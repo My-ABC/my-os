@@ -1,0 +1,17 @@
+# 编译生成文件
+build/
+*.o
+*.elf
+*.bin
+*.iso
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
+.DS_Store
+*.log
+
+# IDE
+.vscode/
+.idea/
