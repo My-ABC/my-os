@@ -6,7 +6,7 @@ align 4
 
 section .text
 global start
-extern kernel_main
+extern kmain
 extern multiboot_info
 
 start:
@@ -15,7 +15,7 @@ start:
     
     ; 保存 Multiboot 信息结构地址
     push ebx               ; ebx 指向 multiboot_info 结构
-    call kernel_main
+    call kmain
     hlt
 
 section .bss
