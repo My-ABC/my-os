@@ -84,6 +84,14 @@ void kmain(struct multiboot_info* info) {
     print_info(buf);
     print_info("\n");
     
+    printf("Hello, %s!\n", "World");
+    printf("Number: %d, Hex: %x\n", 42, 0xDEADBEEF);
+
+    int age;
+    printf("Enter your age: ");
+    scanf("%d", &age);
+    printf("\nYou are %d years old.\n", age);
+    
     print_info("\nSystem running. Press 'b' for blue screen.\n");
     
     while(1) {
