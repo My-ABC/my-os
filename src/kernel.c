@@ -8,6 +8,7 @@
 #include "string.h"
 #include "paging.h"
 #include "shell/shell.h"
+#include "serial.h"
 
 extern struct multiboot_info* multiboot_info;
 
@@ -20,6 +21,13 @@ void kmain(struct multiboot_info* info) {
     trap_init();
     pmm_init(info);
     paging_init();
+    
+    // 初始化串口
+    serial_init(COM1);
+    
+    // 串口输出测试
+    serial_write(COM1, "Serial output test!\n");
+    serial_write(COM1, "My OS serial debug enabled.\n");
     
     keyboard_init();
     __asm__ volatile ("sti");
