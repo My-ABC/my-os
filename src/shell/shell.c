@@ -7,8 +7,9 @@
 #include "idt.h"
 #include "isr.h"
 #include "trap.h"
+#include "process.h"
 
-// 命令声明
+// ========== 命令声明 ==========
 static void cmd_help(int argc, char** argv);
 static void cmd_clear(int argc, char** argv);
 static void cmd_echo(int argc, char** argv);
@@ -20,8 +21,22 @@ static void cmd_sleep(int argc, char** argv);
 static void cmd_version(int argc, char** argv);
 static void cmd_shutdown(int argc, char** argv);
 static void cmd_rand(int argc, char** argv);
+static void cmd_ps(int argc, char** argv);
+static void cmd_kill(int argc, char** argv);
+static void cmd_run(int argc, char** argv);
 
-// 命令列表
+// ========== 用户自定义进程 ==========
+static void user_process(void) {
+    printf("User process started!\n");
+    for (int i = 0; i < 5; i++) {
+        printf("User process: %d\n", i);
+        process_yield();
+    }
+    printf("User process exiting...\n");
+    process_exit(0);
+}
+
+// ========== 命令列表 ==========
 static struct command commands[] = {
     {"help",     cmd_help,     "Show available commands"},
     {"clear",    cmd_clear,    "Clear the screen"},
@@ -30,11 +45,14 @@ static struct command commands[] = {
     {"meminfo",  cmd_meminfo,  "Show memory information"},
     {"reboot",   cmd_reboot,   "Reboot the system"},
     {"blue",     cmd_blue,     "Trigger blue screen (INT3)"},
-    {"sleep",    cmd_sleep,    "Try the sleep"},
-    {"version",  cmd_version,  "The OS version"},
+    {"sleep",    cmd_sleep,    "Wait (seconds)"},
+    {"version",  cmd_version,  "Show OS version"},
     {"shutdown", cmd_shutdown, "Shutdown the system"},
-    {"sand",     cmd_rand,     "print a sand value"},
-    {NULL, NULL, NULL}  // 终止符
+    {"rand",     cmd_rand,     "Print random number"},
+    {"ps",       cmd_ps,       "Show running processes"},
+    {"kill",     cmd_kill,     "Kill a process (kill <pid>)"},
+    {"run",      cmd_run,      "Create a new process (run)"},
+    {NULL, NULL, NULL}
 };
 
 // ========== 命令实现 ==========
@@ -103,11 +121,12 @@ static void cmd_sleep(int argc, char** argv) {
 }
 
 static void cmd_version(int argc, char** argv) {
-    printf("Version: my-os (v0.0.5)");
+    printf("My OS v0.0.6\n");
+    printf("Built: %s %s\n", __DATE__, __TIME__);
 }
+
 static void cmd_shutdown(int argc, char** argv) {
     print_info("Shutting down...\n");
-
     __asm__ volatile (
         "cli\n"
         "movw $0x2000, %%ax\n"
@@ -115,27 +134,54 @@ static void cmd_shutdown(int argc, char** argv) {
         "outw %%ax, %%dx\n"
         : : : "ax", "dx"
     );
-
     while(1) __asm__ volatile ("hlt");
 }
 
 static void cmd_rand(int argc, char** argv) {
     printf("%d\n", rand());
-    return;
+}
+
+static void cmd_ps(int argc, char** argv) {
+    process_cleanup();  // 先清理已终止进程
+    process_list();
+}
+
+static void cmd_kill(int argc, char** argv) {
+    if (argc < 2) {
+        printf("Usage: kill <pid>\n");
+        return;
+    }
+    int pid = atoi(argv[1]);
+    int result = process_kill(pid);
+    if (result == 0) {
+        printf("Process %d killed\n", pid);
+    } else if (result == -2) {
+        printf("Cannot kill running process %d\n", pid);
+    } else {
+        printf("Process %d not found\n", pid);
+    }
+}
+
+static void cmd_run(int argc, char** argv) {
+    int pid = process_create(user_process, "user");
+    if (pid > 0) {
+        printf("User process created (PID=%d)\n", pid);
+        printf("Scheduling...\n");
+        process_schedule();
+    } else {
+        printf("Failed to create process\n");
+    }
 }
 
 // ========== Shell 核心 ==========
 
-// 分割命令行
 static int parse_command(char* line, char** argv) {
     int argc = 0;
     char* p = line;
     while (*p) {
-        // 跳过空格
         while (*p == ' ') p++;
         if (!*p) break;
         argv[argc++] = p;
-        // 跳到下一个空格或结束
         while (*p && *p != ' ') p++;
         if (*p) *p++ = '\0';
     }
@@ -148,7 +194,6 @@ static void shell_execute(char* line) {
     
     if (argc == 0) return;
     
-    // 查找命令
     for (int i = 0; commands[i].name != NULL; i++) {
         if (strcmp(argv[0], commands[i].name) == 0) {
             commands[i].handler(argc, argv);
