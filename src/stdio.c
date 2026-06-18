@@ -82,7 +82,7 @@ static void itoa(int num, char* str) {
     }
 }
 
-// 简易 printf
+// 简易 printf（支持 %-10s 左对齐）
 void printf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -90,17 +90,47 @@ void printf(const char* fmt, ...) {
     for (int i = 0; fmt[i] != '\0'; i++) {
         if (fmt[i] == '%') {
             i++;
+            
+            // 解析标志：是否左对齐
+            int left_align = 0;
+            int width = 0;
+            while (fmt[i] == '-') {
+                left_align = 1;
+                i++;
+            }
+            while (fmt[i] >= '0' && fmt[i] <= '9') {
+                width = width * 10 + (fmt[i] - '0');
+                i++;
+            }
+            
             switch (fmt[i]) {
+                case 's': {
+                    const char* s = va_arg(args, const char*);
+                    int len = 0;
+                    while (s[len]) len++;
+                    
+                    // 如果指定了宽度，补空格
+                    if (width > len) {
+                        int padding = width - len;
+                        if (left_align) {
+                            // 左对齐：先打印内容，再补空格
+                            print_info(s);
+                            for (int j = 0; j < padding; j++) putchar(' ');
+                        } else {
+                            // 右对齐（默认）：先补空格，再打印内容
+                            for (int j = 0; j < padding; j++) putchar(' ');
+                            print_info(s);
+                        }
+                    } else {
+                        print_info(s);
+                    }
+                    break;
+                }
                 case 'd': {
                     int n = va_arg(args, int);
                     char buf[16];
                     itoa(n, buf);
                     print_info(buf);
-                    break;
-                }
-                case 's': {
-                    const char* s = va_arg(args, const char*);
-                    print_info(s);
                     break;
                 }
                 case 'c': {
@@ -111,22 +141,21 @@ void printf(const char* fmt, ...) {
                 case 'x': {
                     unsigned int n = va_arg(args, unsigned int);
                     char buf[16];
-                    int i = 0;
+                    int j = 0;
                     if (n == 0) {
-                        buf[i++] = '0';
+                        buf[j++] = '0';
                     } else {
                         const char* hex = "0123456789ABCDEF";
                         while (n) {
-                            buf[i++] = hex[n & 0xF];
+                            buf[j++] = hex[n & 0xF];
                             n >>= 4;
                         }
                     }
-                    buf[i] = '\0';
-                    // 反转
-                    for (int j = 0; j < i / 2; j++) {
-                        char tmp = buf[j];
-                        buf[j] = buf[i - 1 - j];
-                        buf[i - 1 - j] = tmp;
+                    buf[j] = '\0';
+                    for (int k = 0; k < j / 2; k++) {
+                        char tmp = buf[k];
+                        buf[k] = buf[j - 1 - k];
+                        buf[j - 1 - k] = tmp;
                     }
                     print_info(buf);
                     break;

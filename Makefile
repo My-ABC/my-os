@@ -12,9 +12,11 @@ INC_DIR  = include
 BOOT_DIR = boot
 BUILD_DIR = build
 
-# C 源文件
-C_SRCS   = $(wildcard $(SRC_DIR)/*.c)
-C_OBJS   = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SRCS))
+# 所有 C 源文件（包括子目录）
+SRC_DIRS = src src/shell
+C_SRCS   = $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))
+# 将 .c 文件转为 .o 文件（放在 build 目录下）
+C_OBJS   = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(C_SRCS)))
 
 # 汇编文件（boot 目录下的所有 .asm）
 ASM_SRCS = $(wildcard $(BOOT_DIR)/*.asm)
@@ -39,10 +41,16 @@ $(BUILD_DIR):
 $(TARGET): $(OBJS) linker.ld
 	$(LD) $(LDFLAGS) $^ -o $@
 
+# 汇编文件编译
 $(BUILD_DIR)/%.o: $(BOOT_DIR)/%.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(INC_DIR)/stdint.h | $(BUILD_DIR)
+# src 目录下的 C 文件
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(INC_DIR)/*.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# shell 目录下的 C 文件
+$(BUILD_DIR)/%.o: $(SRC_DIR)/shell/%.c $(INC_DIR)/*.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)

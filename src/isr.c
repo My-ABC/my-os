@@ -15,7 +15,11 @@ uint32_t get_seconds(void) {
 }
 
 void sleep(uint32_t ms) {
-    uint32_t target = system_ticks + ms;
+    // PIT 默认约 18.2Hz，每 tick ≈ 55ms
+    // 所以 1000ms ≈ 18 ticks
+    uint32_t ticks = ms / 55;
+    if (ticks == 0) ticks = 1;
+    uint32_t target = system_ticks + ticks;
     while (system_ticks < target) {
         __asm__ volatile ("hlt");
     }
@@ -33,7 +37,7 @@ void isr_dispatcher(uint8_t irq) {
     switch (irq) {
         case 32:  // 时钟
             system_ticks++;
-            if (system_ticks % 1000 == 0) {
+            if (system_ticks % 18 == 0) {
                 system_seconds++;
             }
             break;
