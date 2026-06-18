@@ -18,13 +18,10 @@ isr%1:
 ISR_ENTRY 32
 ISR_ENTRY 33
 
-; 系统调用 int 0x80
+; 系统调用 - 最简版
 global isr80
 isr80:
-    ; 保存所有寄存器
-    pusha
     call syscall_handler
-    popa
     iret
 
 global isr3
