@@ -14,10 +14,13 @@ isr%1:
     iret
 %endmacro
 
-; 时钟中断
+; 时钟中断 (IRQ0)
 ISR_ENTRY 32
 
-; INT3 异常 (用于蓝屏)
+; 键盘中断 (IRQ1)
+ISR_ENTRY 33
+
+; INT3 异常处理
 global isr3
 isr3:
     pusha
