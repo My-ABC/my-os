@@ -1,7 +1,6 @@
 section .text
 
 extern isr_dispatcher
-extern syscall_handler
 extern int3_handler
 
 %macro ISR_ENTRY 1
@@ -17,12 +16,6 @@ isr%1:
 
 ISR_ENTRY 32
 ISR_ENTRY 33
-
-; 系统调用 - 最简版
-global isr80
-isr80:
-    call syscall_handler
-    iret
 
 global isr3
 isr3:

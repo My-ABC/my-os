@@ -5,7 +5,6 @@ static uint8_t idt[256 * 8] __attribute__((aligned(16)));
 
 extern void isr32(void);
 extern void isr33(void);
-extern void isr80(void);
 
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) {
     uint16_t idx = num * 8;
@@ -28,7 +27,6 @@ void idt_init(void) {
     
     idt_set_gate(32, (uint32_t)isr32, 0x08, 0x8E);
     idt_set_gate(33, (uint32_t)isr33, 0x08, 0x8E);
-    idt_set_gate(0x80, (uint32_t)isr80, 0x08, 0x8E);  // 系统调用
     
     struct {
         uint16_t limit;
