@@ -509,3 +509,43 @@ void system(const char* command) {
     print_info(command);
     print_info("\n");
 }
+
+// ========== 分页分配器 ==========
+
+void* page_alloc(size_t pages) {
+    if (pages == 0) return NULL;
+    
+    uint32_t first_phys = pmm_alloc_page();
+    if (first_phys == 0) return NULL;
+    
+    for (size_t i = 1; i < pages; i++) {
+        uint32_t phys = pmm_alloc_page();
+        if (phys == 0) {
+            for (size_t j = 0; j < i; j++) {
+                pmm_free_page(first_phys + j * 4096);
+            }
+            return NULL;
+        }
+    }
+    
+    return (void*)first_phys;
+}
+
+void page_free(void* ptr, size_t pages) {
+    if (!ptr) return;
+    uint32_t phys = (uint32_t)ptr;
+    for (size_t i = 0; i < pages; i++) {
+        pmm_free_page(phys + i * 4096);
+    }
+}
+
+void* page_alloc_one(void) {
+    uint32_t phys = pmm_alloc_page();
+    if (phys == 0) return NULL;
+    return (void*)phys;
+}
+
+void page_free_one(void* ptr) {
+    if (!ptr) return;
+    pmm_free_page((uint32_t)ptr);
+}

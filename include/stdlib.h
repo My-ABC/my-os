@@ -14,6 +14,12 @@ void heap_init(void);
 void heap_check(void);
 void heap_stats(uint32_t* total, uint32_t* used, uint32_t* free);
 
+// 分页分配（新增）
+void* page_alloc(size_t pages);
+void page_free(void* ptr, size_t pages);
+void* page_alloc_one(void);
+void page_free_one(void* ptr);
+
 // 字符串转换
 int atoi(const char* str);
 long atol(const char* str);
@@ -23,6 +29,7 @@ char* utoa(unsigned int value, char* str, int base);
 // 随机数
 int rand(void);
 void srand(unsigned int seed);
+void srand_auto(void);
 
 // 退出
 void abort(void);

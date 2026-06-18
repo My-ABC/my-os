@@ -1,6 +1,7 @@
 section .text
 
 extern isr_dispatcher
+extern syscall_handler
 extern int3_handler
 
 %macro ISR_ENTRY 1
@@ -14,13 +15,18 @@ isr%1:
     iret
 %endmacro
 
-; 时钟中断 (IRQ0)
 ISR_ENTRY 32
-
-; 键盘中断 (IRQ1)
 ISR_ENTRY 33
 
-; INT3 异常处理
+; 系统调用 int 0x80
+global isr80
+isr80:
+    ; 保存所有寄存器
+    pusha
+    call syscall_handler
+    popa
+    iret
+
 global isr3
 isr3:
     pusha

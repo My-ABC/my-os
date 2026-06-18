@@ -19,19 +19,21 @@ static void cmd_blue(int argc, char** argv);
 static void cmd_sleep(int argc, char** argv);
 static void cmd_version(int argc, char** argv);
 static void cmd_shutdown(int argc, char** argv);
+static void cmd_rand(int argc, char** argv);
 
 // 命令列表
 static struct command commands[] = {
-    {"help",    cmd_help,    "Show available commands"},
-    {"clear",   cmd_clear,   "Clear the screen"},
-    {"echo",    cmd_echo,    "Echo text"},
-    {"uptime",  cmd_uptime,  "Show system uptime"},
-    {"meminfo", cmd_meminfo, "Show memory information"},
-    {"reboot",  cmd_reboot,  "Reboot the system"},
-    {"blue",    cmd_blue,    "Trigger blue screen (INT3)"},
-    {"sleep",   cmd_sleep,   "Try the sleep"},
-    {"version", cmd_version, "The OS version"},
+    {"help",     cmd_help,     "Show available commands"},
+    {"clear",    cmd_clear,    "Clear the screen"},
+    {"echo",     cmd_echo,     "Echo text"},
+    {"uptime",   cmd_uptime,   "Show system uptime"},
+    {"meminfo",  cmd_meminfo,  "Show memory information"},
+    {"reboot",   cmd_reboot,   "Reboot the system"},
+    {"blue",     cmd_blue,     "Trigger blue screen (INT3)"},
+    {"sleep",    cmd_sleep,    "Try the sleep"},
+    {"version",  cmd_version,  "The OS version"},
     {"shutdown", cmd_shutdown, "Shutdown the system"},
+    {"sand",     cmd_rand,     "print a sand value"},
     {NULL, NULL, NULL}  // 终止符
 };
 
@@ -115,6 +117,11 @@ static void cmd_shutdown(int argc, char** argv) {
     );
 
     while(1) __asm__ volatile ("hlt");
+}
+
+static void cmd_rand(int argc, char** argv) {
+    printf("%d\n", rand());
+    return;
 }
 
 // ========== Shell 核心 ==========
