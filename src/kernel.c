@@ -29,7 +29,7 @@ void kmain(struct multiboot_info* info) {
     keyboard_init();
     __asm__ volatile ("sti");
     
-    // 测试缺页异常（访问 256MB，超出已映射区域）
+    // 测试缺页异常（访问 128MB，超出已映射区域）
     print_info("\n=== Testing Page Fault ===\n");
     print_info("Reading 0x01000000 (128MB)...\n");
     
