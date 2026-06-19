@@ -72,6 +72,12 @@ void process_schedule(void) {
     process_cleanup();
     if (process_count == 0) return;
     
+    // 如果当前进程已终止，切换到第一个就绪进程
+    struct process* cur = process_get_current();
+    if (cur == NULL || cur->state == PROC_TERMINATED) {
+        current_pid = -1;
+    }
+    
     int current_idx = -1;
     for (int i = 0; i < process_count; i++) {
         if (processes[i].pid == current_pid) {
@@ -97,7 +103,6 @@ void process_schedule(void) {
     if (next_idx >= 0) {
         current_pid = processes[next_idx].pid;
         processes[next_idx].state = PROC_RUNNING;
-        // 不执行 entry，让外部循环执行
     }
 }
 
@@ -145,10 +150,15 @@ void process_list(void) {
 }
 
 int process_kill(int pid) {
+    if (pid == 1) {
+        return -3;
+    }
+    
     for (int i = 0; i < process_count; i++) {
         if (processes[i].pid == pid) {
-            if (pid == current_pid) {
-                return -2;
+            // 检查进程状态，而不是 current_pid
+            if (processes[i].state == PROC_RUNNING) {
+                return -2;  // 正在运行
             }
             processes[i].state = PROC_TERMINATED;
             return 0;

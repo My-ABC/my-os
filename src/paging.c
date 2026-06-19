@@ -2,6 +2,7 @@
 #include "memory.h"
 #include "stdio.h"
 #include "string.h"
+#include "idt.h"
 
 static uint32_t page_directory[1024] __attribute__((aligned(4096)));
 static uint32_t page_table[1024] __attribute__((aligned(4096)));

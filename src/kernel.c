@@ -29,16 +29,6 @@ void kmain(struct multiboot_info* info) {
     keyboard_init();
     __asm__ volatile ("sti");
     
-    // ===== 测试系统调用 =====
-    print_info("\n=== Testing syscall ===\n");
-    
-    // 测试打印
-    syscall_print("Hello from syscall!\n");
-    
-    // 测试获取 PID
-    int pid = syscall_getpid();
-    printf("PID: %d\n", pid);
-    
     print_info("\nWelcome to My OS!\n");
     print_info("Type 'help' for available commands.\n");
     

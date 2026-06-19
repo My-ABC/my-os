@@ -155,6 +155,8 @@ static void cmd_kill(int argc, char** argv) {
         printf("Process %d killed\n", pid);
     } else if (result == -2) {
         printf("Cannot kill running process %d\n", pid);
+    } else if (result == -3) {
+        printf("Cannot kill kernel process\n");
     } else {
         printf("Process %d not found\n", pid);
     }

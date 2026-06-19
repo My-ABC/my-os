@@ -5,7 +5,7 @@
 
 // ELF 头
 struct elf_header {
-    uint32_t magic;          // 0x7F 'E' 'L' 'F'
+    uint32_t magic;
     uint8_t  elf_class;
     uint8_t  data;
     uint8_t  version;
@@ -38,8 +38,9 @@ struct elf_program_header {
     uint32_t align;
 } __attribute__((packed));
 
-#define ELF_MAGIC 0x464C457F  // "\x7FELF"
+#define ELF_MAGIC 0x464C457F
 
-int elf_load(void* data, int (*entry)(void));
+// 加载 ELF 文件并创建进程
+int elf_load(void* data, const char* name);
 
 #endif

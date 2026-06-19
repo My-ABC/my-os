@@ -3,6 +3,7 @@ section .text
 extern isr_dispatcher
 extern syscall_handler
 extern int3_handler
+extern page_fault_handler
 
 %macro ISR_ENTRY 1
 global isr%1
