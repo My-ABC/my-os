@@ -10,14 +10,9 @@
 #include "shell/shell.h"
 #include "serial.h"
 #include "process.h"
-#include "elf.h"
+#include "syscalls.h"
 
 extern struct multiboot_info* multiboot_info;
-
-// 测试 ELF 数据（一个简单的程序）
-static uint8_t test_elf[] = {
-    // 这里需要放一个真正的 ELF 文件
-};
 
 void kmain(struct multiboot_info* info) {
     vga_clear();
@@ -29,9 +24,20 @@ void kmain(struct multiboot_info* info) {
     pmm_init(info);
     paging_init();
     serial_init(COM1);
+    process_init();
     
     keyboard_init();
     __asm__ volatile ("sti");
+    
+    // ===== 测试系统调用 =====
+    print_info("\n=== Testing syscall ===\n");
+    
+    // 测试打印
+    syscall_print("Hello from syscall!\n");
+    
+    // 测试获取 PID
+    int pid = syscall_getpid();
+    printf("PID: %d\n", pid);
     
     print_info("\nWelcome to My OS!\n");
     print_info("Type 'help' for available commands.\n");

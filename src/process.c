@@ -11,6 +11,18 @@ static int next_pid = 1;
 
 void process_init(void) {
     print_info("Process manager initialized\n");
+    
+    // 创建内核进程 (PID=1)
+    struct process* p = &processes[process_count++];
+    p->pid = 1;
+    p->state = PROC_RUNNING;
+    p->entry = NULL;
+    strcpy(p->name, "kernel");
+    p->stack = 0;
+    p->next = NULL;
+    
+    current_pid = 1;
+    next_pid = 2;
 }
 
 int process_create(void (*entry)(void), const char* name) {
@@ -24,6 +36,7 @@ int process_create(void (*entry)(void), const char* name) {
     p->stack = 0;
     p->next = NULL;
     
+    // 如果当前没有运行进程，让这个进程运行
     if (current_pid == -1) {
         current_pid = p->pid;
         p->state = PROC_RUNNING;
@@ -67,8 +80,8 @@ void process_schedule(void) {
         }
     }
     
-    if (current_idx == -1 || processes[current_idx].state == PROC_TERMINATED) {
-        current_pid = -1;
+    if (current_idx >= 0 && processes[current_idx].state == PROC_RUNNING) {
+        processes[current_idx].state = PROC_READY;
     }
     
     int next_idx = -1;
@@ -84,9 +97,7 @@ void process_schedule(void) {
     if (next_idx >= 0) {
         current_pid = processes[next_idx].pid;
         processes[next_idx].state = PROC_RUNNING;
-        if (processes[next_idx].entry) {
-            processes[next_idx].entry();
-        }
+        // 不执行 entry，让外部循环执行
     }
 }
 

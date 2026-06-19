@@ -2,6 +2,7 @@
 #include "stdio.h"
 #include "isr.h"
 #include "keyboard.h"
+#include "process.h"
 
 volatile uint32_t system_ticks = 0;
 volatile uint32_t system_seconds = 0;
@@ -39,6 +40,9 @@ void isr_dispatcher(uint8_t irq) {
             system_ticks++;
             if (system_ticks % 18 == 0) {
                 system_seconds++;
+            }
+            if (system_ticks % 10 == 0) {
+                process_schedule();
             }
             break;
         case 33:  // 键盘中断

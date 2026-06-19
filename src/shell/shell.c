@@ -27,13 +27,11 @@ static void cmd_run(int argc, char** argv);
 
 // ========== 用户自定义进程 ==========
 static void user_process(void) {
-    printf("User process started!\n");
-    for (int i = 0; i < 5; i++) {
-        printf("User process: %d\n", i);
-        process_yield();
+    int count = 0;
+    while (1) {
+        printf("User process: %d\n", count++);
+        process_yield();  // 让出 CPU
     }
-    printf("User process exiting...\n");
-    process_exit(0);
 }
 
 // ========== 命令列表 ==========
