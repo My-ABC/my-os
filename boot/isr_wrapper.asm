@@ -17,6 +17,15 @@ isr%1:
 ISR_ENTRY 32
 ISR_ENTRY 33
 
+; 系统调用暂时禁用
+; global isr80
+; isr80:
+;     pusha
+;     call syscall_handler
+;     mov [esp+28], eax
+;     popa
+;     iret
+
 global isr3
 isr3:
     pusha
