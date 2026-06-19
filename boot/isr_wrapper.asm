@@ -37,6 +37,14 @@ isr3:
     popa
     iret
 
+; 缺页异常
+global isr14
+isr14:
+    pusha
+    call page_fault_handler
+    popa
+    iret
+
 global idt_load
 idt_load:
     lidt [esp + 4]

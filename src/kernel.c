@@ -29,6 +29,14 @@ void kmain(struct multiboot_info* info) {
     keyboard_init();
     __asm__ volatile ("sti");
     
+    // 测试缺页异常（访问 256MB，超出已映射区域）
+    print_info("\n=== Testing Page Fault ===\n");
+    print_info("Reading 0x10000000 (256MB)...\n");
+    
+    uint32_t* test = (uint32_t*)0x01000000;
+    uint32_t val = *test;
+    printf("Value: 0x%x\n", val);
+    
     print_info("\nWelcome to My OS!\n");
     print_info("Type 'help' for available commands.\n");
     
