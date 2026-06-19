@@ -31,7 +31,7 @@ void kmain(struct multiboot_info* info) {
     
     // 测试缺页异常（访问 256MB，超出已映射区域）
     print_info("\n=== Testing Page Fault ===\n");
-    print_info("Reading 0x10000000 (256MB)...\n");
+    print_info("Reading 0x01000000 (128MB)...\n");
     
     uint32_t* test = (uint32_t*)0x01000000;
     uint32_t val = *test;
