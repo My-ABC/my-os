@@ -4,6 +4,11 @@ AS = nasm
 LD = i686-elf-ld
 
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g -Iinclude
+
+# PANIC_DEMO=1 时内核启动后主动触发 INT3, 用于演示/测试蓝屏
+ifdef PANIC_DEMO
+CFLAGS += -DPANIC_DEMO
+endif
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
@@ -44,8 +49,12 @@ run-nographic: build
 test: build
 	./scripts/test_timer.sh
 
+# 测试 INT3 蓝屏: 校验寄存器 dump 与 ACPI 自动重启
+test-panic:
+	./scripts/test_panic.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test clean
+.PHONY: build run run-nographic test test-panic clean

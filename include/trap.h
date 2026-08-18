@@ -1,6 +1,8 @@
 #ifndef _TRAP_H
 #define _TRAP_H
 
-void isr3_handler(void);
+#include "regs.h"
+
+void isr3_handler(struct registers* regs);
 
 #endif

@@ -48,8 +48,10 @@ void kmain() {
     vga_print_hex(0xDEADBEEF);
     vga_print(" (hex)\n");
 
-    vga_print("Test interrupt\n");
+#ifdef PANIC_DEMO
+    vga_print("Triggering INT3 (panic demo)\n");
     __asm__ volatile ("int $0x03");
+#endif
 
     vga_print("Timer ticking, output on COM1\n");
     while(1) {
