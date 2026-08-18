@@ -1,4 +1,11 @@
 #include "io.h"
+#include "pic.h"
+
+#define PIC1_COMMAND 0x20
+#define PIC1_DATA    0x21
+#define PIC2_COMMAND 0xA0
+#define PIC2_DATA    0xA1
+#define PIC_EOI      0x20
 
 void pic_remap(void) {
     uint8_t mask1 = inb(0x21);
@@ -18,4 +25,27 @@ void pic_remap(void) {
 
     outb(0x21, mask1);
     outb(0xA1, mask2);
+}
+
+void pic_set_mask(uint8_t irq) {
+    uint16_t port = irq < 8 ? PIC1_DATA : PIC2_DATA;
+    if (irq >= 8) {
+        irq -= 8;
+    }
+    outb(port, inb(port) | (1 << irq));
+}
+
+void pic_clear_mask(uint8_t irq) {
+    uint16_t port = irq < 8 ? PIC1_DATA : PIC2_DATA;
+    if (irq >= 8) {
+        irq -= 8;
+    }
+    outb(port, inb(port) & ~(1 << irq));
+}
+
+void pic_send_eoi(uint8_t irq) {
+    if (irq >= 8) {
+        outb(PIC2_COMMAND, PIC_EOI);
+    }
+    outb(PIC1_COMMAND, PIC_EOI);
 }

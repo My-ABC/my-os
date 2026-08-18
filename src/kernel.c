@@ -3,10 +3,14 @@
 #include "io.h"
 #include "idt.h"
 #include "pic.h"
+#include "pit.h"
+#include "serial.h"
 
 void kmain() {
     // 初始化 VGA
     vga_init();
+    serial_init();
+    serial_print("MyOS v0.1 serial console\n");
     
     vga_print("MyOS v0.1\n");
     vga_print("==========\n\n");
@@ -21,6 +25,11 @@ void kmain() {
     vga_print_info("Remapping PIC...");
     pic_remap();
     vga_print_success("PIC remapped");
+
+    vga_print_info("Initializing PIT at 100Hz...");
+    pit_init(PIT_FREQUENCY);
+    pic_clear_mask(0);
+    vga_print_success("PIT initialized");
 
     vga_print_info("Enabling interrupts...");
     __asm__ volatile ("sti");
@@ -41,8 +50,8 @@ void kmain() {
 
     vga_print("Test interrupt\n");
     __asm__ volatile ("int $0x03");
-    
-    __asm__ volatile ("cli");
+
+    vga_print("Timer ticking, output on COM1\n");
     while(1) {
         __asm__ volatile ("hlt");
     }
