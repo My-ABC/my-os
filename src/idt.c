@@ -36,6 +36,9 @@ void idt_init(void) {
     extern void irq0(void);
     idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);
 
+    extern void irq1(void);
+    idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+
     idtp.limit = sizeof(idt) - 1;
     idtp.base = (uint32_t)&idt;
     

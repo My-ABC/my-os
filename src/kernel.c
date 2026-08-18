@@ -4,6 +4,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "pit.h"
+#include "keyboard.h"
 #include "serial.h"
 
 void kmain() {
@@ -31,6 +32,11 @@ void kmain() {
     pic_clear_mask(0);
     vga_print_success("PIT initialized");
 
+    vga_print_info("Initializing keyboard (IRQ1)...");
+    keyboard_init();
+    pic_clear_mask(1);
+    vga_print_success("Keyboard initialized");
+
     vga_print_info("Enabling interrupts...");
     __asm__ volatile ("sti");
     vga_print_success("Interrupts enabled");
@@ -54,7 +60,19 @@ void kmain() {
 #endif
 
     vga_print("Timer ticking, output on COM1\n");
-    while(1) {
-        __asm__ volatile ("hlt");
+    vga_print("Press 'b' for a blue screen, any other key to halt\n");
+    serial_print("Press 'b' for a blue screen, any other key to halt\n");
+
+    char key = keyboard_wait_key();
+    serial_print("Key pressed: ");
+    serial_putchar(key);
+    serial_putchar('\n');
+
+    if (key == 'b' || key == 'B') {
+        __asm__ volatile ("int $0x03");
     }
+
+    serial_print("Halted\n");
+    vga_print("Halted\n");
+    while (1);
 }

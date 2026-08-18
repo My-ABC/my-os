@@ -47,10 +47,19 @@ extern isr_handler
 extern irq_handler
 
 global irq0
+global irq1
 
 irq0:
     pusha
     push dword 32
+    call irq_handler
+    add esp, 4
+    popa
+    iret
+
+irq1:
+    pusha
+    push dword 33
     call irq_handler
     add esp, 4
     popa

@@ -2,6 +2,7 @@
 #include "vga.h"
 #include "pic.h"
 #include "pit.h"
+#include "keyboard.h"
 #include "serial.h"
 
 void isr_handler(uint32_t int_no) {
@@ -17,6 +18,8 @@ void irq_handler(uint32_t int_no) {
             serial_print_dec(ticks / PIT_FREQUENCY);
             serial_putchar('\n');
         }
+    } else if (int_no == 33) {
+        keyboard_irq();
     }
 
     pic_send_eoi(int_no - 32);
