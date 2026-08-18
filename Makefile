@@ -36,8 +36,16 @@ build/%.o: boot/%.asm
 run: build
 	qemu-system-i386 -kernel $(KERNEL)
 
+# 无图形界面运行, 串口输出到终端
+run-nographic: build
+	qemu-system-i386 -kernel $(KERNEL) -nographic
+
+# 测试时钟中断: 校验 COM1 每秒输出一个递增计数
+test: build
+	./scripts/test_timer.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run clean
+.PHONY: build run run-nographic test clean

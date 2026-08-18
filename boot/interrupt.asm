@@ -36,6 +36,16 @@ isr3:
 extern isr_handler
 extern irq_handler
 
+global irq0
+
+irq0:
+    pusha
+    push dword 32
+    call irq_handler
+    add esp, 4
+    popa
+    iret
+
 isr_common_stub:
     pusha
     popa
