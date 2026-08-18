@@ -11,10 +11,7 @@ static void print_reg(const char* name, uint32_t value) {
     vga_print("  ");
 
     serial_print(name);
-    serial_print("0x");
-    for (int i = 28; i >= 0; i -= 4) {
-        serial_putchar("0123456789ABCDEF"[(value >> i) & 0xF]);
-    }
+    serial_print_hex(value);
     serial_putchar('\n');
 }
 

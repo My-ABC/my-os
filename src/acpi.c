@@ -1,5 +1,6 @@
 #include "acpi.h"
 #include "io.h"
+#include "serial.h"
 #include "stddef.h"
 #include "stdint.h"
 
@@ -9,6 +10,11 @@ struct rsdp {
     char oem_id[6];
     uint8_t revision;
     uint32_t rsdt_address;
+    // ACPI 2.0+ 扩展部分, revision >= 2 时有效
+    uint32_t length;
+    uint64_t xsdt_address;
+    uint8_t extended_checksum;
+    uint8_t reserved[3];
 } __attribute__((packed));
 
 struct sdt_header {
@@ -68,8 +74,9 @@ static struct rsdp* find_rsdp_in(uint32_t start, uint32_t end) {
     // RSDP 按 16 字节对齐
     for (uint32_t addr = start; addr < end; addr += 16) {
         struct rsdp* candidate = (struct rsdp*)addr;
+        // 前 20 字节是 ACPI 1.0 部分, 校验和只覆盖这一段
         if (mem_equal(candidate->signature, "RSD PTR ", 8) &&
-            checksum_ok((const uint8_t*)candidate, sizeof(struct rsdp))) {
+            checksum_ok((const uint8_t*)candidate, 20)) {
             return candidate;
         }
     }
@@ -88,21 +95,15 @@ static struct rsdp* find_rsdp(void) {
     return find_rsdp_in(0xE0000, 0x100000);
 }
 
-static struct fadt* find_fadt(void) {
-    struct rsdp* rsdp = find_rsdp();
-    if (rsdp == NULL || rsdp->rsdt_address == 0) {
-        return NULL;
-    }
-
-    struct sdt_header* rsdt = (struct sdt_header*)rsdp->rsdt_address;
-    if (!mem_equal(rsdt->signature, "RSDT", 4)) {
-        return NULL;
-    }
-
-    uint32_t entries = (rsdt->length - sizeof(struct sdt_header)) / 4;
-    uint32_t* tables = (uint32_t*)((uint8_t*)rsdt + sizeof(struct sdt_header));
+// 在 RSDT (4 字节指针) 或 XSDT (8 字节指针) 中查找 FADT
+static struct fadt* find_fadt_in(struct sdt_header* root, int pointer_size) {
+    uint32_t entries = (root->length - sizeof(struct sdt_header)) / pointer_size;
+    uint8_t* tables = (uint8_t*)root + sizeof(struct sdt_header);
     for (uint32_t i = 0; i < entries; i++) {
-        struct sdt_header* table = (struct sdt_header*)tables[i];
+        uint32_t address = pointer_size == 8
+            ? (uint32_t)*(uint64_t*)(tables + i * 8)
+            : *(uint32_t*)(tables + i * 4);
+        struct sdt_header* table = (struct sdt_header*)address;
         if (mem_equal(table->signature, "FACP", 4)) {
             return (struct fadt*)table;
         }
@@ -110,16 +111,54 @@ static struct fadt* find_fadt(void) {
     return NULL;
 }
 
+static struct fadt* find_fadt(void) {
+    struct rsdp* rsdp = find_rsdp();
+    if (rsdp == NULL) {
+        return NULL;
+    }
+
+    if (rsdp->revision >= 2 && rsdp->xsdt_address != 0) {
+        struct sdt_header* xsdt = (struct sdt_header*)(uint32_t)rsdp->xsdt_address;
+        if (mem_equal(xsdt->signature, "XSDT", 4)) {
+            struct fadt* fadt = find_fadt_in(xsdt, 8);
+            if (fadt != NULL) {
+                return fadt;
+            }
+        }
+    }
+
+    if (rsdp->rsdt_address == 0) {
+        return NULL;
+    }
+    struct sdt_header* rsdt = (struct sdt_header*)rsdp->rsdt_address;
+    if (!mem_equal(rsdt->signature, "RSDT", 4)) {
+        return NULL;
+    }
+    return find_fadt_in(rsdt, 4);
+}
+
 static void acpi_reset_via_fadt(void) {
     struct fadt* fadt = find_fadt();
-    if (fadt == NULL || fadt->header.length < sizeof(struct fadt)) {
+    if (fadt == NULL) {
+        serial_print("[ACPI] FADT not found\n");
         return;
     }
-    if (!(fadt->flags & FADT_RESET_REG_SUP)) {
+    // ACPI 1.0 的 FADT (116 字节) 没有 reset register 字段
+    if (fadt->header.length < sizeof(struct fadt) ||
+        !(fadt->flags & FADT_RESET_REG_SUP)) {
+        serial_print("[ACPI] reset register not supported by firmware\n");
         return;
     }
 
     uint32_t address = (uint32_t)fadt->reset_reg.address;
+    serial_print("[ACPI] reset via FADT: space=");
+    serial_print_dec(fadt->reset_reg.address_space);
+    serial_print(" address=");
+    serial_print_hex(address);
+    serial_print(" value=");
+    serial_print_hex(fadt->reset_value);
+    serial_putchar('\n');
+
     if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_IO) {
         outb((uint16_t)address, fadt->reset_value);
     } else if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_MEMORY) {
@@ -131,6 +170,9 @@ void acpi_reboot(void) {
     __asm__ volatile ("cli");
 
     acpi_reset_via_fadt();
+
+    // 走到这里说明 ACPI 复位没生效
+    serial_print("[ACPI] reset did not take effect, falling back\n");
 
     // 兜底 1: PCI 复位控制寄存器
     outb(0xCF9, 0x02);

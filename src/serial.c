@@ -30,6 +30,13 @@ void serial_print(const char* str) {
     }
 }
 
+void serial_print_hex(uint32_t num) {
+    serial_print("0x");
+    for (int i = 28; i >= 0; i -= 4) {
+        serial_putchar("0123456789ABCDEF"[(num >> i) & 0xF]);
+    }
+}
+
 void serial_print_dec(uint32_t num) {
     if (num == 0) {
         serial_putchar('0');

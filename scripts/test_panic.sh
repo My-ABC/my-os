@@ -47,5 +47,18 @@ done
 BOOTS=$(grep -c 'MyOS v0.1 serial console' "$LOG.clean")
 [ "$BOOTS" -ge 2 ] || fail "内核没有自动重启 (只启动了 $BOOTS 次)"
 
-echo "PASS: INT3 触发蓝屏并 dump 寄存器, ACPI 复位后重新启动 ($BOOTS 次启动)"
+# q35 的固件提供 ACPI 2.0+ FADT, 校验确实走的是 reset register 而不是兜底路径
+# (默认 pc 机型的 SeaBIOS 只有 ACPI 1.0 FADT, 没有 reset register)
+Q35_LOG=$(mktemp)
+timeout 15 qemu-system-i386 -machine q35 -kernel "$KERNEL" -display none \
+    -serial file:"$Q35_LOG" -no-reboot >/dev/null 2>&1
+tr -d '\r' < "$Q35_LOG" > "$Q35_LOG.clean"
+echo "--- q35 ACPI 复位路径 ---"
+grep '\[ACPI\]' "$Q35_LOG.clean"
+echo "----------------------"
+grep -q '\[ACPI\] reset via FADT' "$Q35_LOG.clean" || fail "q35 下没有使用 FADT reset register"
+grep -q 'falling back' "$Q35_LOG.clean" && fail "q35 下 ACPI 复位无效, 退到了兜底路径"
+rm -f "$Q35_LOG" "$Q35_LOG.clean"
+
+echo "PASS: INT3 触发蓝屏并 dump 寄存器, 复位后重新启动 ($BOOTS 次启动), q35 下走 ACPI reset register"
 rm -f "$LOG" "$LOG.clean" "$MONITOR"
