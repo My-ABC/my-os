@@ -2,29 +2,38 @@
 # 无图形界面测试 INT3 蓝屏: 校验寄存器 dump 输出到 COM1, 并在倒计时后 ACPI 自动重启
 # MAKE_ARGS 可传给 make (例如没有交叉工具链时: MAKE_ARGS="CC=gcc LD=ld")
 # SCREENSHOT=<path> 时通过 QEMU monitor 抓一张蓝屏截图
+# monitor 用 -monitor pipe: 命名管道驱动, 不依赖 socat 等额外工具
 set -u
 
 KERNEL=${KERNEL:-myos.bin}
 DURATION=${DURATION:-14}
 SCREENSHOT=${SCREENSHOT:-}
-LOG=$(mktemp)
-MONITOR=$(mktemp -u)
+DIR=$(mktemp -d)
+LOG=$DIR/serial.log
+MONITOR=$DIR/monitor
 
 make clean >/dev/null
 # shellcheck disable=SC2086
 make PANIC_DEMO=1 ${MAKE_ARGS:-} build >/dev/null || { echo "FAIL: 构建失败"; exit 1; }
 
+mkfifo "$MONITOR.in" "$MONITOR.out"
+
 qemu-system-i386 -kernel "$KERNEL" -display none -serial file:"$LOG" \
-    -monitor "unix:$MONITOR,server,nowait" &
+    -monitor pipe:"$MONITOR" >/dev/null 2>&1 &
 QEMU_PID=$!
+
+exec 3>"$MONITOR.in"           # 写端保持打开, 否则 qemu 会读到 EOF 关掉 monitor
+cat "$MONITOR.out" >/dev/null &  # 排空 monitor 回显
+DRAIN_PID=$!
 
 if [ -n "$SCREENSHOT" ]; then
     sleep 3  # 蓝屏倒计时期间抓图
-    printf 'screendump %s\n' "$SCREENSHOT" | timeout 5 socat - "UNIX-CONNECT:$MONITOR" >/dev/null 2>&1
+    printf 'screendump %s\n' "$SCREENSHOT" >&3
 fi
 
 sleep "$DURATION"
-kill "$QEMU_PID" 2>/dev/null
+exec 3>&-
+kill "$QEMU_PID" "$DRAIN_PID" 2>/dev/null
 wait "$QEMU_PID" 2>/dev/null
 
 tr -d '\r' < "$LOG" > "$LOG.clean"
@@ -34,7 +43,7 @@ echo "-------------------"
 
 fail() {
     echo "FAIL: $1"
-    rm -f "$LOG" "$LOG.clean" "$MONITOR"
+    rm -rf "$DIR"
     exit 1
 }
 
@@ -61,4 +70,4 @@ grep -q 'falling back' "$Q35_LOG.clean" && fail "q35 下 ACPI 复位无效, 退�
 rm -f "$Q35_LOG" "$Q35_LOG.clean"
 
 echo "PASS: INT3 触发蓝屏并 dump 寄存器, 复位后重新启动 ($BOOTS 次启动), q35 下走 ACPI reset register"
-rm -f "$LOG" "$LOG.clean" "$MONITOR"
+rm -rf "$DIR"
