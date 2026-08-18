@@ -11,7 +11,7 @@ void kmain() {
     // 初始化 VGA
     vga_init();
     serial_init();
-    serial_print("MyOS v0.1 serial console\n");
+    serial_print("MyOS v0.0.1\n");
     
     vga_print("MyOS v0.1\n");
     vga_print("==========\n\n");
