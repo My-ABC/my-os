@@ -5,6 +5,7 @@
 #define BUFFER_SIZE 32
 
 // 扫描码集 1 (make code) 到 ASCII, 0 表示不可打印/未映射
+// 0x47-0x53 是小键盘, 按 Num Lock 打开时的字符映射
 static const char scancode_ascii[128] = {
     0,    27,  '1', '2', '3', '4',  '5', '6',
     '7',  '8', '9', '0', '-', '=',  '\b', '\t',
@@ -13,7 +14,10 @@ static const char scancode_ascii[128] = {
     'd',  'f', 'g', 'h', 'j', 'k',  'l', ';',
     '\'', '`', 0,   '\\', 'z', 'x', 'c', 'v',
     'b',  'n', 'm', ',', '.', '/',  0,   '*',
-    0,    ' ',
+    0,    ' ', 0,   0,   0,   0,    0,   0,
+    0,    0,   0,   0,   0,   0,    0,   '7',
+    '8',  '9', '-', '4', '5', '6',  '+', '1',
+    '2',  '3', '0', '.',
 };
 
 static volatile char buffer[BUFFER_SIZE];
@@ -31,13 +35,28 @@ void keyboard_init(void) {
 }
 
 void keyboard_irq(void) {
+    static uint8_t extended = 0;
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
+
+    if (scancode == 0xE0) {  // 扩展码前缀, 真正的键在下一个字节
+        extended = 1;
+        return;
+    }
+
+    uint8_t was_extended = extended;
+    extended = 0;
 
     if (scancode & 0x80) {  // break code: 松开按键
         return;
     }
 
-    char c = scancode_ascii[scancode & 0x7F];
+    char c;
+    if (was_extended) {
+        // 扩展码里只有小键盘的 Enter 和 / 是可打印的
+        c = scancode == 0x1C ? '\n' : (scancode == 0x35 ? '/' : 0);
+    } else {
+        c = scancode_ascii[scancode & 0x7F];
+    }
     if (c == 0) {
         return;
     }

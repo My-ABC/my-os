@@ -64,6 +64,9 @@ void kmain() {
     serial_print("Press 'b' for a blue screen, any other key to halt\n");
 
     char key = keyboard_wait_key();
+    vga_print("Key pressed: ");
+    vga_putchar(key);
+    vga_putchar('\n');
     serial_print("Key pressed: ");
     serial_putchar(key);
     serial_putchar('\n');
