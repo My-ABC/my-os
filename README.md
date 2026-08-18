@@ -2,7 +2,7 @@ English | [中文](README-zh.md)
 
 # MyOS
 
-A small 32-bit x86 hobby kernel: boots via Multiboot, prints to VGA text mode and COM1, and handles CPU exceptions and hardware IRQs.
+A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1, and handles CPU exceptions and hardware IRQs.
 
 ## Features
 

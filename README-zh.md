@@ -2,7 +2,7 @@
 
 # MyOS
 
-一个 32 位 x86 玩具内核：通过 Multiboot 启动，输出到 VGA 文本模式和 COM1 串口，处理 CPU 异常与硬件中断。
+一个 32 位 x86 内核：通过 Multiboot 启动，输出到 VGA 文本模式和 COM1 串口，处理 CPU 异常与硬件中断。
 
 ## 功能
 
