@@ -53,8 +53,12 @@ test: build
 test-panic:
 	./scripts/test_panic.sh
 
+# 测试键盘中断: 注入按键, 'b' 蓝屏, 其他键卡死
+test-keyboard:
+	./scripts/test_keyboard.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test test-panic clean
+.PHONY: build run run-nographic test test-panic test-keyboard clean
