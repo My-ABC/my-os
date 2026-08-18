@@ -28,9 +28,19 @@ extern isr3_handler
 global isr3
 
 isr3:
+    cli
+    push dword 0        ; 伪错误码
+    push dword 3        ; 中断号
     pusha
+    xor eax, eax
+    mov ax, ds
+    push eax
+    push esp            ; struct registers*
     call isr3_handler
+    add esp, 4
+    pop eax
     popa
+    add esp, 8          ; 弹掉中断号与错误码
     iret
 
 extern isr_handler
