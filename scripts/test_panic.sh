@@ -53,12 +53,15 @@ for REG in EAX EBX ECX EDX ESI EDI EBP ESP CS DS EFL; do
     grep -q "^$REG *=0x" "$LOG.clean" || fail "缺少寄存器 $REG 的输出"
 done
 
-BOOTS=$(grep -c 'MyOS v0.1 serial console' "$LOG.clean")
+BOOTS=$(grep -c 'MyOS v0.0.1' "$LOG.clean")
 [ "$BOOTS" -ge 2 ] || fail "内核没有自动重启 (只启动了 $BOOTS 次)"
 
 # q35 的固件提供 ACPI 2.0+ FADT, 校验确实走的是 reset register 而不是兜底路径
 # (默认 pc 机型的 SeaBIOS 只有 ACPI 1.0 FADT, 没有 reset register)
 Q35_LOG=$(mktemp)
+# 确保使用带 PANIC_DEMO 的内核进行 q35 测试
+make clean >/dev/null
+make PANIC_DEMO=1 ${MAKE_ARGS:-} build >/dev/null || { echo "FAIL: q35 构建失败"; exit 1; }
 timeout 15 qemu-system-i386 -machine q35 -kernel "$KERNEL" -display none \
     -serial file:"$Q35_LOG" -no-reboot >/dev/null 2>&1
 tr -d '\r' < "$Q35_LOG" > "$Q35_LOG.clean"

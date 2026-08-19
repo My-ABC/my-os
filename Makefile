@@ -50,8 +50,12 @@ run: build
 run-nographic: build
 	qemu-system-i386 -kernel $(KERNEL) -nographic
 
+test: test-timer test-panic test-keyboard test-scancode-set2 test-rtc
+	echo ""
+	echo "All test ok!"
+
 # 测试时钟中断: 校验 COM1 每秒输出一个递增计数
-test: build
+test-timer: build
 	./scripts/test_timer.sh
 
 # 测试 INT3 蓝屏: 校验寄存器 dump 与 ACPI 自动重启
@@ -78,4 +82,4 @@ test-rtc-time:
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test test-panic test-keyboard test-scancode-set2 test-rtc clean
+.PHONY: build run run-nographic test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean
