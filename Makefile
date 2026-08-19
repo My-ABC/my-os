@@ -66,8 +66,12 @@ test-keyboard:
 test-scancode-set2:
 	./scripts/test_scancode_set2.sh
 
+# 测试RTC: 读取并显示当前时间，验证年份处理是否正确
+test-rtc:
+	./scripts/test_rtc.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test test-panic test-keyboard test-scancode-set2 clean
+.PHONY: build run run-nographic test test-panic test-keyboard test-scancode-set2 test-rtc clean

@@ -6,6 +6,7 @@
 #include "pit.h"
 #include "keyboard.h"
 #include "serial.h"
+#include "rtc.h"
 
 void kmain() {
     // 初始化 VGA
@@ -49,6 +50,10 @@ void kmain() {
     __asm__ volatile ("sti");
     vga_print_success("Interrupts enabled");
 
+    vga_print_info("Initializing RTC...");
+    rtc_init();
+    vga_print_success("RTC initialized");
+
     vga_print_info("Kernel loaded at 0x100000");
     vga_print_warning("Low memory detected");
     vga_print_error("Network card not found");
@@ -61,6 +66,61 @@ void kmain() {
     vga_print(" (dec), ");
     vga_print_hex(0xDEADBEEF);
     vga_print(" (hex)\n");
+
+    // 显示RTC时间
+    vga_print("Current time (UTC): ");
+    rtc_print_datetime();
+    
+    // 显示北京时间
+    vga_print("Beijing time (UTC+8): ");
+    {
+        rtc_time_t time;
+        rtc_read_time(&time);
+        rtc_to_beijing_time(&time);
+        
+        // 打印北京时间
+        vga_print_dec(time.year);
+        vga_putchar('-');
+        if (time.month < 10) vga_putchar('0');
+        vga_print_dec(time.month);
+        vga_putchar('-');
+        if (time.day < 10) vga_putchar('0');
+        vga_print_dec(time.day);
+        vga_putchar(' ');
+        
+        if (time.hour < 10) vga_putchar('0');
+        vga_print_dec(time.hour);
+        vga_putchar(':');
+        if (time.minute < 10) vga_putchar('0');
+        vga_print_dec(time.minute);
+        vga_putchar(':');
+        if (time.second < 10) vga_putchar('0');
+        vga_print_dec(time.second);
+        vga_putchar('\n');
+        
+        // 同样输出到串口
+        serial_print("Beijing time (UTC+8): ");
+        serial_print_dec(time.year);
+        serial_putchar('-');
+        if (time.month < 10) serial_putchar('0');
+        serial_print_dec(time.month);
+        serial_putchar('-');
+        if (time.day < 10) serial_putchar('0');
+        serial_print_dec(time.day);
+        serial_putchar(' ');
+        
+        if (time.hour < 10) serial_putchar('0');
+        serial_print_dec(time.hour);
+        serial_putchar(':');
+        if (time.minute < 10) serial_putchar('0');
+        serial_print_dec(time.minute);
+        serial_putchar(':');
+        if (time.second < 10) serial_putchar('0');
+        serial_print_dec(time.second);
+        serial_putchar('\n');
+    }
+    // 显示Unix时间戳
+    rtc_print_unix_timestamp();
 
 #ifdef PANIC_DEMO
     vga_print("Triggering INT3 (panic demo)\n");
