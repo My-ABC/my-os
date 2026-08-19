@@ -43,6 +43,7 @@ make test-panic         # INT3 blue screen: register dump + automatic reboot
 make test-keyboard      # keyboard (scancode set 1): 'b' -> blue screen, other keys -> halt
 make test-scancode-set2 # keyboard (scancode set 2): switch to scancode set 2 and test
 make test-rtc           # RTC: read and display current time, Beijing time, and Unix timestamp, verify year handling
+make test-rtc-time RTC_TIME="2000-01-01T00:00:01"  # RTC: test with specific time (supports QEMU time format)
 ```
 
 The keyboard and panic tests drive QEMU through its monitor (`-monitor pipe:`) to inject keys and take screenshots, so no extra tools are required. Pass make flags with `MAKE_ARGS`, e.g. `MAKE_ARGS="CC=gcc LD=ld" make test-keyboard`.

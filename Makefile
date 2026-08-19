@@ -70,6 +70,10 @@ test-scancode-set2:
 test-rtc:
 	./scripts/test_rtc.sh
 
+# 测试RTC: 使用指定时间测试，例如: make test-rtc-time RTC_TIME="2000-01-01T00:00:01"
+test-rtc-time:
+	RTC_TIME=$(RTC_TIME) ./scripts/test_rtc.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)

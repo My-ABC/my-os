@@ -43,6 +43,7 @@ make test-panic         # INT3 蓝屏: 寄存器 dump + 自动重启
 make test-keyboard      # 键盘（扫描码集1）: 'b' 蓝屏, 其他键停机
 make test-scancode-set2 # 键盘（扫描码集2）: 切换到扫描码集2后测试
 make test-rtc           # RTC: 读取并显示当前时间、北京时间、Unix时间戳，验证年份处理是否正确
+make test-rtc-time RTC_TIME="2000-01-01T00:00:01"  # RTC: 使用指定时间测试（支持QEMU时间格式）
 ```
 
 键盘和蓝屏测试通过 QEMU monitor（`-monitor pipe:`）注入按键、抓取截图，不需要额外工具。给 make 传参用 `MAKE_ARGS`，例如 `MAKE_ARGS="CC=gcc LD=ld" make test-keyboard`。

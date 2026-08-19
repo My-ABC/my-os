@@ -90,18 +90,15 @@ void rtc_read_time(rtc_time_t *time) {
         time->year = century * 100 + time->year;
     } else {
         // 如果没有世纪寄存器，需要推断世纪
-        // 这里使用一个启发式方法：假设年份 >= 90 则为1900年代，否则为2000年代
-        // 注意：这不是完美的解决方案，但避免了简单的千年虫问题
-        if (time->year >= 90) {
-            time->year = 1900 + time->year;
-        } else {
+        // 使用更智能的推断：基于当前年份范围
+        // 假设我们在2020年代左右，所以：
+        // 00-29 -> 2000-2029
+        // 30-99 -> 1930-1999
+        if (time->year <= 29) {
             time->year = 2000 + time->year;
+        } else {
+            time->year = 1900 + time->year;
         }
-    }
-    
-    // 确保年份在合理范围内
-    if (time->year < 2000) {
-        time->year = 2000 + (time->year % 100);
     }
 }
 
