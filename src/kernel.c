@@ -34,6 +34,14 @@ void kmain() {
 
     vga_print_info("Initializing keyboard (IRQ1)...");
     keyboard_init();
+    
+#ifdef SCANCODE_SET
+    keyboard_set_scancode_set(SCANCODE_SET);
+    serial_print("Scancode set: ");
+    serial_print_dec(SCANCODE_SET);
+    serial_putchar('\n');
+#endif
+    
     pic_clear_mask(1);
     vga_print_success("Keyboard initialized");
 

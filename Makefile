@@ -9,6 +9,11 @@ CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g -Iinclude
 ifdef PANIC_DEMO
 CFLAGS += -DPANIC_DEMO
 endif
+
+# SCANCODE_SET=1 或 2 时设置键盘扫描码集
+ifdef SCANCODE_SET
+CFLAGS += -DSCANCODE_SET=$(SCANCODE_SET)
+endif
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
@@ -57,8 +62,12 @@ test-panic:
 test-keyboard:
 	./scripts/test_keyboard.sh
 
+# 测试扫描码集2: 切换到扫描码集2后测试键盘输入
+test-scancode-set2:
+	./scripts/test_scancode_set2.sh
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test test-panic test-keyboard clean
+.PHONY: build run run-nographic test test-panic test-keyboard test-scancode-set2 clean

@@ -12,7 +12,7 @@
 - **IDT** — 256 项，INT3 与 IRQ0/IRQ1 有真实处理函数
 - **PIC** — 8259 重映射到向量 `0x20`/`0x28`，支持单个 IRQ 屏蔽与 EOI
 - **PIT 时钟** — 通道 0 跑 100Hz（IRQ0），每秒在 COM1 打印一个递增数字
-- **键盘** — IRQ1，扫描码集 1（含小键盘与 `0xE0` 扩展码），32 字节环形缓冲
+- **键盘** — IRQ1，支持扫描码集 1 和 2（含小键盘与 `0xE0` 扩展码），32 字节环形缓冲
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
 
@@ -37,9 +37,10 @@ make CC=gcc LD=ld build   # 需要 gcc-multilib
 所有测试都是无图形界面的，通过校验 COM1 输出来判断结果。
 
 ```bash
-make test           # 100Hz 时钟: COM1 每秒输出一个递增数字
-make test-panic     # INT3 蓝屏: 寄存器 dump + 自动重启
-make test-keyboard  # 键盘: 'b' 蓝屏, 其他键停机
+make test               # 100Hz 时钟: COM1 每秒输出一个递增数字
+make test-panic         # INT3 蓝屏: 寄存器 dump + 自动重启
+make test-keyboard      # 键盘（扫描码集1）: 'b' 蓝屏, 其他键停机
+make test-scancode-set2 # 键盘（扫描码集2）: 切换到扫描码集2后测试
 ```
 
 键盘和蓝屏测试通过 QEMU monitor（`-monitor pipe:`）注入按键、抓取截图，不需要额外工具。给 make 传参用 `MAKE_ARGS`，例如 `MAKE_ARGS="CC=gcc LD=ld" make test-keyboard`。
@@ -50,6 +51,18 @@ make test-keyboard  # 键盘: 'b' 蓝屏, 其他键停机
 
 - `b` — 触发蓝屏：dump 寄存器，倒计时 5 秒后重启
 - 其他键 — 打印 `Halted` 并停机
+
+### 扫描码集设置
+
+内核支持通过编译选项设置键盘扫描码集：
+
+```bash
+make SCANCODE_SET=1 build  # 使用扫描码集1（默认）
+make SCANCODE_SET=2 build  # 使用扫描码集2
+make run
+```
+
+扫描码集2是现代PS/2键盘的标准格式，使用 `0xF0` 前缀标识断码，而扫描码集1使用最高位标识断码。
 
 用 `make PANIC_DEMO=1` 构建时，内核会在初始化后直接触发 `int $0x03`，`make test-panic` 就是这么做的。
 
