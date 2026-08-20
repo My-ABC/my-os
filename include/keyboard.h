@@ -23,4 +23,7 @@ char keyboard_getchar(void);
 // 阻塞等待一个按键
 char keyboard_wait_key(void);
 
+// 检查是否有按键等待读取 (非阻塞)
+int keyboard_hit(void);
+
 #endif

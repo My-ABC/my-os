@@ -180,3 +180,7 @@ char keyboard_wait_key(void) {
         __asm__ volatile ("hlt");  // 等中断, 不空转烧 CPU
     }
 }
+
+int keyboard_hit(void) {
+    return head != tail;
+}
