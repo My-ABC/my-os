@@ -16,6 +16,7 @@
 - **RTC** — CMOS 实时时钟，读取年/月/日和时/分/秒，支持4位数年份避免千年虫问题，支持时区转换和Unix时间戳
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
+- **shell(内核)** — 制作了一个内核态的shell
 
 ## 构建
 
@@ -38,7 +39,8 @@ make CC=gcc LD=ld build   # 需要 gcc-multilib
 所有测试都是无图形界面的，通过校验 COM1 输出来判断结果。
 
 ```bash
-make test               # 100Hz 时钟: COM1 每秒输出一个递增数字
+make test               # 测试所有     
+make test-timer         # 100Hz 时钟: COM1 每秒输出一个递增数字
 make test-panic         # INT3 蓝屏: 寄存器 dump + 自动重启
 make test-keyboard      # 键盘（扫描码集1）: 'b' 蓝屏, 其他键停机
 make test-scancode-set2 # 键盘（扫描码集2）: 切换到扫描码集2后测试
@@ -69,11 +71,25 @@ make run
 
 用 `make PANIC_DEMO=1` 构建时，内核会在初始化后直接触发 `int $0x03`，`make test-panic` 就是这么做的。
 
+## shell使用
+```
+命令列表：
+time     获取时间
+panic    触发INT 3
+echo     打印后面的文字
+reboot   ACPI重启
+secho    串口打印文字
+tick     获取PIT中的tick
+help     显示帮助
+clear    清屏
+hello    打印hello消息
+```
+
 ## 目录结构
 
 ```
 boot/     Multiboot 头、内核入口、中断桩 (NASM)
-src/      内核、VGA、串口、IDT、PIC、PIT、键盘、RTC、蓝屏、ACPI
+src/      内核、VGA、串口、IDT、PIC、PIT、键盘、RTC、蓝屏、ACPI、shell
 include/  硬件抽象头文件与 freestanding 类型定义
 scripts/  无图形界面的 QEMU 测试
 linker.ld 1MB 加载地址与段布局
