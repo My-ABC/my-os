@@ -106,7 +106,7 @@ int cmd_secho(int argc, char *argv[]) {
 }
 
 int cmd_tick(int argc, char *argv[]) {
-    printf("Tick count: %u\n", pit_ticks());
+    printf("Tick count: %d\n", pit_ticks());
     return 0;
 }
 
