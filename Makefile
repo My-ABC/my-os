@@ -60,6 +60,9 @@ run: build
 run-nographic: build
 	qemu-system-i386 -kernel $(KERNEL) -nographic -serial stdio
 
+run-serial: build
+	qemu-system-i386 -kernel $(KERNEL) -serial stdio
+
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -serial stdio
@@ -68,8 +71,15 @@ run-q35: build
 run-q35-nographic: build
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -nographic
 
+debug: build
+	@echo "=== QEMU GDB server started on localhost:1234 ==="
+	@echo "=== In another terminal: i686-elf-gdb myos.bin ==="
+	@echo "=== (gdb) target remote localhost:1234 ==="
+	@echo "=== (gdb) b kmain  # set breakpoint ==="
+	qemu-system-i386 -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown on gdb"
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic run-q35 run-q35-nographic clean
+.PHONY: build run run-nographic run-serial run-q35 run-q35-nographic debug clean
