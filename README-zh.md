@@ -16,6 +16,7 @@
 - **RTC** — CMOS 实时时钟，读取年/月/日和时/分/秒，支持4位数年份避免千年虫问题，支持时区转换和Unix时间戳
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
+- **ACPI 关机** — 通过 ACPI S5 状态关机，备用方案使用常见 ACPI I/O 端口
 - **shell(内核)** — 制作了一个内核态的shell
 
 ## 构建
@@ -26,6 +27,8 @@
 make build          # -> myos.bin
 make run            # 带图形窗口的 QEMU
 make run-nographic  # 串口输出到终端的 QEMU
+make run-q35        # 使用 q35 机型运行（更好的 ACPI 支持）
+make run-q35-nographic  # 使用 q35 机型运行，串口输出到终端
 ```
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：
@@ -78,6 +81,7 @@ time     获取时间
 panic    触发INT 3
 echo     打印后面的文字
 reboot   ACPI重启
+shutdown ACPI关机
 secho    串口打印文字
 tick     获取PIT中的tick
 help     显示帮助

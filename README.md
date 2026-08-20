@@ -16,6 +16,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **RTC** — CMOS real-time clock, reads year/month/day and hour/minute/second, supports 4-digit year to avoid Y2K bugs, supports timezone conversion and Unix timestamps
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
 - **ACPI reboot** — resets through the FADT reset register, falling back to `0xCF9`, the keyboard controller, and finally a triple fault
+- **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
 - **shell(kernel)** — impl a shell on kernel mode 
 
 ## Building
@@ -26,6 +27,8 @@ Requirements: `nasm`, an i686 toolchain, `qemu-system-x86` (for running and test
 make build          # -> myos.bin
 make run            # QEMU with a graphical window
 make run-nographic  # QEMU with the serial console on the terminal
+make run-q35        # QEMU with q35 machine (better ACPI support)
+make run-q35-nographic  # QEMU with q35 machine, serial console on terminal
 ```
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
@@ -78,6 +81,7 @@ time     get time
 panic    call the INT3
 echo     print the fist arg
 reboot   use ACPI to reboot
+shutdown use ACPI to shutdown
 secho    print text on COM1
 tick     get tick of PIT
 help     show help

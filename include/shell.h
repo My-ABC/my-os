@@ -6,12 +6,12 @@
 // panic    触发INT 3
 // echo     打印后面的文字
 // reboot   ACPI重启
+// shutdown ACPI关机
 // secho    串口打印文字
 // tick     获取PIT中的tick
 // help     显示帮助
 // clear    清屏
 // hello    打印hello消息
-//*shutdown ACPI关机
 
 typedef struct {
     const char *name;

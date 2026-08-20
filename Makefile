@@ -48,11 +48,19 @@ build/%.o: boot/%.asm
 
 # 运行
 run: build
-	qemu-system-i386 -kernel $(KERNEL)
+	qemu-system-i386 -kernel $(KERNEL) -serial stdio
 
 # 无图形界面运行, 串口输出到终端
 run-nographic: build
-	qemu-system-i386 -kernel $(KERNEL) -nographic
+	qemu-system-i386 -kernel $(KERNEL) -nographic -serial stdio
+
+# 使用 q35 机型运行（更好的 ACPI 支持）
+run-q35: build
+	qemu-system-i386 -machine q35 -kernel $(KERNEL) -serial stdio
+
+# 使用 q35 机型运行，串口输出到终端
+run-q35-nographic: build
+	qemu-system-i386 -machine q35 -kernel $(KERNEL) -nographic
 
 test: test-timer test-panic test-keyboard test-scancode-set2 test-rtc
 	echo ""
@@ -86,4 +94,4 @@ test-rtc-time:
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean
+.PHONY: build run run-nographic run-q35 run-q35-nographic test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean

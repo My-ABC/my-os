@@ -4,4 +4,7 @@
 // 通过 ACPI FADT 的 reset register 复位; 失败时回退到 0xCF9 / 键盘控制器 / 三重错误
 void acpi_reboot(void);
 
+// 通过 ACPI S5 状态实现系统关机
+void acpi_shutdown(void);
+
 #endif
