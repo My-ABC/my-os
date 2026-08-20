@@ -7,8 +7,14 @@
 // 当前使用的扫描码集 (1 或 2)
 static int current_scancode_set = 1;
 
+// 修饰键状态
+static int shift_pressed = 0;
+static int alt_pressed = 0;
+static int ctrl_pressed = 0;
+static int caps_lock_on = 0;
+static int num_lock_on = 0;
+
 // 扫描码集 1 (make code) 到 ASCII, 0 表示不可打印/未映射
-// 0x47-0x53 是小键盘, 按 Num Lock 打开时的字符映射
 static const char scancode_ascii_set1[128] = {
     0,    27,  '1', '2', '3', '4',  '5', '6',
     '7',  '8', '9', '0', '-', '=',  '\b', '\t',
@@ -38,13 +44,60 @@ static const char scancode_ascii_set2[128] = {
     '2',  '3', '0', '.',
 };
 
+// Shift 符号映射表
+static const char shift_symbols[128] = {
+    ['1'] = '!', ['2'] = '@', ['3'] = '#', ['4'] = '$',
+    ['5'] = '%', ['6'] = '^', ['7'] = '&', ['8'] = '*',
+    ['9'] = '(', ['0'] = ')', ['-'] = '_', ['='] = '+',
+    ['['] = '{', [']'] = '}', ['\\'] = '|', [';'] = ':',
+    ['\''] = '"', [','] = '<', ['.'] = '>', ['/'] = '?',
+    ['`'] = '~'
+};
+
 static volatile char buffer[BUFFER_SIZE];
 static volatile uint32_t head = 0;
 static volatile uint32_t tail = 0;
 
+// 转换字符（处理 Shift、Caps Lock）
+static char apply_modifiers(char c, int shift, int caps) {
+    if (c >= 'a' && c <= 'z') {
+        if (shift || caps) {
+            return c - 'a' + 'A';
+        }
+        return c;
+    }
+    if (shift && c >= '1' && c <= '9') {
+        return shift_symbols[(int)c];
+    }
+    if (shift) {
+        // 处理其他符号
+        switch (c) {
+            case '0': return ')';
+            case '-': return '_';
+            case '=': return '+';
+            case '[': return '{';
+            case ']': return '}';
+            case '\\': return '|';
+            case ';': return ':';
+            case '\'': return '"';
+            case ',': return '<';
+            case '.': return '>';
+            case '/': return '?';
+            case '`': return '~';
+        }
+    }
+    return c;
+}
+
 void keyboard_init(void) {
     head = 0;
     tail = 0;
+    shift_pressed = 0;
+    alt_pressed = 0;
+    ctrl_pressed = 0;
+    caps_lock_on = 0;
+    num_lock_on = 0;
+    current_scancode_set = 1;
 
     // 丢掉上电后残留在输出缓冲区里的字节, 否则第一次 IRQ1 可能不会到来
     while (inb(0x64) & 0x01) {
@@ -87,7 +140,7 @@ static uint8_t keyboard_send_command_with_response(uint8_t cmd) {
 
 void keyboard_set_scancode_set(int set) {
     if (set < 1 || set > 2) {
-        return;  // 只支持扫描码集1和2
+        return;
     }
 
     // 禁用键盘
@@ -118,7 +171,7 @@ void keyboard_irq(void) {
     static uint8_t release = 0;  // 扫描集2的释放标志
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
 
-    if (scancode == 0xE0) {  // 扩展码前缀, 真正的键在下一个字节
+    if (scancode == 0xE0) {  // 扩展码前缀
         extended = 1;
         return;
     }
@@ -131,7 +184,31 @@ void keyboard_irq(void) {
     uint8_t was_extended = extended;
     extended = 0;
 
-    if (current_scancode_set == 1 && (scancode & 0x80)) {  // 扫描集1的断码: 松开按键
+    // 处理修饰键（扫描集1和2通用）
+    // 左 Shift: 0x2A, 右 Shift: 0x36
+    if (scancode == 0x2A || scancode == 0x36) {
+        shift_pressed = 1;
+        return;
+    }
+    if (scancode == 0xAA || scancode == 0xB6) {
+        shift_pressed = 0;
+        return;
+    }
+
+    // Caps Lock: 0x3A (按下), 0xBA (释放)
+    if (scancode == 0x3A) {
+        caps_lock_on = !caps_lock_on;
+        return;
+    }
+
+    // Num Lock: 0x45 (按下), 0xC5 (释放)
+    if (scancode == 0x45) {
+        num_lock_on = !num_lock_on;
+        return;
+    }
+
+    if (current_scancode_set == 1 && (scancode & 0x80)) {  // 扫描集1的断码
+        // 检查是否是修饰键释放（已在上面处理）
         return;
     }
 
@@ -142,10 +219,9 @@ void keyboard_irq(void) {
 
     char c;
     if (was_extended) {
-        // 扩展码里只有小键盘的 Enter 和 / 是可打印的
+        // 扩展码（小键盘 Enter, / 等）
         c = scancode == 0x1C ? '\n' : (scancode == 0x35 ? '/' : 0);
     } else {
-        // 根据当前扫描码集选择映射表
         const char *scancode_ascii = (current_scancode_set == 1) ? 
                                       scancode_ascii_set1 : scancode_ascii_set2;
         c = scancode_ascii[scancode & 0x7F];
@@ -154,8 +230,11 @@ void keyboard_irq(void) {
         return;
     }
 
+    // 应用 Shift 和 Caps Lock 转换
+    c = apply_modifiers(c, shift_pressed, caps_lock_on);
+
     uint32_t next = (head + 1) % BUFFER_SIZE;
-    if (next != tail) {  // 满了就丢弃, 不覆盖旧按键
+    if (next != tail) {
         buffer[head] = c;
         head = next;
     }
@@ -165,7 +244,6 @@ char keyboard_getchar(void) {
     if (head == tail) {
         return 0;
     }
-
     char c = buffer[tail];
     tail = (tail + 1) % BUFFER_SIZE;
     return c;
@@ -177,7 +255,7 @@ char keyboard_wait_key(void) {
         if (c != 0) {
             return c;
         }
-        __asm__ volatile ("hlt");  // 等中断, 不空转烧 CPU
+        __asm__ volatile ("hlt");
     }
 }
 

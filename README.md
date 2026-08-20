@@ -12,6 +12,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **IDT** — 256 entries, real handlers for INT3 and IRQ0/IRQ1
 - **PIC** — 8259 remapped to vectors `0x20`/`0x28`, per-IRQ masking, EOI
 - **PIT timer** — channel 0 at 100 Hz (IRQ0), prints one number per second on COM1
+- **GDT** — global descriptor table, supports code segment, data segment, user mode segment
 - **Keyboard** — IRQ1, supports scancode set 1 and 2 (including the numeric keypad and `0xE0` extended codes), 32-byte ring buffer
 - **RTC** — CMOS real-time clock, reads year/month/day and hour/minute/second, supports 4-digit year to avoid Y2K bugs, supports timezone conversion and Unix timestamps
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
@@ -36,29 +37,6 @@ The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolcha
 ```bash
 make CC=gcc LD=ld build   # needs gcc-multilib
 ```
-
-## Testing
-
-All tests run headless (no graphical window) and check the COM1 output.
-
-```bash
-make test               # test all
-make test-timer         # 100 Hz timer: one incrementing number per second on COM1
-make test-panic         # INT3 blue screen: register dump + automatic reboot
-make test-keyboard      # keyboard (scancode set 1): 'b' -> blue screen, other keys -> halt
-make test-scancode-set2 # keyboard (scancode set 2): switch to scancode set 2 and test
-make test-rtc           # RTC: read and display current time, Beijing time, and Unix timestamp, verify year handling
-make test-rtc-time RTC_TIME="2000-01-01T00:00:01"  # RTC: test with specific time (supports QEMU time format)
-```
-
-The keyboard and panic tests drive QEMU through its monitor (`-monitor pipe:`) to inject keys and take screenshots, so no extra tools are required. Pass make flags with `MAKE_ARGS`, e.g. `MAKE_ARGS="CC=gcc LD=ld" make test-keyboard`.
-
-## Usage
-
-After boot the kernel waits for a key:
-
-- `b` — trigger a blue screen: register dump, a 5 second countdown, then a reboot
-- any other key — print `Halted` and stop
 
 ### Scancode Set Configuration
 
@@ -95,7 +73,7 @@ hello    print hello message
 boot/     Multiboot header, kernel entry, interrupt stubs (NASM)
 src/      kernel, VGA, serial, IDT, PIC, PIT, keyboard, RTC, panic, ACPI, shell
 include/  hardware headers and freestanding type definitions
-scripts/  headless QEMU tests
+scripts/  CI/CD files
 linker.ld 1 MB load address and section layout
 ```
 

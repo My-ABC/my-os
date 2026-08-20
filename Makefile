@@ -68,36 +68,8 @@ run-q35: build
 run-q35-nographic: build
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -nographic
 
-test: test-timer test-panic test-keyboard test-scancode-set2 test-rtc
-	echo ""
-	echo "All test ok!"
-
-# 测试时钟中断: 校验 COM1 每秒输出一个递增计数
-test-timer: build
-	./scripts/test_timer.sh
-
-# 测试 INT3 蓝屏: 校验寄存器 dump 与 ACPI 自动重启
-test-panic:
-	./scripts/test_panic.sh
-
-# 测试键盘中断: 注入按键, 'b' 蓝屏, 其他键卡死
-test-keyboard:
-	./scripts/test_keyboard.sh
-
-# 测试扫描码集2: 切换到扫描码集2后测试键盘输入
-test-scancode-set2:
-	./scripts/test_scancode_set2.sh
-
-# 测试RTC: 读取并显示当前时间，验证年份处理是否正确
-test-rtc:
-	./scripts/test_rtc.sh
-
-# 测试RTC: 使用指定时间测试，例如: make test-rtc-time RTC_TIME="2000-01-01T00:00:01"
-test-rtc-time:
-	RTC_TIME=$(RTC_TIME) ./scripts/test_rtc.sh
-
 # 清理
 clean:
 	rm -rf build $(KERNEL)
 
-.PHONY: build run run-nographic run-q35 run-q35-nographic test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean
+.PHONY: build run run-nographic run-q35 run-q35-nographic clean
