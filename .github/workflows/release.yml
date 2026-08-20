@@ -1,0 +1,38 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'             # 推送 v0.0.1, v0.0.2 等标签时触发
+  workflow_dispatch:     # 也支持手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write    # 允许创建 Release 并上传文件
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y nasm grub-pc-bin xorriso gcc-multilib
+
+      - name: Build kernel and ISO
+        run: |
+          make CC=gcc LD=ld build
+          make iso
+
+      - name: Create Release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            myos.bin
+            myos.iso
