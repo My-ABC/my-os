@@ -78,6 +78,9 @@ debug: build
 	@echo "=== (gdb) b kmain  # set breakpoint ==="
 	qemu-system-i386 -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown on gdb"
 
+gdb:
+	i686-elf-gdb -ex "target remote localhost:1234" $(KERNEL)
+
 # 清理
 clean:
 	rm -rf build $(KERNEL)
