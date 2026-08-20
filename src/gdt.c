@@ -30,7 +30,7 @@ void gdt_init(void) {
     serial_print("[GDT] Initializing GDT\n");
 
     // 设置 GDT 指针
-    gdt_ptr.limit = (sizeof(struct gdt_entry) * 5) - 1;
+    gdt_ptr.limit = (sizeof(struct gdt_entry) * 6) - 1;
     gdt_ptr.base  = (uint32_t)&gdt;
 
     serial_print("[GDT] gdt_limit = ");
@@ -69,7 +69,7 @@ void gdt_init(void) {
     serial_print("[GDT] GDT entries set up\n");
 
     serial_print("[GDT] GDT table contents:\n");
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         serial_print("  entry ");
         serial_print_dec(i);
         serial_print(": ");

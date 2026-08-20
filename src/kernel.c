@@ -10,10 +10,12 @@
 #include "serial.h"
 #include "rtc.h"
 #include "shell.h"
+#include "tss.h"
 
 void kmain() {
     // 初始化 GDT（必须最先进行）
     gdt_init();
+    tss_init();
     
     // 初始化 VGA
     vga_init();

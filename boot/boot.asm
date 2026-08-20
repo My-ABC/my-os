@@ -8,6 +8,7 @@ align 4
 section .text
 global start
 extern kmain
+global stack_top
 
 start:
     mov esp, stack_top
