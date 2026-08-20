@@ -8,6 +8,7 @@
 #include "keyboard.h"
 #include "serial.h"
 #include "rtc.h"
+#include "shell.h"
 
 void kmain() {
     // 初始化 VGA
@@ -88,7 +89,7 @@ void kmain() {
     vga_print("Triggering INT3 (panic demo)\n");
     __asm__ volatile ("int $0x03");
 #endif
-
+#ifdef KEYBOARD_DEMO
     printf("Timer ticking, output on COM1\n");
     printf("Press 'b' for a blue screen, any other key to halt\n");
     serial_printf("Press 'b' for a blue screen, any other key to halt\n");
@@ -104,4 +105,7 @@ void kmain() {
     serial_printf("Halted\n");
     printf("Halted\n");
     while (1);
+#else
+    start_shell();
+#endif
 }

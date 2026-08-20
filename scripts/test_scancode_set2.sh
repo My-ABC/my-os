@@ -20,7 +20,7 @@ command -v "$QEMU" >/dev/null || fail "找不到 $QEMU, 请安装 qemu-system-x8
 
 make clean >/dev/null
 # shellcheck disable=SC2086
-make ${MAKE_ARGS:-} SCANCODE_SET=2 build >/dev/null || fail "构建失败"
+make ${MAKE_ARGS:-} SCANCODE_SET=2 KEYBOARD_DEMO=1 build >/dev/null || fail "构建失败"
 
 # 启动内核, 等它进入等待按键状态后注入一个键, 返回清理过的 COM1 日志路径
 run_with_key() {
