@@ -80,7 +80,7 @@ debug: build
 	@echo "=== In another terminal: i686-elf-gdb myos.bin ==="
 	@echo "=== (gdb) target remote localhost:1234 ==="
 	@echo "=== (gdb) b kmain  # set breakpoint ==="
-	qemu-system-i386 -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown on gdb"
+	qemu-system-i386 -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown
 
 gdb:
 	i686-elf-gdb -ex "target remote localhost:1234" $(KERNEL)
