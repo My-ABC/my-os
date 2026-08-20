@@ -20,13 +20,12 @@
 
 ## 构建
 
-依赖：`nasm`、i686 工具链、`qemu-system-x86`（运行与测试用）、`grub-pc-bin`、 `grub-common`、 `xorriso`。
+依赖：`nasm`、i686 工具链、`qemu-system-x86`（运行与测试用）。
 
 ```bash
 make build          # -> myos.bin
 make run            # 带图形窗口的 QEMU
 make run-nographic  # 串口输出到终端的 QEMU
-make iso            # 构建ISO文件
 ```
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：

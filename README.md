@@ -20,13 +20,12 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 
 ## Building
 
-Requirements: `nasm`, an i686 toolchain, `qemu-system-x86` (for running and testing),`grub-pc-bin`, `grub-common`, `xorriso`.
+Requirements: `nasm`, an i686 toolchain, `qemu-system-x86` (for running and testing).
 
 ```bash
 make build          # -> myos.bin
 make run            # QEMU with a graphical window
 make run-nographic  # QEMU with the serial console on the terminal
-make iso            # gen iso file
 ```
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
