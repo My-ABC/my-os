@@ -11,6 +11,20 @@
 #include "rtc.h"
 #include "shell.h"
 #include "tss.h"
+#include "syscall.h"
+
+static uint32_t user_stack[1024];
+void user_func(void) {
+    const char *str = "Hello, from Ring3\n";
+    __asm__ volatile (
+        "int $0x80"
+        :
+        : "a"(SYS_WRITE), "b"(str)
+        : "memory"
+    );
+
+    while (1);
+}
 
 void kmain() {
     // 初始化 GDT（必须最先进行）
@@ -113,6 +127,18 @@ void kmain() {
     printf("Halted\n");
     while (1);
 #else
-    start_shell();
+    // start_shell();
+    __asm__ volatile (
+        "cli\n"
+        "pushl $0x23\n"
+        "pushl %0\n"
+        "pushl $0x202\n"
+        "pushl $0x1B\n"
+        "pushl %1\n"
+        "iret\n"
+        :
+        : "r"(user_stack), "r"(user_func)
+        : "memory"
+    );
 #endif
 }

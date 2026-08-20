@@ -22,6 +22,14 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
     idt[num].flags = flags;
 }
 
+void idt_set_entry(int index, uint32_t base, uint16_t selector, uint8_t flags) {
+    idt[index].base_low = base & 0xFFFF;
+    idt[index].sel = selector;
+    idt[index].always0 = 0;        // 必须为 0
+    idt[index].flags = flags;
+    idt[index].base_high = (base >> 16) & 0xFFFF;
+}
+
 void isr_handler(uint32_t int_no);
 void irq_handler(uint32_t int_no);
 
@@ -38,6 +46,9 @@ void idt_init(void) {
 
     extern void irq1(void);
     idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
+
+    extern void syscall(void);
+    idt_set_entry(0x80, (uint32_t)syscall, 0x08, 0xEE);
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base = (uint32_t)&idt;

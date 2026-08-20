@@ -65,6 +65,15 @@ irq1:
     popa
     iret
 
+global syscall
+extern syscall_handler
+syscall:
+    pushad
+    call syscall_handler
+    mov [esp + 28], eax
+    popad
+    iret
+
 isr_common_stub:
     pusha
     popa
