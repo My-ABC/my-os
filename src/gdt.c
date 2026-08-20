@@ -1,8 +1,8 @@
 #include "gdt.h"
 #include "serial.h"
 
-// GDT 数组（5 个条目：空描述符、内核代码段、内核数据段、用户代码段、用户数据段）
-static struct gdt_entry gdt[5];
+// GDT 数组（6 个条目：空描述符、内核代码段、内核数据段、用户代码段、用户数据段、TSS）
+static struct gdt_entry gdt[6];
 static struct gdt_ptr gdt_ptr;
 
 // 设置 GDT 条目

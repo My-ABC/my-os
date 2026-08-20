@@ -1,7 +1,11 @@
 # 最简 Makefile - 自动查找文件
-CC = i686-elf-gcc
-AS = nasm
-LD = i686-elf-ld
+# 检测编译器
+CC := $(shell if command -v i686-elf-gcc >/dev/null 2>&1; then echo i686-elf-gcc; else echo gcc; fi)
+LD := $(shell if command -v i686-elf-ld >/dev/null 2>&1; then echo i686-elf-ld; else echo ld; fi)
+
+# 检测 nasm
+AS := $(shell if command -v nasm >/dev/null 2>&1; then echo nasm; else echo "nasm not found"; exit 1; fi)
+
 
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g -Iinclude
 
