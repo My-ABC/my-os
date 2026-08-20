@@ -2,6 +2,7 @@
 #include "stdio.h"
 #include "vga.h"
 #include "io.h"
+#include "gdt.h"
 #include "idt.h"
 #include "pic.h"
 #include "pit.h"
@@ -11,6 +12,9 @@
 #include "shell.h"
 
 void kmain() {
+    // 初始化 GDT（必须最先进行）
+    gdt_init();
+    
     // 初始化 VGA
     vga_init();
     serial_init();
@@ -21,6 +25,7 @@ void kmain() {
     
     // 测试日志输出
     vga_print_info("System initialized successfully");
+    vga_print_success("GDT initialized");
     
     vga_print_info("Loading IDT...");
     idt_init();

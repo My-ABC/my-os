@@ -28,6 +28,7 @@ ASM_SRCS = $(wildcard boot/*.asm)
 # 自动生成目标文件列表
 C_OBJS = $(patsubst src/%.c, build/%.o, $(C_SRCS))
 ASM_OBJS = $(patsubst boot/%.asm, build/%.o, $(ASM_SRCS))
+ASM_OBJS += build/gdt_asm.o
 OBJS = $(ASM_OBJS) $(C_OBJS)
 
 KERNEL = myos.bin
@@ -43,6 +44,11 @@ build/%.o: src/%.c
 
 # 编译汇编文件
 build/%.o: boot/%.asm
+	mkdir -p build
+	$(AS) $(ASFLAGS) $< -o $@
+
+# 单独编译 gdt.asm
+build/gdt_asm.o: boot/gdt.asm
 	mkdir -p build
 	$(AS) $(ASFLAGS) $< -o $@
 
