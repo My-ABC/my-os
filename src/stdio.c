@@ -2,6 +2,8 @@
 #include "stddef.h"
 #include "vga.h"
 #include "serial.h"
+#include "stdarg.h"
+#include "keyboard.h"
 
 // Helper function to convert integer to string
 static int int_to_str(char* str, int value, int base) {
@@ -284,4 +286,32 @@ int puts(const char* str) {
     vga_print(str);
     vga_putchar('\n');
     return 0;
+}
+
+int getchar(void) {
+    return keyboard_wait_key();
+}
+
+char *gets(char *buf, int size) {
+    int i = 0;
+    while (i < size - 1) {
+        char c = getchar();
+        if (c == '\n' || c == '\r') {
+            buf[i] = '\0';
+            putchar('\n');
+            return buf;
+        } else if (c == '\b') {
+            if (i > 0) {
+                i--;
+                putchar('\b');
+                putchar(' ');
+                putchar('\b');
+            }
+        } else {
+            buf[i++] = c;
+            putchar(c);
+        }
+    }
+    buf[i] = '\0';
+    return buf;
 }
