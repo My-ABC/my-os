@@ -12,7 +12,8 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **IDT** — 256 entries, real handlers for INT3 and IRQ0/IRQ1
 - **PIC** — 8259 remapped to vectors `0x20`/`0x28`, per-IRQ masking, EOI
 - **PIT timer** — channel 0 at 100 Hz (IRQ0), prints one number per second on COM1
-- **GDT** — global descriptor table, supports code segment, data segment, user mode segment
+- **GDT** — global descriptor table, supports code segment, data segment, user mode segment, TSS
+- **TSS** — impl esp0, ss0
 - **Keyboard** — IRQ1, supports scancode set 1 and 2 (including the numeric keypad and `0xE0` extended codes), 32-byte ring buffer
 - **RTC** — CMOS real-time clock, reads year/month/day and hour/minute/second, supports 4-digit year to avoid Y2K bugs, supports timezone conversion and Unix timestamps
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
