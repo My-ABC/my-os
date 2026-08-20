@@ -35,6 +35,7 @@ ASM_OBJS = $(patsubst boot/%.asm, build/%.o, $(ASM_SRCS))
 ASM_OBJS += build/gdt_asm.o
 OBJS = $(ASM_OBJS) $(C_OBJS)
 
+ISO = myos.iso
 KERNEL = myos.bin
 
 # 构建
@@ -75,6 +76,19 @@ run-q35: build
 run-q35-nographic: build
 	qemu-system-i386 -machine q35 -kernel $(KERNEL) -nographic
 
+iso: build
+	@mkdir -p iso/boot/grub
+	@cp $(KERNEL) iso/boot/
+	@echo "set timeout=5" > iso/boot/grub/grub.cfg
+	@echo "set default=0" >> iso/boot/grub/grub.cfg
+	@echo "menuentry \"MyOS\" {" >> iso/boot/grub/grub.cfg
+	@echo "    multiboot /boot/$(KERNEL)" >> iso/boot/grub/grub.cfg
+	@echo "    boot" >> iso/boot/grub/grub.cfg
+	@echo "}" >> iso/boot/grub/grub.cfg
+	@grub-mkrescue -o myos.iso iso/ --modules="multiboot biosdisk iso9660"
+	@rm -rf iso
+	@echo "ISO generated: myos.iso"
+
 debug: build
 	@echo "=== QEMU GDB server started on localhost:1234 ==="
 	@echo "=== In another terminal: i686-elf-gdb myos.bin ==="
@@ -85,8 +99,11 @@ debug: build
 gdb:
 	i686-elf-gdb -ex "target remote localhost:1234" $(KERNEL)
 
+run-iso: iso
+	qemu-system-i386 -cdrom myos.iso -serial stdio
+
 # 清理
 clean:
-	rm -rf build $(KERNEL)
+	rm -rf build $(KERNEL) $(ISO)
 
-.PHONY: build run run-nographic run-serial run-q35 run-q35-nographic debug clean
+.PHONY: build run run-nographic run-serial run-q35 run-q35-nographic iso run-iso debug clean

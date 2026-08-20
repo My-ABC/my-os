@@ -320,5 +320,5 @@ void printd(const char* topic, const char* msg) {
     printf("[");
     printf(topic);
     printf("] ");
-    print(msg);
+    printf(msg);
 }
