@@ -19,6 +19,8 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
 - **ACPI reboot** — resets through the FADT reset register, falling back to `0xCF9`, the keyboard controller, and finally a triple fault
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
+- **Ring 3** — impl Ring3
+- **syscall** — impl syscall for the Ring3
 - **shell(kernel)** — impl a shell on kernel mode 
 
 ## Building
