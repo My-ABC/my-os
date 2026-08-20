@@ -85,5 +85,20 @@ test-rtc-time:
 # 清理
 clean:
 	rm -rf build $(KERNEL)
+	rm -rf build iso
 
-.PHONY: build run run-nographic test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean
+# 生成可启动 ISO
+iso: build
+	@mkdir -p iso/boot/grub
+	@cp $(KERNEL) iso/boot/
+	@echo "set timeout=5" > iso/boot/grub/grub.cfg
+	@echo "set default=0" >> iso/boot/grub/grub.cfg
+	@echo "menuentry \"MyOS\" {" >> iso/boot/grub/grub.cfg
+	@echo "    multiboot /boot/$(KERNEL)" >> iso/boot/grub/grub.cfg
+	@echo "    boot" >> iso/boot/grub/grub.cfg
+	@echo "}" >> iso/boot/grub/grub.cfg
+	@grub-mkrescue -o myos.iso iso/
+	@rm -rf iso
+	@echo "ISO generated: myos.iso"
+
+.PHONY: build run run-nographic iso test test-timer test-panic test-keyboard test-scancode-set2 test-rtc clean
