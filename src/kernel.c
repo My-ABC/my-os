@@ -12,16 +12,12 @@
 #include "shell.h"
 #include "tss.h"
 #include "syscall.h"
+#include "ring3.h"
 
 static uint32_t user_stack[1024];
 void user_func(void) {
     const char *str = "Hello, from Ring3\n";
-    __asm__ volatile (
-        "int $0x80"
-        :
-        : "a"(SYS_WRITE), "b"(str)
-        : "memory"
-    );
+    sys_call(SYS_WRITE, str, 0, 0);
 
     while (1);
 }
@@ -128,17 +124,6 @@ void kmain() {
     while (1);
 #else
     // start_shell();
-    __asm__ volatile (
-        "cli\n"
-        "pushl $0x23\n"
-        "pushl %0\n"
-        "pushl $0x202\n"
-        "pushl $0x1B\n"
-        "pushl %1\n"
-        "iret\n"
-        :
-        : "r"(user_stack), "r"(user_func)
-        : "memory"
-    );
+    ring0_to_ring3(user_stack, user_func);
 #endif
 }

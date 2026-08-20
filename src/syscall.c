@@ -18,11 +18,11 @@ uint32_t syscall_handler() {
 
     switch (eax) {
         case SYS_WRITE: { // 参数: ebx: const char *str
-            vga_print(ebx);
+            vga_print((const char*)ebx);
             return 0;
         }
         case SYS_READ: { // 参数: ebx: char *str, ecx: size_t size
-            gets(ebx, ecx);
+            gets((char*)ebx, ecx);
             return 0;
         }
         case SYS_GETCHAR: {
@@ -40,11 +40,24 @@ uint32_t syscall_handler() {
         case SYS_TIME: {
             rtc_time_t time;
             rtc_read_time(&time);
-            uint32_t *t = rtc_to_unix_timestamp(&time);
+            uint32_t t = rtc_to_unix_timestamp(&time);
             return t;
         }
 
         default:
             return -1;
     }
+}
+
+uint32_t sys_call(int call_number, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+    uint32_t res = res;
+    
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(res)
+        : "a"(call_number), "b"(arg1), "c"(arg2), "d"(arg3)
+        : "memory"
+    );
+
+    return res;
 }

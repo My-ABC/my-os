@@ -315,3 +315,10 @@ char *gets(char *buf, int size) {
     buf[i] = '\0';
     return buf;
 }
+
+void printd(const char* topic, const char* msg) {
+    printf("[");
+    printf(topic);
+    printf("] ");
+    print(msg);
+}

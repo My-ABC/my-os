@@ -19,4 +19,6 @@ int serial_printf(const char* format, ...);
 int getchar(void);          // 从键盘获取一个字符（阻塞）
 char *gets(char *buf, int size);  // 读取一行字符串（带缓冲区大小）
 
+void printd(const char* topic, const char* msg);
+
 #endif
