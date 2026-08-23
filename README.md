@@ -22,6 +22,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **Ring 3** — impl Ring3
 - **syscall** — impl syscall for the Ring3
 - **shell(kernel)** — impl a shell on kernel mode 
+- **Memory paging** — partial memory mapping support.
 
 ## Building
 
