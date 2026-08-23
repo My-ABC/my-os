@@ -14,14 +14,6 @@
 #include "syscall.h"
 #include "ring3.h"
 
-static uint32_t user_stack[1024];
-void user_func(void) {
-    const char *str = "Hello, from Ring3\n";
-    sys_call(SYS_WRITE, (uint32_t)str, 0, 0);
-
-    while (1);
-}
-
 void kmain() {
     // 初始化 GDT（必须最先进行）
     gdt_init();
@@ -123,7 +115,6 @@ void kmain() {
     printf("Halted\n");
     while (1);
 #else
-    // start_shell();
-    ring0_to_ring3(user_stack, user_func);
+    start_shell();
 #endif
 }
