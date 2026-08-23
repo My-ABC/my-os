@@ -91,7 +91,7 @@ iso: build
 	@echo "    multiboot /boot/$(KERNEL)" >> iso/boot/grub/grub.cfg
 	@echo "    boot" >> iso/boot/grub/grub.cfg
 	@echo "}" >> iso/boot/grub/grub.cfg
-	@GRUB_TARGET=i386-pc grub-mkrescue -o myos.iso iso/ --modules="multiboot biosdisk iso9660"
+	@grub-mkrescue -d /usr/lib/grub/i386-pc/ -o myos.iso iso/ --modules="multiboot biosdisk iso9660"
 	@rm -rf iso
 	@echo "ISO generated: myos.iso"
 
