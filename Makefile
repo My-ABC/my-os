@@ -33,6 +33,7 @@ ASM_SRCS = $(wildcard boot/*.asm)
 C_OBJS = $(patsubst src/%.c, build/%.o, $(C_SRCS))
 ASM_OBJS = $(patsubst boot/%.asm, build/%.o, $(ASM_SRCS))
 ASM_OBJS += build/gdt_asm.o
+ASM_OBJS += build/paging_asm.o
 OBJS = $(ASM_OBJS) $(C_OBJS)
 
 ISO = myos.iso
@@ -54,6 +55,11 @@ build/%.o: boot/%.asm
 
 # 单独编译 gdt.asm
 build/gdt_asm.o: boot/gdt.asm
+	mkdir -p build
+	$(AS) $(ASFLAGS) $< -o $@
+
+# 单独编译 paging.asm
+build/paging_asm.o: boot/paging.asm
 	mkdir -p build
 	$(AS) $(ASFLAGS) $< -o $@
 

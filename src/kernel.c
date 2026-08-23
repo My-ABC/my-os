@@ -13,23 +13,30 @@
 #include "tss.h"
 #include "syscall.h"
 #include "ring3.h"
+#include "paging.h"
 
 void kmain() {
     // 初始化 GDT（必须最先进行）
     gdt_init();
     tss_init();
     
-    // 初始化 VGA
-    vga_init();
+    // 初始化串口（用于早期调试输出）
     serial_init();
     serial_printf("MyOS v0.0.1\n");
     
-    printf("MyOS v0.1\n");
+    // 初始化分页（在GDT之后，VGA之前）
+    paging_init();
+    
+    // 初始化 VGA
+    vga_init();
+    
+    printf("MyOS v0.2\n");
     printf("==========\n\n");
     
     // 测试日志输出
     vga_print_info("System initialized successfully");
     vga_print_success("GDT initialized");
+    vga_print_success("Paging enabled");
     
     vga_print_info("Loading IDT...");
     idt_init();
