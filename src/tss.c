@@ -31,7 +31,7 @@ void tss_init(void) {
     // 3. 在GDT中设置TSS描述符（索引5，选择子 0x28）
     uint32_t base = (uint32_t)&tss;
     uint32_t limit = sizeof(tss) - 1;
-    gdt_set_entry(5, base, limit, 0x89, 0x40);
+    gdt_set_entry(5, base, limit, 0x89, 0x00);
     serial_print("[TSS] GDT entry set for TSS.\n");
 
     // 4. 执行 ltr 指令加载 TSS 到 TR 寄存器
