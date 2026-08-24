@@ -5,17 +5,11 @@
 // 页目录（物理地址对齐到4KB）
 static struct page_directory page_directory __attribute__((aligned(PAGE_SIZE)));
 
-// 页表数组（32个页表，支持128MB虚拟内存）
-static struct page_table page_tables[32] __attribute__((aligned(PAGE_SIZE)));
+// 页表数组（1024个页表，支持4GB虚拟内存）
+static struct page_table page_tables[1024] __attribute__((aligned(PAGE_SIZE)));
 
 // 当前页目录的物理地址
 static uint32_t current_page_dir_phys;
-
-// 内核虚拟地址起始位置（1MB，与物理地址相同）
-#define KERNEL_VIRTUAL_BASE 0x100000
-
-// 内核大小（约8MB，预留足够空间）
-#define KERNEL_SIZE 0x800000
 
 // 将物理地址转换为页帧号
 #define PHYS_TO_FRAME(phys) ((phys) >> 12)
@@ -68,12 +62,6 @@ void paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t fla
     uint32_t pd_index = VIRT_TO_PD_INDEX(virtual_addr);
     uint32_t pt_index = VIRT_TO_PT_INDEX(virtual_addr);
     
-    serial_print("[PAGING] Mapping page: virt=");
-    serial_print_hex(virtual_addr);
-    serial_print(", phys=");
-    serial_print_hex(physical_addr);
-    serial_print("\n");
-    
     // 获取或创建页目录项
     struct page_directory_entry* pd_entry = &page_directory.entries[pd_index];
     
@@ -84,7 +72,7 @@ void paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t fla
         serial_print("\n");
         
         // 检查是否超出预分配的页表数组
-        if (pd_index >= 32) {
+        if (pd_index >= 1024) {
             serial_print("[PAGING] Error: Page table index exceeds pre-allocated array\n");
             return;
         }
@@ -121,8 +109,6 @@ void paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t fla
     pt_entry->writable = (flags & PAGE_WRITABLE) ? 1 : 0;
     pt_entry->user = (flags & PAGE_USER) ? 1 : 0;
     pt_entry->frame_addr = PHYS_TO_FRAME(physical_addr);
-    
-    serial_print("[PAGING] Page mapped successfully\n");
 }
 
 // 解除页映射
@@ -168,40 +154,52 @@ void paging_init(void) {
     serial_print("\n");
     
     // 映射内核区域（虚拟地址 = 物理地址，1:1映射）
-    // 映射前4MB内存（内核代码和数据）
-    serial_print("[PAGING] Mapping kernel memory (1:1 mapping)\n");
+    // 映射完整的4GB地址空间
+    serial_print("[PAGING] Mapping kernel memory (1:1 mapping for 4GB)\n");
     
-    uint32_t kernel_end = KERNEL_VIRTUAL_BASE + KERNEL_SIZE;
-    for (uint32_t addr = KERNEL_VIRTUAL_BASE; addr < kernel_end; addr += PAGE_SIZE) {
-        paging_map_page(addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
+    serial_print("[PAGING] Mapping from 0x0 to 0xFFFFFFFF\n");
+    
+    // 映射完整的4GB地址空间（0x00000000 - 0xFFFFFFFF）
+    // 分段映射：1024个页目录项，每个映射4MB
+    for (uint32_t pd_index = 0; pd_index < 1024; pd_index++) {
+        // 为每个页目录项创建页表
+        struct page_directory_entry* pd_entry = &page_directory.entries[pd_index];
+        
+        // 使用预分配的页表
+        uint32_t pt_phys_addr = (uint32_t)&page_tables[pd_index];
+        
+        // 清空页表
+        memset(&page_tables[pd_index], 0, sizeof(struct page_table));
+        
+        // 设置页目录项
+        pd_entry->present = 1;
+        pd_entry->writable = 1;
+        pd_entry->user = 0;
+        pd_entry->frame_addr = PHYS_TO_FRAME(pt_phys_addr);
+        
+        // 映射页表中的所有1024个页表项（每个页表项映射4KB，共4MB）
+        struct page_table* pt = (struct page_table*)pt_phys_addr;
+        uint32_t base_addr = pd_index << 22; // 每个页目录项映射4MB
+        
+        for (uint32_t pt_index = 0; pt_index < 1024; pt_index++) {
+            uint32_t addr = base_addr + (pt_index << 12);
+            pt->entries[pt_index].present = 1;
+            pt->entries[pt_index].writable = 1;
+            pt->entries[pt_index].user = 0;
+            pt->entries[pt_index].frame_addr = PHYS_TO_FRAME(addr);
+        }
+        
+        // 每64个页目录项（256MB）打印一次进度
+        if (pd_index % 64 == 0) {
+            serial_print("[PAGING] Mapped PD index ");
+            serial_print_dec(pd_index);
+            serial_print(" (up to ");
+            serial_print_hex(base_addr);
+            serial_print(")\n");
+        }
     }
     
-    // 映射VGA内存区域（0xB8000-0xBFFFF）
-    serial_print("[PAGING] Mapping VGA memory\n");
-    paging_map_page(0xB8000, 0xB8000, PAGE_PRESENT | PAGE_WRITABLE);
-    
-    // 映射页目录和页表自身（用于访问分页结构）
-    serial_print("[PAGING] Mapping paging structures\n");
-    uint32_t paging_start = current_page_dir_phys;
-    uint32_t paging_end = paging_start + sizeof(page_directory) + (sizeof(struct page_table) * 32);
-    paging_end = PAGE_ALIGN(paging_end);
-    
-    for (uint32_t addr = paging_start; addr < paging_end; addr += PAGE_SIZE) {
-        paging_map_page(addr, addr, PAGE_PRESENT | PAGE_WRITABLE);
-    }
-    
-    // 映射ACPI相关的内存区域（用于ACPI表查找）
-    serial_print("[PAGING] Mapping ACPI memory regions\n");
-    // 映射BDA区域（BIOS Data Area，包含EBDA指针）
-    paging_map_page(0x400, 0x400, PAGE_PRESENT | PAGE_WRITABLE);
-    // 映射EBDA区域（通常在0x9FC00左右）
-    paging_map_page(0x9FC00, 0x9FC00, PAGE_PRESENT | PAGE_WRITABLE);
-    // 映射BIOS ROM区域（0xE0000-0xFFFFF）
-    for (uint32_t addr = 0xE0000; addr < 0x100000; addr += PAGE_SIZE) {
-        paging_map_page(addr, addr, PAGE_PRESENT);
-    }
-    
-    serial_print("[PAGING] Paging structures initialized\n");
+    serial_print("[PAGING] 4GB 1:1 mapping completed\n");
     serial_print("[PAGING] Enabling paging...\n");
     
     // 启用分页
