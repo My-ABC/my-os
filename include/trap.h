@@ -4,5 +4,6 @@
 #include "regs.h"
 
 void isr3_handler(struct registers* regs);
+void isr14_handler(struct registers* regs);
 
 #endif

@@ -24,8 +24,11 @@ irq%1:
 %endmacro
 
 extern isr3_handler
+extern isr14_handler
 
 global isr3
+
+global isr14
 
 isr3:
     cli
@@ -41,6 +44,21 @@ isr3:
     pop eax
     popa
     add esp, 8          ; 弹掉中断号与错误码
+    iret
+
+isr14:
+    cli
+    push dword 14
+    pusha
+    xor eax, eax
+    mov ax, ds
+    push eax
+    push esp
+    call isr14_handler
+    add esp, 4
+    pop eax
+    popa
+    add esp, 8
     iret
 
 extern isr_handler

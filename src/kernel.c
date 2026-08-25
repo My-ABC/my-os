@@ -14,8 +14,9 @@
 #include "syscall.h"
 #include "ring3.h"
 #include "paging.h"
+#include "pmm.h"
 
-void kmain() {
+void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
     gdt_init();
     tss_init();
@@ -23,6 +24,9 @@ void kmain() {
     // 初始化串口（用于早期调试输出）
     serial_init();
     serial_printf("MyOS v0.0.1\n");
+
+    // 初始化物理内存管理（在分页前确保可用内存位图已建立）
+    pmm_init(multiboot_info);
     
     // 初始化分页（在GDT之后，VGA之前）
     paging_init();
@@ -53,7 +57,12 @@ void kmain() {
 
     vga_print_info("Initializing keyboard (IRQ1)...");
     keyboard_init();
-    
+
+    uint32_t *test_ptr = (uint32_t *)0x00800000; // 一个未映射的地址
+    *test_ptr = 0x12345678;
+    serial_print("Write succeeded!\n");
+    serial_printf("ptr value: %d\n", *test_ptr);
+        
 #ifdef SCANCODE_SET
     keyboard_set_scancode_set(SCANCODE_SET);
     serial_printf("Scancode set: %d\n", SCANCODE_SET);

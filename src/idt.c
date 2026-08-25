@@ -41,6 +41,9 @@ void idt_init(void) {
     extern void isr3(void);
     idt_set_gate(3, (uint32_t)isr3, 0x08, 0x8E);
 
+    extern void isr14(void);
+    idt_set_gate(14, (uint32_t)isr14, 0x08, 0x8E);
+
     extern void irq0(void);
     idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);
 

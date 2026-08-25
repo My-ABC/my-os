@@ -37,6 +37,7 @@ SECTIONS
         paging_structures_start = .;
         . = . + 0x10000;  /* 预留64KB给分页结构 */
         paging_structures_end = .;
+        kernel_end = .;
     }
 
     /DISCARD/ :
