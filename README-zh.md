@@ -22,7 +22,7 @@
 - **Ring 3** — 实现了Ring3
 - **syscall** — 实现系统调用为了Ring3
 - **shell(内核)** — 制作了一个内核态的shell
-- **内存分页** — 实现了一个部分映射的内存分页
+- **内存分页** — 实现了完整内存分页
 
 ## 构建
 
@@ -89,4 +89,4 @@ QEMU 默认的 `pc` 机型（SeaBIOS）只提供 ACPI 1.0 的 FADT，里面没�
 
 ## 许可证
 
-[MIT](LICENSE)
+[GPLv3](LICENSE)
