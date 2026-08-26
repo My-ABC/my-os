@@ -1,7 +1,4 @@
 # docs/_config.yml
-theme: jekyll-theme-minimal
+remote_theme: pages-themes/hacker@v0.2.0
 title: MyOS
 description: A small 32-bit x86 kernel
-
-# 暗色模式支持
-dark_mode: true
