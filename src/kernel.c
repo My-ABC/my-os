@@ -83,6 +83,7 @@ void kmain(uint32_t multiboot_info) {
 
     vga_print_info("Remapping PIC...");
     pic_remap();
+    pic_set_mask(14);
     vga_print_success("PIC remapped");
 
     vga_print_info("Initializing PIT at 100Hz...");
@@ -143,6 +144,10 @@ void kmain(uint32_t multiboot_info) {
 #ifdef PANIC_DEMO
     vga_print("Triggering INT3 (panic demo)\n");
     __asm__ volatile ("int $0x03");
+#endif
+#ifdef ELF_DEMO
+    vga_print("Loading built-in ELF demo\n");
+    cmd_elf(0, 0);
 #endif
 #ifdef KEYBOARD_DEMO
     printf("Timer ticking, output on COM1\n");

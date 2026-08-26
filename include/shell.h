@@ -28,6 +28,16 @@ int cmd_tick(int argc, char *argv[]);
 int cmd_help(int argc, char *argv[]);
 int cmd_clear(int argc, char *argv[]);
 int cmd_hello(int argc, char *argv[]);
+int cmd_elf(int argc, char *argv[]);
+int cmd_run(int argc, char *argv[]);
+int cmd_disk(int argc, char *argv[]);
+int cmd_ls(int argc, char *argv[]);
+int cmd_cat(int argc, char *argv[]);
+int cmd_write(int argc, char *argv[]);
+int cmd_rm(int argc, char *argv[]);
+int cmd_cd(int argc, char *argv[]);
+int cmd_mkdir(int argc, char *argv[]);
+int cmd_rmdir(int argc, char *argv[]);
 int cmd_shutdown(int argc, char *argv[]);
 int cmd_ring3(int argc, char *argv[]);
 

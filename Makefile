@@ -18,6 +18,10 @@ ifdef KEYBOARD_DEMO
 CFLAGS += -DKEYBOARD_DEMO
 endif
 
+ifdef ELF_DEMO
+CFLAGS += -DELF_DEMO
+endif
+
 # SCANCODE_SET=1 或 2 时设置键盘扫描码集
 ifdef SCANCODE_SET
 CFLAGS += -DSCANCODE_SET=$(SCANCODE_SET)
@@ -38,6 +42,8 @@ OBJS = $(ASM_OBJS) $(C_OBJS)
 
 ISO = myos.iso
 KERNEL = myos.bin
+DISK ?= disk.img
+DISK_SIZE ?= 64M
 
 # 构建
 build: $(OBJS)
@@ -73,6 +79,19 @@ run-nographic: build
 
 run-serial: build
 	qemu-system-i386 -kernel $(KERNEL) -serial stdio
+
+disk:
+	@if test -f "$(DISK)"; then \
+		echo "Disk image already exists: $(DISK)"; \
+	else \
+		command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }; \
+		truncate -s $(DISK_SIZE) "$(DISK)"; \
+		mkfs.fat -F 32 -n MYOS "$(DISK)"; \
+		echo "Created FAT32 disk image: $(DISK) ($(DISK_SIZE))"; \
+	fi
+
+run-disk: build disk
+	qemu-system-i386 -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
 
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
@@ -112,4 +131,4 @@ run-iso: iso
 clean:
 	rm -rf build $(KERNEL) $(ISO)
 
-.PHONY: build run run-nographic run-serial run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build disk run run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
