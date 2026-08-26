@@ -1,4 +1,0 @@
-# docs/_config.yml
-remote_theme: pages-themes/hacker@v0.2.0
-title: MyOS
-description: A small 32-bit x86 kernel
