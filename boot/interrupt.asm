@@ -1,4 +1,4 @@
-section .text
+section .boot.text progbits alloc exec nowrite
 
 %macro ISR_NOERR 1
 isr%1:

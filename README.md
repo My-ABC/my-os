@@ -24,6 +24,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **shell(kernel)** — impl a shell on kernel mode 
 - **Memory paging** — implemented full memory paging.
 - **PMM** — impl PMM
+- **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
 
 ## Building
 

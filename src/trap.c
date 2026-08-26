@@ -2,6 +2,7 @@
 #include "panic.h"
 #include "serial.h"
 #include "paging.h"
+#include "pmm.h"
 
 void isr3_handler(struct registers* regs) {
     panic_blue_screen("Breakpoint exception (INT3)", regs);
@@ -19,8 +20,20 @@ void isr14_handler(struct registers* regs) {
     serial_print("\n");
 
     if ((regs->err_code & 0x1U) == 0U) {
-        paging_map_page(fault_addr, fault_addr, PAGE_PRESENT | PAGE_WRITABLE);
-        serial_print("[PAGE FAULT] Lazy mapped missing page\n");
+        uint32_t flags = PAGE_PRESENT | PAGE_WRITABLE;
+        void *physical_page = pmm_alloc_page();
+
+        if (physical_page == 0) {
+            panic_blue_screen("Out of physical memory", regs);
+            return;
+        }
+
+        if (paging_is_user_address(fault_addr)) {
+            flags |= PAGE_USER;
+        }
+
+        paging_map_page(fault_addr, (uint32_t)physical_page, flags);
+        serial_print("[PAGE FAULT] Allocated and mapped physical page\n");
         return;
     }
 

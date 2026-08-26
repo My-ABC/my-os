@@ -4,6 +4,9 @@
 
 extern uint32_t kernel_end;
 
+#define KERNEL_VIRT_BASE 0xC0000000U
+#define KERNEL_PHYS_BASE 0x00100000U
+
 static pmm_state_t g_pmm = {0};
 
 struct multiboot_mmap_entry {
@@ -134,12 +137,12 @@ void pmm_init(uint32_t multiboot_info_addr) {
     }
 
     bitmap_size = (total_frames + 7U) / 8U;
-    bitmap_addr = pmm_align_up((uint32_t)&kernel_end, PMM_PAGE_SIZE);
+    bitmap_addr = pmm_align_up((uint32_t)&kernel_end - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE, PMM_PAGE_SIZE);
 
     g_pmm.total_frames = total_frames;
     g_pmm.used_frames = 0U;
     g_pmm.bitmap_size = bitmap_size;
-    g_pmm.bitmap = (uint8_t *)bitmap_addr;
+    g_pmm.bitmap = (uint8_t *)(bitmap_addr + KERNEL_VIRT_BASE);
     g_pmm.next_free_frame = 0U;
 
     memset(g_pmm.bitmap, 0x00, bitmap_size);
@@ -152,7 +155,7 @@ void pmm_init(uint32_t multiboot_info_addr) {
 
     pmm_mark_used_range(0x00000000U, 0x100000U);
 
-    uint32_t kernel_end_page = pmm_align_up((uint32_t)&kernel_end, PMM_PAGE_SIZE);
+    uint32_t kernel_end_page = pmm_align_up((uint32_t)&kernel_end - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE, PMM_PAGE_SIZE);
     pmm_mark_used_range(0x100000U, kernel_end_page - 0x100000U + PMM_PAGE_SIZE * 2U);
     pmm_mark_used_range(bitmap_addr, bitmap_size + PMM_PAGE_SIZE);
 

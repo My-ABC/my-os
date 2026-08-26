@@ -1,30 +1,46 @@
 ENTRY(start)
 
+KERNEL_VIRT_BASE = 0xC0000000;
+KERNEL_PHYS_BASE = 1M;
+
 SECTIONS
 {
-    . = 1M;
+    . = KERNEL_PHYS_BASE;
 
     .multiboot ALIGN(4K) :
     {
         *(.multiboot)
     }
 
-    .text ALIGN(4K) :
+    .boot.text ALIGN(4K) :
+    {
+        *(.boot.text)
+    }
+
+    .boot.bss ALIGN(4K) (NOLOAD) :
+    {
+        *(.boot.bss)
+    }
+
+    boot_end = .;
+    . = KERNEL_VIRT_BASE + (boot_end - KERNEL_PHYS_BASE);
+
+    .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE)
     {
         *(.text)
     }
 
-    .rodata ALIGN(4K) :
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE)
     {
         *(.rodata)
     }
 
-    .data ALIGN(4K) :
+    .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE)
     {
         *(.data)
     }
 
-    .bss ALIGN(4K) :
+    .bss ALIGN(4K) (NOLOAD) : AT(ADDR(.bss) - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE)
     {
         *(COMMON)
         *(.bss)

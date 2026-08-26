@@ -24,6 +24,7 @@
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
 - **PMM** — 实现了PMM
+- **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 
 ## 构建
 

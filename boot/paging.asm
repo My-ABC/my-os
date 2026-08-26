@@ -1,4 +1,4 @@
-section .text
+section .boot.text progbits alloc exec nowrite
 global paging_enable
 
 ; 启用分页

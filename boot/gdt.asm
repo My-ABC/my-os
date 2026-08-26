@@ -1,4 +1,4 @@
-section .text
+section .boot.text progbits alloc exec nowrite
 global gdt_load
 
 ; 加载 GDT

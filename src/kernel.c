@@ -15,6 +15,7 @@
 #include "ring3.h"
 #include "paging.h"
 #include "pmm.h"
+#include "heap.h"
 
 void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
@@ -46,6 +47,40 @@ void kmain(uint32_t multiboot_info) {
     idt_init();
     vga_print_success("IDT loaded");
 
+    char *heap_test = (char *)kmalloc(100);
+    if (heap_test != 0) {
+        heap_test[0] = 'O';
+        heap_test[1] = 'K';
+        heap_test[2] = '\0';
+        serial_print("[HEAP] kmalloc write: ");
+        serial_print(heap_test);
+        serial_print("\n");
+        kfree(heap_test);
+        serial_print("[HEAP] kfree completed\n");
+    } else {
+        serial_print("[HEAP] kmalloc failed\n");
+    }
+
+        char *heap_reuse = (char *)kmalloc(100);
+        if (heap_reuse != 0) {
+            serial_print("[HEAP] free-list reuse succeeded\n");
+            kfree(heap_reuse);
+        }
+
+        char *heap_resize = (char *)kcalloc(8, 16);
+        if (heap_resize != 0) {
+            heap_resize = (char *)krealloc(heap_resize, 8192);
+            if (heap_resize != 0) {
+                serial_print("[HEAP] calloc/realloc succeeded\n");
+                kfree(heap_resize);
+            }
+        }
+
+    uint32_t *test_ptr = (uint32_t *)0x00800000;
+    *test_ptr = 0x12345678;
+    serial_print("Write succeeded!\n");
+    serial_printf("ptr value: %d\n", *test_ptr);
+
     vga_print_info("Remapping PIC...");
     pic_remap();
     vga_print_success("PIC remapped");
@@ -58,11 +93,6 @@ void kmain(uint32_t multiboot_info) {
     vga_print_info("Initializing keyboard (IRQ1)...");
     keyboard_init();
 
-    uint32_t *test_ptr = (uint32_t *)0x00800000; // 一个未映射的地址
-    *test_ptr = 0x12345678;
-    serial_print("Write succeeded!\n");
-    serial_printf("ptr value: %d\n", *test_ptr);
-        
 #ifdef SCANCODE_SET
     keyboard_set_scancode_set(SCANCODE_SET);
     serial_printf("Scancode set: %d\n", SCANCODE_SET);

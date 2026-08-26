@@ -6,6 +6,10 @@
 // 页大小（4KB）
 #define PAGE_SIZE 4096
 
+// 低 3GB 为用户地址空间，高 1GB 为内核地址空间
+#define USER_SPACE_END 0xC0000000U
+#define KERNEL_SPACE_BASE USER_SPACE_END
+
 // 页目录和页表的索引位数
 #define PD_INDEX_BITS 10
 #define PT_INDEX_BITS 12
@@ -80,7 +84,13 @@ void paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t fla
 // 解除页映射
 void paging_unmap_page(uint32_t virtual_addr);
 
+// 获取虚拟页对应的物理地址；未映射时返回 0
+uint32_t paging_get_page_physical(uint32_t virtual_addr);
+
 // 刷新TLB
 void paging_flush_tlb(uint32_t virtual_addr);
+
+// 判断虚拟地址是否属于用户空间
+uint32_t paging_is_user_address(uint32_t virtual_addr);
 
 #endif
