@@ -29,12 +29,12 @@ function switchLanguage() {
 <div id="content"></div>
 
 <script>
-fetch('/my-os/README-zh.md')
+fetch('https://raw.githubusercontent.com/My-ABC/my-os/main/README-zh.md')
   .then(response => response.text())
   .then(text => {
     document.getElementById('content').innerHTML = marked.parse(text);
   })
   .catch(error => {
-    document.getElementById('content').innerHTML = '<h1>加载 README 失败</h1>';
+    document.getElementById('content').innerHTML = '<p>加载 README 失败: ' + error + '</p>';
   });
 </script>
