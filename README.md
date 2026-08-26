@@ -92,4 +92,4 @@ The default QEMU `pc` machine (SeaBIOS) only exposes an ACPI 1.0 FADT, which has
 
 ## License
 
-[GPLv3](LICENSE)
+[GPLv2](LICENSE)
