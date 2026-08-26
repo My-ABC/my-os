@@ -157,7 +157,7 @@ int cmd_ring3(int argc, char *argv[]) {
     // 将低地址用户代码页映射为 Ring 3 可执行页，用户栈由页错误按需建立。
     paging_map_page((uint32_t)user_entry, (uint32_t)user_entry,
                     PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    serial_print("[RING3] Entering user function at 0x");
+    serial_print("[RING3] Entering user function at ");
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
     ring0_to_ring3((uint32_t *)0x00801000, user_entry);
