@@ -8,5 +8,3 @@ Welcome to MyOS! This is a small 32-bit x86 kernel.
 - [Shell Commands](../README.md#shell-use)
 
 ---
-
-{!README.md!}
