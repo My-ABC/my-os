@@ -298,45 +298,61 @@ static int acpi_find_s5(struct fadt *fadt, uint8_t *sleep_type) {
     return 0;
 }
 
-static void acpi_reset_via_fadt(void) {
+static int acpi_reset_via_fadt(void) {
     struct fadt* fadt = find_fadt();
     if (fadt == NULL) {
         serial_print("[ACPI] FADT not found\n");
-        return;
+        return 0;
     }
     // ACPI 1.0 的 FADT (116 字节) 没有 reset register 字段
-    if (fadt->header.length < sizeof(struct fadt) ||
-        !(fadt->flags & FADT_RESET_REG_SUP)) {
+    uint8_t *fadt_bytes = (uint8_t *)fadt;
+    uint32_t fadt_flags = *(uint32_t *)(fadt_bytes + 112U);
+    struct generic_address *reset_reg = (struct generic_address *)(fadt_bytes + 116U);
+    uint8_t reset_value = fadt_bytes[128U];
+
+    if (fadt->header.length < 129U || !(fadt_flags & FADT_RESET_REG_SUP)) {
         serial_print("[ACPI] reset register not supported by firmware\n");
-        return;
+        return 0;
     }
 
-    uint32_t address = (uint32_t)fadt->reset_reg.address;
+    uint32_t address = (uint32_t)reset_reg->address;
     serial_print("[ACPI] reset via FADT: space=");
-    serial_print_dec(fadt->reset_reg.address_space);
+    serial_print_dec(reset_reg->address_space);
     serial_print(" address=");
     serial_print_hex(address);
     serial_print(" value=");
-    serial_print_hex(fadt->reset_value);
+    serial_print_hex(reset_value);
     serial_putchar('\n');
 
-    if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_IO) {
-        outb((uint16_t)address, fadt->reset_value);
-    } else if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_MEMORY) {
-        *(volatile uint8_t*)acpi_physical_ptr(address) = fadt->reset_value;
+    if (reset_reg->address_space == ACPI_ADDRESS_SPACE_IO) {
+        outb((uint16_t)address, reset_value);
+        return 1;
+    } else if (reset_reg->address_space == ACPI_ADDRESS_SPACE_MEMORY) {
+        *(volatile uint8_t*)acpi_physical_ptr(address) = reset_value;
+        return 1;
     }
+
+    return 0;
 }
 
 void acpi_reboot(void) {
     __asm__ volatile ("cli");
 
-    acpi_reset_via_fadt();
+    if (acpi_reset_via_fadt()) {
+        serial_print("[ACPI] reset command sent, waiting for reset\n");
+        for (volatile uint32_t delay = 0; delay < 1000000U; ++delay) {
+            __asm__ volatile ("nop");
+        }
+    }
 
     // 走到这里说明 ACPI 复位没生效
     serial_print("[ACPI] reset did not take effect, falling back\n");
 
     // 兜底 1: PCI 复位控制寄存器
     outb(0xCF9, 0x02);
+    for (volatile uint32_t delay = 0; delay < 10000U; ++delay) {
+        __asm__ volatile ("nop");
+    }
     outb(0xCF9, 0x06);
 
     // 兜底 2: 键盘控制器脉冲 CPU RESET 线
@@ -346,6 +362,9 @@ void acpi_reboot(void) {
         }
     }
     outb(0x64, 0xFE);
+    for (volatile uint32_t delay = 0; delay < 1000000U; ++delay) {
+        __asm__ volatile ("nop");
+    }
 
     // 兜底 3: 加载空 IDT 后触发三重错误
     struct {
