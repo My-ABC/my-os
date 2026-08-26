@@ -74,6 +74,7 @@ tick     get tick of PIT
 help     show help
 clear    clear screen
 hello    print hello message
+ring3    test ring3 on Low Address
 ```
 
 ## Layout

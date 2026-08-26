@@ -74,6 +74,7 @@ tick     获取PIT中的tick
 help     显示帮助
 clear    清屏
 hello    打印hello消息
+ring3    测试ring3在低地址
 ```
 
 ## 目录结构
