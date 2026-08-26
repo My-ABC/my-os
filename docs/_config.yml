@@ -1,0 +1,7 @@
+# docs/_config.yml
+theme: jekyll-theme-minimal
+title: MyOS
+description: A small 32-bit x86 kernel
+
+# 暗色模式支持
+dark_mode: true
