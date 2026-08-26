@@ -29,6 +29,7 @@ int cmd_help(int argc, char *argv[]);
 int cmd_clear(int argc, char *argv[]);
 int cmd_hello(int argc, char *argv[]);
 int cmd_shutdown(int argc, char *argv[]);
+int cmd_ring3(int argc, char *argv[]);
 
 void start_shell(void);
 

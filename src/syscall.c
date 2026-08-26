@@ -3,6 +3,7 @@
 #include "stdio.h"
 #include "vga.h"
 #include "acpi.h"
+#include "serial.h"
 
 uint32_t syscall_handler() {
     uint32_t eax, ebx, ecx, edx;
@@ -18,6 +19,7 @@ uint32_t syscall_handler() {
 
     switch (eax) {
         case SYS_WRITE: { // 参数: ebx: const char *str
+            serial_print("[SYSCALL] SYS_WRITE from Ring 3\n");
             vga_print((const char*)ebx);
             return 0;
         }

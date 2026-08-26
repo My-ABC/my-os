@@ -43,18 +43,24 @@ struct fadt {
     struct sdt_header header;
     uint32_t firmware_ctrl;
     uint32_t dsdt;
-    uint8_t int_model;
-    uint16_t pm1a_cnt_blk;    // PM1a 控制块端口 I/O 地址
-    uint16_t pm1b_cnt_blk;    // PM1b 控制块端口 I/O 地址
-    uint8_t pm2_cnt_blk;
-    uint8_t pm1a_evt_blk;
-    uint8_t pm1b_evt_blk;
-    uint8_t pm2_evt_blk;
-    uint8_t pm_tmr_blk;
-    uint8_t gpe0_blk;
-    uint8_t gpe1_blk;
-    uint8_t pm1_cnt_len;
+    uint8_t reserved1;
+    uint8_t preferred_pm_profile;
+    uint16_t sci_int;
+    uint32_t smi_cmd;
+    uint8_t acpi_enable;
+    uint8_t acpi_disable;
+    uint8_t s4bios_req;
+    uint8_t pstate_cnt;
+    uint32_t pm1a_evt_blk;
+    uint32_t pm1b_evt_blk;
+    uint32_t pm1a_cnt_blk;
+    uint32_t pm1b_cnt_blk;
+    uint32_t pm2_cnt_blk;
+    uint32_t pm_tmr_blk;
+    uint32_t gpe0_blk;
+    uint32_t gpe1_blk;
     uint8_t pm1_evt_len;
+    uint8_t pm1_cnt_len;
     uint8_t pm2_cnt_len;
     uint8_t pm2_evt_len;
     uint8_t pm_tmr_len;
@@ -73,12 +79,12 @@ struct fadt {
     uint8_t century;
     uint16_t iapc_boot_arch;
     uint8_t reserved2;
-    uint32_t flags;        // 偏移 112
-    struct generic_address reset_reg;  // 偏移 116
-    uint8_t reset_value;               // 偏移 128
+    uint32_t flags;
+    struct generic_address reset_reg;
+    uint8_t reset_value;
     uint8_t reserved3[3];
-    uint8_t x_firmware_ctrl;
-    uint8_t x_dsdt;
+    uint64_t x_firmware_ctrl;
+    uint64_t x_dsdt;
     struct generic_address x_pm1a_cnt_blk;
     struct generic_address x_pm1b_cnt_blk;
     struct generic_address x_pm2_cnt_blk;
@@ -132,6 +138,31 @@ struct fadt_legacy {
 
 #define ACPI_ADDRESS_SPACE_MEMORY 0
 #define ACPI_ADDRESS_SPACE_IO     1
+#define KERNEL_VIRT_BASE 0xC0000000U
+#define KERNEL_PHYS_BASE 0x00100000U
+
+static void *acpi_physical_ptr(uint32_t physical_addr) {
+    if (physical_addr < KERNEL_PHYS_BASE + 0x00300000U) {
+        return (void *)physical_addr;
+    }
+
+    uint32_t virtual_addr = KERNEL_VIRT_BASE + physical_addr - KERNEL_PHYS_BASE;
+    paging_map_page(virtual_addr & ~(PAGE_SIZE - 1U),
+                    physical_addr & ~(PAGE_SIZE - 1U),
+                    PAGE_PRESENT | PAGE_WRITABLE);
+    return (void *)(virtual_addr);
+}
+
+static struct sdt_header *acpi_map_table(uint32_t physical_addr) {
+    struct sdt_header *header = (struct sdt_header *)acpi_physical_ptr(physical_addr);
+    uint32_t start = physical_addr & ~(PAGE_SIZE - 1U);
+    uint32_t end = physical_addr + header->length;
+
+    for (uint32_t address = start; address < end; address += PAGE_SIZE) {
+        acpi_physical_ptr(address);
+    }
+    return (struct sdt_header *)acpi_physical_ptr(physical_addr);
+}
 
 static int mem_equal(const char* a, const char* b, uint32_t len) {
     for (uint32_t i = 0; i < len; i++) {
@@ -185,7 +216,7 @@ static struct fadt* find_fadt_in(struct sdt_header* root, int pointer_size) {
             : *(uint32_t*)(tables + i * 4);
         
         // 在1:1 4GB映射下，所有物理地址都应该已经映射
-        struct sdt_header* table = (struct sdt_header*)address;
+        struct sdt_header* table = acpi_map_table(address);
         if (mem_equal(table->signature, "FACP", 4)) {
             return (struct fadt*)table;
         }
@@ -202,7 +233,7 @@ static struct fadt* find_fadt(void) {
     if (rsdp->revision >= 2 && rsdp->xsdt_address != 0) {
         uint32_t xsdt_addr = (uint32_t)rsdp->xsdt_address;
         // 在1:1 4GB映射下，所有物理地址都应该已经映射
-        struct sdt_header* xsdt = (struct sdt_header*)xsdt_addr;
+        struct sdt_header* xsdt = acpi_map_table(xsdt_addr);
         if (mem_equal(xsdt->signature, "XSDT", 4)) {
             struct fadt* fadt = find_fadt_in(xsdt, 8);
             if (fadt != NULL) {
@@ -216,11 +247,55 @@ static struct fadt* find_fadt(void) {
     }
     uint32_t rsdt_addr = rsdp->rsdt_address;
     // 在1:1 4GB映射下，所有物理地址都应该已经映射
-    struct sdt_header* rsdt = (struct sdt_header*)rsdt_addr;
+    struct sdt_header* rsdt = acpi_map_table(rsdt_addr);
     if (!mem_equal(rsdt->signature, "RSDT", 4)) {
         return NULL;
     }
     return find_fadt_in(rsdt, 4);
+}
+
+static int acpi_find_s5(struct fadt *fadt, uint8_t *sleep_type) {
+    uint32_t dsdt_addr = fadt->dsdt;
+    if (dsdt_addr == 0U && fadt->header.length >= 140U) {
+        dsdt_addr = (uint32_t)fadt->x_dsdt;
+    }
+    if (dsdt_addr == 0U) {
+        return 0;
+    }
+
+    struct sdt_header *dsdt = acpi_map_table(dsdt_addr);
+    uint8_t *data = (uint8_t *)dsdt + sizeof(struct sdt_header);
+    uint32_t length = dsdt->length - sizeof(struct sdt_header);
+
+    for (uint32_t i = 0; i + 6U < length; ++i) {
+        if (data[i] == 0x08U && data[i + 1U] == '_' && data[i + 2U] == 'S' &&
+            data[i + 3U] == '5' && data[i + 4U] == '_') {
+            uint32_t package = i + 5U;
+            if (data[package] == 0x12U) {
+                uint8_t pkg_length_byte = data[package + 1U];
+                uint32_t length_bytes = (pkg_length_byte >> 6) & 0x3U;
+                uint32_t value = package + 2U;
+
+                if (length_bytes == 0U) {
+                    value = package + 3U;
+                } else {
+                    value = package + 2U + length_bytes;
+                }
+
+                // Skip NumElements and decode the first AML integer object.
+                value++;
+                if (data[value] == 0x0AU) {
+                    *sleep_type = data[value + 1U];
+                    return 1;
+                }
+                if (data[value] <= 0x0FU) {
+                    *sleep_type = data[value];
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
 }
 
 static void acpi_reset_via_fadt(void) {
@@ -248,7 +323,7 @@ static void acpi_reset_via_fadt(void) {
     if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_IO) {
         outb((uint16_t)address, fadt->reset_value);
     } else if (fadt->reset_reg.address_space == ACPI_ADDRESS_SPACE_MEMORY) {
-        *(volatile uint8_t*)address = fadt->reset_value;
+        *(volatile uint8_t*)acpi_physical_ptr(address) = fadt->reset_value;
     }
 }
 
@@ -298,50 +373,39 @@ void acpi_shutdown(void) {
     serial_print_dec(fadt->header.length);
     serial_putchar('\n');
 
-    uint16_t pm1a_cnt = 0;
+    uint32_t pm1a_cnt = 0;
+    uint32_t pm1b_cnt = fadt->pm1b_cnt_blk;
     uint8_t pm1_cnt_len = 0;
+    uint8_t s5_type = 0;
     
     // 用于内存空间关机的标志
     int use_memory_space = 0;
     uint32_t memory_address = 0;
     
-    // 根据 FADT 长度决定使用哪个结构体
-    if (fadt->header.length <= 116) {
-        // ACPI 1.0 简化版 FADT
-        struct fadt_legacy* legacy_fadt = (struct fadt_legacy*)fadt;
-        pm1a_cnt = legacy_fadt->pm1a_cnt_blk;
-        pm1_cnt_len = legacy_fadt->pm1_cnt_len;
-        serial_print("[ACPI] legacy PM1a_cnt_blk=");
-        serial_print_hex(pm1a_cnt);
-        serial_print(" pm1_cnt_len=");
-        serial_print_dec(pm1_cnt_len);
-        serial_putchar('\n');
-    } else {
-        // ACPI 2.0+ 完整版 FADT
-        pm1a_cnt = fadt->pm1a_cnt_blk;
-        pm1_cnt_len = fadt->pm1_cnt_len;
-        serial_print("[ACPI] PM1a_cnt_blk=");
-        serial_print_hex(pm1a_cnt);
-        serial_print(" pm1_cnt_len=");
-        serial_print_dec(pm1_cnt_len);
-        serial_putchar('\n');
-
-        // 如果传统地址为 0，尝试使用扩展地址结构
-        if (pm1a_cnt == 0 && fadt->header.length >= 176) {
-            if (fadt->x_pm1a_cnt_blk.address != 0) {
-                if (fadt->x_pm1a_cnt_blk.address_space == ACPI_ADDRESS_SPACE_IO) {
-                    pm1a_cnt = (uint16_t)fadt->x_pm1a_cnt_blk.address;
-                    serial_print("[ACPI] using extended PM1a control block (I/O space)\n");
-                } else if (fadt->x_pm1a_cnt_blk.address_space == ACPI_ADDRESS_SPACE_MEMORY) {
-                    // 支持内存空间的 ACPI 地址
-                    use_memory_space = 1;
-                    memory_address = (uint32_t)fadt->x_pm1a_cnt_blk.address;
-                    // 在1:1 4GB映射下，所有物理地址都应该已经映射
-                    serial_print("[ACPI] using extended PM1a control block (memory space)\n");
-                }
-            }
+    pm1a_cnt = fadt->pm1a_cnt_blk;
+    pm1_cnt_len = fadt->pm1_cnt_len;
+    if (pm1a_cnt == 0U && fadt->header.length >= 176U && fadt->x_pm1a_cnt_blk.address != 0U) {
+        if (fadt->x_pm1a_cnt_blk.address_space == ACPI_ADDRESS_SPACE_IO) {
+            pm1a_cnt = (uint32_t)fadt->x_pm1a_cnt_blk.address;
+        } else if (fadt->x_pm1a_cnt_blk.address_space == ACPI_ADDRESS_SPACE_MEMORY) {
+            use_memory_space = 1;
+            memory_address = (uint32_t)acpi_physical_ptr((uint32_t)fadt->x_pm1a_cnt_blk.address);
         }
     }
+
+    serial_print("[ACPI] PM1a_cnt_blk=");
+    serial_print_hex(pm1a_cnt);
+    serial_print(" pm1_cnt_len=");
+    serial_print_dec(pm1_cnt_len);
+    serial_putchar('\n');
+
+    if (!acpi_find_s5(fadt, &s5_type)) {
+        serial_print("[ACPI] S5 not found in DSDT\n");
+        return;
+    }
+    serial_print("[ACPI] S5 SLP_TYP=");
+    serial_print_dec(s5_type);
+    serial_putchar('\n');
 
     if (pm1a_cnt == 0 && !use_memory_space) {
         serial_print("[ACPI] PM1a control block address is zero\n");
@@ -351,6 +415,9 @@ void acpi_shutdown(void) {
 
     // 根据 PM1_CNT_LEN 确定访问大小（如果长度为0，默认为2字节）
     int access_size = (pm1_cnt_len > 0) ? pm1_cnt_len : 2;
+    if (access_size != 1 && access_size != 2 && access_size != 4) {
+        access_size = 2;
+    }
     
     uint32_t current_value = 0;
     
@@ -373,36 +440,21 @@ void acpi_shutdown(void) {
             current_value = *pm1a_cnt_mem;
         }
 
-        // S5 关机: 尝试常见的 S5 SLP_TYP 值
-        // SLP_TYP 位 10-12, SLP_EN 位 13
-        // 不同系统使用不同的S5值：0x5、0x7等
-        uint8_t s5_values[] = {0x5, 0x7, 0x1, 0x2};
-        uint32_t sleep_value = 0;
-        
-        for (int i = 0; i < 4; i++) {
-            sleep_value = (current_value & ~(0x7 << 10)) | (s5_values[i] << 10) | (1 << 13);
-            serial_print("[ACPI] trying S5 value=");
-            serial_print_dec(s5_values[i]);
-            serial_print(" sleep_value=");
-            serial_print_hex(sleep_value);
-            serial_putchar('\n');
-        
-            // 写入 PM1a 控制寄存器（内存空间）
-            if (access_size == 2) {
-                volatile uint16_t* pm1a_cnt_mem = (volatile uint16_t*)memory_address;
-                *pm1a_cnt_mem = (uint16_t)sleep_value;
-            } else if (access_size == 4) {
-                volatile uint32_t* pm1a_cnt_mem = (volatile uint32_t*)memory_address;
-                *pm1a_cnt_mem = sleep_value;
-            } else {
-                volatile uint8_t* pm1a_cnt_mem = (volatile uint8_t*)memory_address;
-                *pm1a_cnt_mem = (uint8_t)sleep_value;
-            }
-            
-            // 短暂延迟，看是否关机成功
-            for (int j = 0; j < 100000; j++) {
-                __asm__ volatile ("nop");
-            }
+        uint32_t sleep_value = (current_value & ~(0x7U << 10)) |
+                               ((uint32_t)s5_type << 10) | (1U << 13);
+        serial_print("[ACPI] writing S5 sleep_value=");
+        serial_print_hex(sleep_value);
+        serial_putchar('\n');
+
+        if (access_size == 2) {
+            volatile uint16_t* pm1a_cnt_mem = (volatile uint16_t*)memory_address;
+            *pm1a_cnt_mem = (uint16_t)sleep_value;
+        } else if (access_size == 4) {
+            volatile uint32_t* pm1a_cnt_mem = (volatile uint32_t*)memory_address;
+            *pm1a_cnt_mem = sleep_value;
+        } else {
+            volatile uint8_t* pm1a_cnt_mem = (volatile uint8_t*)memory_address;
+            *pm1a_cnt_mem = (uint8_t)sleep_value;
         }
     } else {
         serial_print("[ACPI] shutdown via PM1a control block: port=");
@@ -420,32 +472,27 @@ void acpi_shutdown(void) {
             current_value = inb(pm1a_cnt);
         }
 
-        // S5 关机: 尝试常见的 S5 SLP_TYP 值
-        // SLP_TYP 位 10-12, SLP_EN 位 13
-        // 不同系统使用不同的S5值：0x5、0x7等
-        uint8_t s5_values[] = {0x5, 0x7, 0x1, 0x2};
-        uint32_t sleep_value = 0;
-        
-        for (int i = 0; i < 4; i++) {
-            sleep_value = (current_value & ~(0x7 << 10)) | (s5_values[i] << 10) | (1 << 13);
-            serial_print("[ACPI] trying S5 value=");
-            serial_print_dec(s5_values[i]);
-            serial_print(" sleep_value=");
-            serial_print_hex(sleep_value);
-            serial_putchar('\n');
-        
-            // 写入 PM1a 控制寄存器（I/O 空间）
+        uint32_t sleep_value = (current_value & ~(0x7U << 10)) |
+                               ((uint32_t)s5_type << 10) | (1U << 13);
+        serial_print("[ACPI] writing S5 sleep_value=");
+        serial_print_hex(sleep_value);
+        serial_putchar('\n');
+
+        if (access_size == 2) {
+            outw((uint16_t)pm1a_cnt, (uint16_t)sleep_value);
+        } else if (access_size == 4) {
+            outl((uint16_t)pm1a_cnt, sleep_value);
+        } else {
+            outb((uint16_t)pm1a_cnt, (uint8_t)sleep_value);
+        }
+
+        if (pm1b_cnt != 0U) {
             if (access_size == 2) {
-                outw(pm1a_cnt, (uint16_t)sleep_value);
+                outw((uint16_t)pm1b_cnt, (uint16_t)sleep_value);
             } else if (access_size == 4) {
-                outl(pm1a_cnt, sleep_value);
+                outl((uint16_t)pm1b_cnt, sleep_value);
             } else {
-                outb(pm1a_cnt, (uint8_t)sleep_value);
-            }
-            
-            // 短暂延迟，看是否关机成功
-            for (int j = 0; j < 100000; j++) {
-                __asm__ volatile ("nop");
+                outb((uint16_t)pm1b_cnt, (uint8_t)sleep_value);
             }
         }
     }

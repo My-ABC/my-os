@@ -142,7 +142,7 @@ void pmm_init(uint32_t multiboot_info_addr) {
     g_pmm.total_frames = total_frames;
     g_pmm.used_frames = 0U;
     g_pmm.bitmap_size = bitmap_size;
-    g_pmm.bitmap = (uint8_t *)(bitmap_addr + KERNEL_VIRT_BASE);
+    g_pmm.bitmap = (uint8_t *)(KERNEL_VIRT_BASE + bitmap_addr - KERNEL_PHYS_BASE);
     g_pmm.next_free_frame = 0U;
 
     memset(g_pmm.bitmap, 0x00, bitmap_size);

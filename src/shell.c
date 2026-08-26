@@ -8,6 +8,8 @@
 #include "keyboard.h"
 #include "panic.h"
 #include "serial.h"
+#include "paging.h"
+#include "ring3.h"
 
 // 命令表
 static cmd_t cmd_table[] = {
@@ -21,6 +23,7 @@ static cmd_t cmd_table[] = {
     {"help",     cmd_help,     "Show this help"},
     {"clear",    cmd_clear,    "Clear screen"},
     {"hello",    cmd_hello,    "Print hello message"},
+    {"ring3",    cmd_ring3,    "Enter Ring 3 user mode"},
     {NULL, NULL, NULL}
 };
 
@@ -147,6 +150,17 @@ int cmd_hello(int argc, char *argv[]) {
     } else {
         printf("Hello, my-os!\n");
     }
+    return 0;
+}
+
+int cmd_ring3(int argc, char *argv[]) {
+    // 将低地址用户代码页映射为 Ring 3 可执行页，用户栈由页错误按需建立。
+    paging_map_page((uint32_t)user_entry, (uint32_t)user_entry,
+                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    serial_print("[RING3] Entering user function at 0x");
+    serial_print_hex((uint32_t)user_entry);
+    serial_print("\n");
+    ring0_to_ring3((uint32_t *)0x00801000, user_entry);
     return 0;
 }
 

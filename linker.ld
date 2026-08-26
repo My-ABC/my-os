@@ -22,7 +22,15 @@ SECTIONS
         *(.boot.bss)
     }
 
-    boot_end = .;
+    . = ALIGN(4M);
+    .user.text :
+    {
+        user_start = .;
+        *(.user.text)
+        user_end = .;
+    }
+
+    boot_end = ALIGN(user_end);
     . = KERNEL_VIRT_BASE + (boot_end - KERNEL_PHYS_BASE);
 
     .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE)

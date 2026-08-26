@@ -19,7 +19,7 @@
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
 - **ACPI 关机** — 通过 ACPI S5 状态关机，备用方案使用常见 ACPI I/O 端口
-- **Ring 3** — 实现了Ring3
+- **Ring 3** — 实现了Ring3+测试ring3(低地址)
 - **syscall** — 实现系统调用为了Ring3
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
