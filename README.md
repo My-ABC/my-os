@@ -21,6 +21,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
 - **Ring 3** — impl Ring3+test ring3(low address)
 - **syscall** — impl syscall for the Ring3
+- **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing
 - **shell(kernel)** — impl a shell on kernel mode 
 - **Memory paging** — implemented full memory paging.
 - **PMM** — impl PMM
@@ -75,6 +76,7 @@ help     show help
 clear    clear screen
 hello    print hello message
 ring3    test ring3 on Low Address
+elf      load and run the built-in ELF32 test program
 ```
 
 ## Layout

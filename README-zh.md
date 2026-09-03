@@ -26,6 +26,7 @@
 - **PMM** — 实现了PMM
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
+- **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零
 
 ## 构建
 
@@ -75,6 +76,7 @@ help     显示帮助
 clear    清屏
 hello    打印hello消息
 ring3    测试ring3在低地址
+elf      装载并运行内置 ELF32 测试程序
 ```
 
 ## 目录结构

@@ -10,6 +10,10 @@
 #include "serial.h"
 #include "paging.h"
 #include "ring3.h"
+#include "elf.h"
+
+extern const uint8_t elf_demo_start[];
+extern const uint8_t elf_demo_end[];
 
 // 命令表
 static cmd_t cmd_table[] = {
@@ -24,6 +28,7 @@ static cmd_t cmd_table[] = {
     {"clear",    cmd_clear,    "Clear screen"},
     {"hello",    cmd_hello,    "Print hello message"},
     {"ring3",    cmd_ring3,    "Enter Ring 3 user mode"},
+    {"elf",      cmd_elf,      "Load the built-in ELF32 program"},
     {NULL, NULL, NULL}
 };
 
@@ -161,6 +166,20 @@ int cmd_ring3(int argc, char *argv[]) {
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
     ring0_to_ring3((uint32_t *)0x00801000, user_entry);
+    return 0;
+}
+
+int cmd_elf(int argc, char *argv[]) {
+    uint32_t size = (uint32_t)(elf_demo_end - elf_demo_start);
+    int result;
+    (void)argc;
+    (void)argv;
+
+    result = elf_run(elf_demo_start, size);
+    if (result != 0) {
+        printf("ELF32 load failed\n");
+        return result;
+    }
     return 0;
 }
 
