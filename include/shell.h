@@ -21,6 +21,7 @@ typedef struct {
 
 int cmd_time(int argc, char *argv[]);
 int cmd_panic(int argc, char *argv[]);
+int cmd_svga_blue(int argc, char *argv[]);
 int cmd_echo(int argc, char *argv[]);
 int cmd_reboot(int argc, char *argv[]);
 int cmd_secho(int argc, char *argv[]);

@@ -2,8 +2,12 @@ section .multiboot
 
 align 4
     dd 0x1BADB002
-    dd 0x03
-    dd -(0x1BADB002 + 0x03)
+    dd 0x07
+    dd -(0x1BADB002 + 0x07)
+    dd 0
+    dd 640
+    dd 480
+    dd 32
 
 %define KERNEL_VIRT_BASE 0xC0000000
 

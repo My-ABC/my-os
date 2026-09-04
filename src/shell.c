@@ -11,6 +11,7 @@
 #include "paging.h"
 #include "ring3.h"
 #include "elf.h"
+#include "vbe.h"
 
 extern const uint8_t elf_demo_start[];
 extern const uint8_t elf_demo_end[];
@@ -19,6 +20,7 @@ extern const uint8_t elf_demo_end[];
 static cmd_t cmd_table[] = {
     {"time",     cmd_time,     "Show current time"},
     {"panic",    cmd_panic,    "Trigger blue screen"},
+    {"svga_blue", cmd_svga_blue, "Show a blue screen"},
     {"echo",     cmd_echo,     "Print text"},
     {"reboot",   cmd_reboot,   "Reboot system"},
     {"shutdown", cmd_shutdown, "Shutdown system"},
@@ -87,6 +89,16 @@ int cmd_time(int argc, char *argv[]) {
 int cmd_panic(int argc, char *argv[]) {
     printf("Triggering panic...\n");
     __asm__ volatile ("int $0x03");
+    return 0;
+}
+
+int cmd_svga_blue(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+    if (vbe_blue_screen() != 0) {
+        vga_set_color(VGA_COLOR_BLUE, VGA_COLOR_BLUE);
+        vga_clear();
+    }
     return 0;
 }
 

@@ -1,6 +1,7 @@
 #include "stdint.h"
 #include "stddef.h"
 #include "vga.h"
+#include "vbe.h"
 
 // VGA 参数
 #define VGA_WIDTH 80
@@ -73,6 +74,10 @@ void vga_init(void) {
 
 // 清屏
 void vga_clear(void) {
+    if (vbe_available()) {
+        vbe_clear();
+        return;
+    }
     for (uint16_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
         VGA_MEMORY[i] = vga_entry(' ', current_color);
     }
@@ -84,10 +89,17 @@ void vga_clear(void) {
 // 设置颜色
 void vga_set_color(enum vga_color fg, enum vga_color bg) {
     current_color = vga_color(fg, bg);
+    if (vbe_available()) {
+        vbe_set_color((uint8_t)fg, (uint8_t)bg);
+    }
 }
 
 // 打印字符
 void vga_putchar(char c) {
+    if (vbe_available()) {
+        vbe_putchar(c);
+        return;
+    }
     if (c == '\n') {
         // 换行
         cursor_row++;

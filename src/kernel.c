@@ -16,6 +16,7 @@
 #include "paging.h"
 #include "pmm.h"
 #include "heap.h"
+#include "vbe.h"
 
 void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
@@ -32,6 +33,9 @@ void kmain(uint32_t multiboot_info) {
     // 初始化分页（在GDT之后，VGA之前）
     paging_init();
     tss_update_cr3(paging_get_page_directory());
+
+    // 使用启动阶段 BIOS VBE 调用返回的帧缓冲信息。
+    vbe_initialize(multiboot_info);
     
     // 初始化 VGA
     vga_init();

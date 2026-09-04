@@ -42,5 +42,4 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            myos.bin
             myos.iso

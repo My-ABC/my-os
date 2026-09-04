@@ -69,8 +69,12 @@ build/paging_asm.o: boot/paging.asm
 	mkdir -p build
 	$(AS) $(ASFLAGS) $< -o $@
 
-# 运行
-run: build
+# 运行：通过 GRUB ISO 启动，保留 GRUB 提供的 framebuffer 信息
+run: iso
+	qemu-system-i386 -cdrom $(ISO) -serial stdio
+
+# 直接 -kernel 启动，不经过 GRUB，仅用于启动链调试
+run-kernel: build
 	qemu-system-i386 -kernel $(KERNEL) -serial stdio
 
 # 无图形界面运行, 串口输出到终端
@@ -106,6 +110,8 @@ iso: build
 	@cp $(KERNEL) iso/boot/
 	@echo "set timeout=5" > iso/boot/grub/grub.cfg
 	@echo "set default=0" >> iso/boot/grub/grub.cfg
+	@echo "set gfxmode=640x480x32" >> iso/boot/grub/grub.cfg
+	@echo "set gfxpayload=keep" >> iso/boot/grub/grub.cfg
 	@echo "menuentry \"MyOS\" {" >> iso/boot/grub/grub.cfg
 	@echo "    multiboot /boot/$(KERNEL)" >> iso/boot/grub/grub.cfg
 	@echo "    boot" >> iso/boot/grub/grub.cfg
@@ -125,10 +131,10 @@ gdb:
 	i686-elf-gdb -ex "target remote localhost:1234" $(KERNEL)
 
 run-iso: iso
-	qemu-system-i386 -cdrom myos.iso -serial stdio
+	qemu-system-i386 -machine q35 -cdrom $(ISO) -serial stdio
 
 # 清理
 clean:
 	rm -rf build $(KERNEL) $(ISO)
 
-.PHONY: build disk run run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
