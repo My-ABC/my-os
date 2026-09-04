@@ -2,12 +2,13 @@
 
 # MyOS
 
-一个 32 位 x86 内核：通过 Multiboot 启动，输出到 VGA 文本模式和 COM1 串口，处理 CPU 异常与硬件中断。
+一个 32 位 x86 内核：通过 Multiboot/GRUB 启动，使用 GRUB 提供的 framebuffer 控制台和 COM1 串口，处理 CPU 异常与硬件中断。
 
 ## 功能
 
-- **Multiboot 启动** — 由 GRUB/QEMU 加载到 1MB，自行建立栈后进入 `kmain`
-- **VGA 文本模式** — `0xB8000` 上的 80x25 驱动，支持颜色、滚屏、硬件光标、十六进制/十进制打印
+- **Multiboot/GRUB 视频启动** — GRUB 请求 640x480x32 framebuffer，并将地址传给内核
+- **Framebuffer 控制台** — 16x16 放大 ASCII 字体，支持大小写、标点、滚屏和闪烁下划线光标
+- **VGA 文本回退** — 没有 GRUB framebuffer 时仍支持直接使用 `0xB8000` 文本输出
 - **串口控制台** — COM1 (`0x3F8`) 日志，所有无图形测试都靠它
 - **IDT** — 256 项，INT3 与 IRQ0/IRQ1 有真实处理函数
 - **PIC** — 8259 重映射到向量 `0x20`/`0x28`，支持单个 IRQ 屏蔽与 EOI
@@ -27,6 +28,7 @@
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
 - **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零
+- **SVGA** — `svga_blue` 将 GRUB framebuffer 填充为蓝色
 
 ## 构建
 
@@ -34,11 +36,12 @@
 
 ```bash
 make build          # -> myos.bin
-make run            # 带图形窗口的 QEMU
+make run            # 通过 GRUB ISO 启动并打开图形窗口
+make run-kernel     # 直接 -kernel 启动，不经过 GRUB framebuffer
 make run-nographic  # 串口输出到终端的 QEMU
 make run-q35        # 使用 q35 机型运行（更好的 ACPI 支持）
 make run-q35-nographic  # 使用 q35 机型运行，串口输出到终端
-make run-iso        # 带图形窗口的 QEMU 用 ISO
+make run-iso        # 使用 q35 机型通过 ISO 启动并打开图形窗口
 make iso            # 生成iso文件
 ```
 
@@ -77,6 +80,7 @@ clear    清屏
 hello    打印hello消息
 ring3    测试ring3在低地址
 elf      装载并运行内置 ELF32 测试程序
+svga_blue 将 framebuffer 填充为蓝色
 ```
 
 ## 目录结构

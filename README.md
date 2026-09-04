@@ -2,12 +2,13 @@ English | [中文](README-zh.md)
 
 # MyOS
 
-A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1, and handles CPU exceptions and hardware IRQs.
+A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided framebuffer console and COM1, and handles CPU exceptions and hardware IRQs.
 
 ## Features
 
-- **Multiboot boot** — loaded at 1 MB by GRUB/QEMU, sets up its own stack and calls `kmain`
-- **VGA text mode** — 80x25 driver at `0xB8000` with colors, scrolling, hardware cursor, hex/dec printing
+- **Multiboot/GRUB video boot** — GRUB requests a 640x480x32 framebuffer and passes its address to the kernel
+- **Framebuffer console** — 16x16 scaled ASCII font, upper/lowercase glyphs, punctuation, scrolling, and a blinking underline cursor
+- **VGA text fallback** — direct `0xB8000` text output remains available when no GRUB framebuffer is provided
 - **Serial console** — COM1 (`0x3F8`) logging, used by all headless tests
 - **IDT** — 256 entries, real handlers for INT3 and IRQ0/IRQ1
 - **PIC** — 8259 remapped to vectors `0x20`/`0x28`, per-IRQ masking, EOI
@@ -23,6 +24,7 @@ A small 32-bit x86 kernel: boots via Multiboot, prints to VGA text mode and COM1
 - **syscall** — impl syscall for the Ring3
 - **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing
 - **shell(kernel)** — impl a shell on kernel mode 
+- **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
 - **Memory paging** — implemented full memory paging.
 - **PMM** — impl PMM
 - **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
@@ -34,11 +36,12 @@ Requirements: `nasm`, an i686 toolchain, `qemu-system-x86` (for running and test
 
 ```bash
 make build          # -> myos.bin
-make run            # QEMU with a graphical window
+make run            # boot the GRUB ISO with a graphical window
+make run-kernel     # direct -kernel boot, without GRUB framebuffer
 make run-nographic  # QEMU with the serial console on the terminal
 make run-q35        # QEMU with q35 machine (better ACPI support)
 make run-q35-nographic  # QEMU with q35 machine, serial console on terminal
-make run-iso        # QEMU with a graphical window use iso
+make run-iso        # boot the ISO with q35 and a graphical window
 make iso            # gen iso file
 ```
 
@@ -77,6 +80,7 @@ clear    clear screen
 hello    print hello message
 ring3    test ring3 on Low Address
 elf      load and run the built-in ELF32 test program
+svga_blue fill the framebuffer with blue
 ```
 
 ## Layout
