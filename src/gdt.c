@@ -1,8 +1,8 @@
 #include "gdt.h"
 #include "serial.h"
 
-// GDT 数组（6 个条目：空描述符、内核代码段、内核数据段、用户代码段、用户数据段、TSS）
-static struct gdt_entry gdt[6];
+// GDT 数组：空描述符、内核/用户段、普通 TSS、双重错误 TSS
+static struct gdt_entry gdt[7];
 static struct gdt_ptr gdt_ptr;
 
 // 设置 GDT 条目
@@ -30,7 +30,7 @@ void gdt_init(void) {
     serial_print("[GDT] Initializing GDT\n");
 
     // 设置 GDT 指针
-    gdt_ptr.limit = (sizeof(struct gdt_entry) * 6) - 1;
+    gdt_ptr.limit = (sizeof(struct gdt_entry) * 7) - 1;
     gdt_ptr.base  = (uint32_t)&gdt;
 
     serial_print("[GDT] gdt_limit = ");
@@ -69,7 +69,7 @@ void gdt_init(void) {
     serial_print("[GDT] GDT entries set up\n");
 
     serial_print("[GDT] GDT table contents:\n");
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         serial_print("  entry ");
         serial_print_dec(i);
         serial_print(": ");

@@ -20,5 +20,6 @@ typedef void(*isr_t)(void);
 
 void idt_init(void);
 void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags);
+void idt_set_task_gate(uint8_t num, uint16_t sel);
 
 #endif

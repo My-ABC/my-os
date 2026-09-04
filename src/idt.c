@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "io.h"
 #include "vga.h"
+#include "gdt.h"
 
 static struct idt_entry idt[256];
 static struct idt_ptr idtp;
@@ -30,6 +31,14 @@ void idt_set_entry(int index, uint32_t base, uint16_t selector, uint8_t flags) {
     idt[index].base_high = (base >> 16) & 0xFFFF;
 }
 
+void idt_set_task_gate(uint8_t num, uint16_t sel) {
+    idt[num].base_low = 0;
+    idt[num].sel = sel;
+    idt[num].always0 = 0;
+    idt[num].flags = 0x85;
+    idt[num].base_high = 0;
+}
+
 void isr_handler(uint32_t int_no);
 void irq_handler(uint32_t int_no);
 
@@ -43,6 +52,8 @@ void idt_init(void) {
 
     extern void isr14(void);
     idt_set_gate(14, (uint32_t)isr14, 0x08, 0x8E);
+
+    idt_set_task_gate(8, GDT_DF_TSS_SELECTOR);
 
     extern void irq0(void);
     idt_set_gate(32, (uint32_t)irq0, 0x08, 0x8E);

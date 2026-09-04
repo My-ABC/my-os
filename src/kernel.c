@@ -31,6 +31,7 @@ void kmain(uint32_t multiboot_info) {
     
     // 初始化分页（在GDT之后，VGA之前）
     paging_init();
+    tss_update_cr3(paging_get_page_directory());
     
     // 初始化 VGA
     vga_init();

@@ -38,5 +38,6 @@ struct tss_t {
 } __attribute__((packed));
 
 void tss_init(void);
+void tss_update_cr3(uint32_t page_directory);
 
 #endif

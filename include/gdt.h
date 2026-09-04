@@ -23,7 +23,8 @@ struct gdt_ptr {
 #define GDT_NULL_SELECTOR  0x00
 #define GDT_CODE_SELECTOR  0x08
 #define GDT_DATA_SELECTOR  0x10
-#define GDT_TSS_SELECTOR   0x18
+#define GDT_TSS_SELECTOR   0x28
+#define GDT_DF_TSS_SELECTOR 0x30
 
 // 访问权限字节定义
 #define GDT_ACCESS_PRESENT        0x80  // P 位：段存在

@@ -9,6 +9,11 @@ struct tss_t tss __attribute__((section(".bss")));
 
 // 声明汇编中的内核栈顶地址
 extern char stack_top[];
+extern void double_fault_task(void);
+
+static struct tss_t double_fault_tss __attribute__((section(".bss")));
+static uint8_t double_fault_stack[4096]
+    __attribute__((section(".bss"), aligned(16)));
 
 void tss_init(void) {
     serial_print("[TSS] Initializing...\n");
@@ -34,6 +39,23 @@ void tss_init(void) {
     gdt_set_entry(5, base, limit, 0x89, 0x00);
     serial_print("[TSS] GDT entry set for TSS.\n");
 
+    memset(&double_fault_tss, 0, sizeof(double_fault_tss));
+    double_fault_tss.esp = (uint32_t)(double_fault_stack + sizeof(double_fault_stack));
+    double_fault_tss.cr3 = 0;
+    double_fault_tss.eip = (uint32_t)double_fault_task;
+    double_fault_tss.eflags = 0x202;
+    double_fault_tss.cs = 0x08;
+    double_fault_tss.ss = 0x10;
+    double_fault_tss.ds = 0x10;
+    double_fault_tss.es = 0x10;
+    double_fault_tss.fs = 0x10;
+    double_fault_tss.gs = 0x10;
+    double_fault_tss.io_map_base = sizeof(double_fault_tss);
+
+    gdt_set_entry(6, (uint32_t)&double_fault_tss,
+                  sizeof(double_fault_tss) - 1, 0x89, 0x00);
+    serial_print("[TSS] Double-fault task TSS configured.\n");
+
     // 4. 执行 ltr 指令加载 TSS 到 TR 寄存器
     __asm__ volatile("ltr %w0" : : "r" ((uint16_t)0x28));
     serial_print("[TSS] ltr instruction executed.\n");
@@ -50,4 +72,8 @@ void tss_init(void) {
     } else {
         serial_print("[TSS] ERROR: TR register mismatch!\n");
     }
+}
+
+void tss_update_cr3(uint32_t page_directory) {
+    double_fault_tss.cr3 = page_directory;
 }

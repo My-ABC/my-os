@@ -29,6 +29,7 @@ extern isr14_handler
 global isr3
 
 global isr14
+global double_fault_task
 
 isr3:
     cli
@@ -60,6 +61,13 @@ isr14:
     popa
     add esp, 8
     iret
+
+; #DF 通过 IDT 任务门切换到独立 TSS 后到达这里。
+double_fault_task:
+    cli
+.halt:
+    hlt
+    jmp .halt
 
 extern isr_handler
 extern irq_handler
