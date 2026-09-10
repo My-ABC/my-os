@@ -126,6 +126,53 @@ static void vbe_erase_cursor(void) {
     }
 }
 
+static void vbe_scroll_up(void) {
+    uint32_t columns = vbe_state.width / ASCII_FONT_WIDTH;
+    uint32_t rows = vbe_state.height / ASCII_FONT_HEIGHT;
+    uint32_t scroll_area_rows = rows - 1U;
+
+    for (uint32_t row = 0; row < scroll_area_rows; row++) {
+        for (uint32_t column = 0; column < columns; column++) {
+            uint32_t src_y = (row + 1U) * ASCII_FONT_HEIGHT;
+            uint32_t dst_y = row * ASCII_FONT_HEIGHT;
+            for (uint32_t glyph_y = 0; glyph_y < ASCII_FONT_HEIGHT; glyph_y++) {
+                for (uint32_t glyph_x = 0; glyph_x < ASCII_FONT_WIDTH; glyph_x++) {
+                    uint32_t src_x = column * ASCII_FONT_WIDTH + glyph_x;
+                    uint32_t src_color = 0U;
+                    volatile uint8_t *src = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
+                        (src_y + glyph_y) * vbe_state.pitch + src_x * ((vbe_state.bpp + 7U) / 8U);
+                    volatile uint8_t *dst = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
+                        (dst_y + glyph_y) * vbe_state.pitch + src_x * ((vbe_state.bpp + 7U) / 8U);
+                    if (vbe_state.bpp == 32) {
+                        src_color = *(volatile uint32_t *)src;
+                        *(volatile uint32_t *)dst = src_color;
+                    } else {
+                        uint32_t bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
+                        for (uint32_t b = 0; b < bytes_per_pixel; b++) {
+                            dst[b] = src[b];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (uint32_t row = scroll_area_rows; row < rows; row++) {
+        for (uint32_t column = 0; column < columns; column++) {
+            uint32_t start_x = column * ASCII_FONT_WIDTH;
+            uint32_t start_y = row * ASCII_FONT_HEIGHT;
+            for (uint32_t glyph_y = 0; glyph_y < ASCII_FONT_HEIGHT; glyph_y++) {
+                for (uint32_t glyph_x = 0; glyph_x < ASCII_FONT_WIDTH; glyph_x++) {
+                    vbe_put_pixel(start_x + glyph_x, start_y + glyph_y, vbe_background);
+                }
+            }
+        }
+    }
+
+    vbe_cursor_y = rows - 1U;
+    vbe_cursor_x = 0;
+}
+
 void vbe_cursor_tick(void) {
     if (!vbe_available()) {
         return;
@@ -197,8 +244,12 @@ void vbe_putchar(char c) {
         vbe_draw_glyph(glyph, vbe_cursor_x, vbe_cursor_y);
         vbe_cursor_x++;
     }
-    if (vbe_cursor_x >= columns || vbe_cursor_y >= rows) {
-        vbe_clear();
+    if (vbe_cursor_x >= columns) {
+        vbe_cursor_x = 0;
+        vbe_cursor_y++;
+    }
+    if (vbe_cursor_y >= rows) {
+        vbe_scroll_up();
     } else {
         vbe_draw_cursor();
     }
