@@ -39,7 +39,9 @@
 
 ## 构建
 
-依赖：`nasm`、i686 工具链、Python 3 和宿主机 `cc`（测试用）、`qemu-system-x86`（运行用）、`grub-pc-bin`、`xorriso`、`grub-common`。
+各目标依赖：构建内核需要 `nasm` 和 i686 工具链；宿主机测试需要 Python 3 和宿主机 `cc`；
+QEMU 运行及集成测试需要 `qemu-system-i386`；ISO 目标还需要 `grub-pc-bin`、`xorriso`
+和 `grub-common`。
 
 ```bash
 make build          # -> myos.bin
@@ -51,9 +53,23 @@ make run-q35-nographic  # 使用 q35 机型运行，串口输出到终端
 make run-iso        # 使用 q35 机型通过 ISO 启动并打开图形窗口
 make iso            # 生成iso文件
 make test           # 运行内核例程的宿主机测试
+make test-qemu      # 构建内核并运行有时限的无头 QEMU 集成测试
 ```
 
 `make test` 使用 Python `unittest` 自动发现 Python 用例，并运行 `test/` 中的每个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。可执行的宿主测试覆盖字符串函数、RTC 日期/时区计算、ELF32 输入校验、GDT/IDT 描述符编码，以及带硬件 I/O stub 的键盘、PIC、PIT 和串口行为。静态源码和布局检查覆盖 ACPI、heap、I/O、paging、panic、PMM、shell、syscall、trap、TSS、VBE、VGA 和 IRQ0 栈帧约定。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
+
+`make test` 特意保持为纯宿主机测试，不需要 QEMU 或内核交叉工具链
+（需要 Python 3 和宿主机 `cc`）。`make test-qemu` 需要内核构建工具
+（`nasm` 及 i686 编译器/链接器）、Python 3 和 `qemu-system-i386`；它会构建
+`myos.bin`，以无头 TCG 模式启动
+`qemu-system-i386`，通过 QEMU monitor 驱动 PS/2 键盘，并检查 COM1 串口输出。
+测试覆盖启动、Shell 输入、Ring 3 调度/列表/前后台切换/结束，以及 ELF32
+装载、执行、清理和重新装载。测试有整体时限，并为启动、串口和 monitor 等待
+设置超时；每项检查都会输出具名 PASS/FAIL，结束或失败时都会终止 QEMU。
+该目标需要单独安装 QEMU；可通过 `make test-qemu QEMU=/path/to/qemu`
+指定可执行文件。测试使用一种 QEMU PC/TCG 配置，不能替代其他固件、真实硬件
+测试，也不验证 GRUB ISO 启动。测试使用 Python 内置 socket，无需宿主机
+`timeout`、`socat` 或 netcat。
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：
 

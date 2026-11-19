@@ -39,7 +39,10 @@ The latest tagged release includes a GRUB-bootable ISO built by GitHub Actions:
 
 ## Building
 
-Requirements: `nasm`, an i686 toolchain, Python 3 and a host `cc` (for tests), `qemu-system-x86` (for running), `grub-pc-bin`, `xorriso`, `grub-common`.
+Requirements by target: kernel builds need `nasm` and an i686 toolchain; host
+tests need Python 3 and a host `cc`; QEMU runs and integration tests need
+`qemu-system-i386`; ISO targets additionally need `grub-pc-bin`, `xorriso`, and
+`grub-common`.
 
 ```bash
 make build          # -> myos.bin
@@ -51,6 +54,7 @@ make run-q35-nographic  # QEMU with q35 machine, serial console on terminal
 make run-iso        # boot the ISO with q35 and a graphical window
 make iso            # gen iso file
 make test           # run host-side tests for kernel routines
+make test-qemu      # build and run the bounded headless QEMU integration suite
 ```
 
 `make test` uses Python `unittest` to discover the Python cases and every shell
@@ -63,6 +67,22 @@ TSS, VBE, VGA, and the IRQ0 frame contract. These checks do not execute
 privileged instructions, access physical addresses, or boot QEMU; hardware
 behavior still requires emulator or device validation. C checks and named
 Python cases print clear case names and PASS/FAIL results.
+
+`make test` intentionally remains host-only, so it works without QEMU or the
+kernel cross-toolchain (it needs Python 3 and host `cc`). `make test-qemu`
+requires the kernel build tools (`nasm` and an i686 compiler/linker), Python 3,
+and `qemu-system-i386`; it builds `myos.bin`, starts
+`qemu-system-i386` in headless TCG mode, and drives the PS/2 keyboard through
+QEMU's monitor while checking COM1 output. It exercises startup, shell input,
+Ring 3 scheduling/listing/foreground/background/termination, and ELF32 loading,
+execution, cleanup, and reload. The harness has an overall timeout, bounded
+startup/serial/monitor waits, reports each named PASS/FAIL check, and terminates
+QEMU on completion or failure. QEMU is a separate required prerequisite for
+this target; override its executable with `make test-qemu QEMU=/path/to/qemu`.
+It uses Python's built-in socket support, so host `timeout`, `socat`, and
+netcat are not required.
+This emulates one QEMU PC/TCG configuration and is not a substitute for testing
+other firmware, hardware, or booting the GRUB ISO.
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
 

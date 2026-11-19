@@ -42,6 +42,7 @@ OBJS = $(ASM_OBJS) $(C_OBJS)
 
 ISO = myos.iso
 KERNEL = myos.bin
+QEMU ?= qemu-system-i386
 DISK ?= disk.img
 DISK_SIZE ?= 64M
 
@@ -51,6 +52,9 @@ build: $(OBJS)
 
 test:
 	python3 -m unittest discover -s test -p 'test_*.py' -v
+
+test-qemu: build
+	python3 test/run_qemu_integration.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
 
 # 编译 C 文件
 build/%.o: src/%.c
@@ -140,4 +144,4 @@ run-iso: iso
 clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__
 
-.PHONY: build test disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build test test-qemu disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

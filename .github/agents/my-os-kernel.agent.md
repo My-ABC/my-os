@@ -9,7 +9,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 
 ## Repository map
 
-- `Makefile`: compiler/tool selection, object rules, kernel/ISO builds, QEMU run targets, tests, and cleanup (`make clean` also removes `test/__pycache__/`). `make test` runs Python `unittest`; test scripts must use host `cc` directly, never the kernel cross-compiler selected by `CC`.
+- `Makefile`: compiler/tool selection, object rules, kernel/ISO builds, QEMU run targets, tests, and cleanup (`make clean` also removes `test/__pycache__/`). `make test` runs host-only Python `unittest`; test scripts must use host `cc` directly, never the kernel cross-compiler selected by `CC`. `make test-qemu` builds and runs the bounded headless QEMU integration suite.
 - `.gitignore`: generated build/image outputs and local editor/debug files.
 - `linker.ld`: 1 MiB physical load, user-code placement, high-half kernel sections, and reserved paging storage.
 - `LICENSE`: project GPLv2 license.
@@ -32,7 +32,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `scripts/say_hi.py`: pull-request greeting script used by CI.
 - `.github/workflows/pr_hi.yml`: runs the greeting script for pull requests.
 - `.github/workflows/release.yml`: builds the kernel and ISO for tagged releases or manual dispatch.
-- `test/`: host-runnable and integration tests; keep all test-specific files here. `test_shell_scripts.py` discovers every `*.sh` test script; each shell suite should be separate and print named PASS/FAIL checks. Host C suites use `test/compile_c_test` (which invokes host `cc` directly) for strings, RTC, ELF32 validation, descriptor encoding, and stubbed keyboard/PIC/PIT/serial behavior. `test_module_contracts.py` statically checks the remaining privileged or physical-memory contracts: ACPI, heap, I/O, paging, panic, PMM, shell, syscall, trap, TSS, VBE, VGA, and IRQ0 frame layout.
+- `test/`: host-runnable and integration tests; keep all test-specific files here. `test_shell_scripts.py` discovers every `*.sh` test script; each shell suite should be separate and print named PASS/FAIL checks. Host C suites use `test/compile_c_test` (which invokes host `cc` directly) for strings, RTC, ELF32 validation, descriptor encoding, and stubbed keyboard/PIC/PIT/serial behavior. `test_module_contracts.py` statically checks the remaining privileged or physical-memory contracts: ACPI, heap, I/O, paging, panic, PMM, shell, syscall, trap, TSS, VBE, VGA, and IRQ0 frame layout. `run_qemu_integration.py` uses QEMU headless TCG, monitor keyboard input, serial output, and bounded timeouts to exercise startup, shell, Ring 3, and ELF32 runtime behavior; it is run explicitly via `make test-qemu`, not host-only `make test`.
 - `README.md`, `README-zh.md`: English and Chinese user/build documentation; keep behavior and commands aligned.
 
 ## Architecture constraints
@@ -51,6 +51,6 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 1. Read the affected implementation, header, assembly entry points, and callers before editing.
 2. Search for existing helpers and tests before introducing new logic.
 3. Make the smallest complete change and update directly related documentation.
-4. Run `make test` for the host test suite and `make build` for kernel compilation when applicable. `make test` must be runnable without the cross-compiler; C suites must call host `cc`, and each case must print a useful name and PASS/FAIL status. Privileged instructions and direct physical-memory paths should use stubs or source/layout checks rather than unsafe host execution. Use QEMU targets only when runtime behavior is relevant and the required tools are available.
+4. Run `make test` for the host test suite and `make build` for kernel compilation when applicable. `make test` must be runnable without the cross-compiler; C suites must call host `cc`, and each case must print a useful name and PASS/FAIL status. Privileged instructions and direct physical-memory paths should use stubs or source/layout checks rather than unsafe host execution. When runtime behavior is relevant and QEMU is installed, also run `make test-qemu`; the target has bounded waits and terminates its emulator.
 5. Keep this agent guide synchronized with repository changes; update it in the same change whenever build/test behavior, architecture conventions, or file responsibilities change.
 6. Report changed files, exact validation results, and remaining hardware/emulation limitations. Do not claim a QEMU or hardware check that was not run.
