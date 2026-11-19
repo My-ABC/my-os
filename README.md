@@ -39,7 +39,7 @@ The latest tagged release includes a GRUB-bootable ISO built by GitHub Actions:
 
 ## Building
 
-Requirements: `nasm`, an i686 toolchain, `qemu-system-x86` (for running and testing), `grub-pc-bin`, `xorriso`, `grub-common`.
+Requirements: `nasm`, an i686 toolchain, Python 3 and a host `cc` (for tests), `qemu-system-x86` (for running), `grub-pc-bin`, `xorriso`, `grub-common`.
 
 ```bash
 make build          # -> myos.bin
@@ -50,7 +50,14 @@ make run-q35        # QEMU with q35 machine (better ACPI support)
 make run-q35-nographic  # QEMU with q35 machine, serial console on terminal
 make run-iso        # boot the ISO with q35 and a graphical window
 make iso            # gen iso file
+make test           # run host-side tests for kernel routines
 ```
+
+`make test` uses Python `unittest` to run each shell test script in `test/`. The C
+test suites use the host `cc` (independent of the kernel's `CC` cross-compiler)
+to exercise string routines, RTC date/time calculations, and ELF32 input
+validation. Each check prints its name and PASS/FAIL status. Tests do not boot
+QEMU or exercise privileged hardware paths.
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
 
@@ -70,7 +77,7 @@ make run
 
 Scancode set 2 is the modern standard for PS/2 keyboards, using the `0xF0` prefix to identify break codes, while scancode set 1 uses the high bit.
 
-Building with `make PANIC_DEMO=1` makes the kernel trigger `int $0x03` right after initialization, which is what `make test-panic` uses.
+Building with `make PANIC_DEMO=1` makes the kernel trigger `int $0x03` right after initialization.
 
 ## shell use
 ```

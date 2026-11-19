@@ -184,44 +184,54 @@ static void add_days(rtc_time_t *time, int days) {
     }
 }
 
-// 时区转换：将时间转换为指定时区
-void rtc_convert_timezone(rtc_time_t *time, int offset_seconds) {
-    // 计算偏移的小时和分钟
-    int offset_hours = offset_seconds / 3600;
-    int offset_minutes = (offset_seconds % 3600) / 60;
-    
-    // 应用偏移
-    time->hour += offset_hours;
-    time->minute += offset_minutes;
-    
-    // 处理分钟溢出
-    while (time->minute >= 60) {
-        time->minute -= 60;
-        time->hour++;
-    }
-    while (time->minute < 0) {
-        time->minute += 60;
-        time->hour--;
-    }
-    
-    // 处理小时溢出
-    while (time->hour >= 24) {
-        time->hour -= 24;
-        add_days(time, 1);
-    }
-    while (time->hour < 0) {
-        time->hour += 24;
-        // 处理日期减1（这里简化处理，假设不会跨月）
-        time->day--;
-        if (time->day < 1) {
-            time->month--;
-            if (time->month < 1) {
+static void subtract_days(rtc_time_t *time, int days) {
+    while (days > 0) {
+        if (time->day > 1) {
+            time->day--;
+        } else {
+            if (time->month > 1) {
+                time->month--;
+            } else {
                 time->month = 12;
                 time->year--;
             }
             time->day = days_in_month(time->year, time->month);
         }
+        days--;
     }
+}
+
+// 时区转换：将时间转换为指定时区
+void rtc_convert_timezone(rtc_time_t *time, int offset_seconds) {
+    // 计算偏移的小时和分钟
+    int offset_hours = offset_seconds / 3600;
+    int offset_minutes = (offset_seconds % 3600) / 60;
+    int hour = time->hour + offset_hours;
+    int minute = time->minute + offset_minutes;
+
+    // 应用偏移
+    // 处理分钟溢出
+    while (minute >= 60) {
+        minute -= 60;
+        hour++;
+    }
+    while (minute < 0) {
+        minute += 60;
+        hour--;
+    }
+    
+    // 处理小时溢出
+    while (hour >= 24) {
+        hour -= 24;
+        add_days(time, 1);
+    }
+    while (hour < 0) {
+        hour += 24;
+        subtract_days(time, 1);
+    }
+
+    time->hour = (uint8_t)hour;
+    time->minute = (uint8_t)minute;
 }
 
 // 转换为北京时间（UTC+8）

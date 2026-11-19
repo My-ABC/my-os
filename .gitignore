@@ -30,5 +30,3 @@ iso/
 # QEMU 文件
 qemu.log
 *.pid
-
-.github/agents

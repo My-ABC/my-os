@@ -49,6 +49,9 @@ DISK_SIZE ?= 64M
 build: $(OBJS)
 	$(LD) $(LDFLAGS) $^ -o $(KERNEL)
 
+test:
+	python3 -m unittest discover -s test -p 'test_*.py' -v
+
 # 编译 C 文件
 build/%.o: src/%.c
 	mkdir -p build
@@ -135,6 +138,6 @@ run-iso: iso
 
 # 清理
 clean:
-	rm -rf build $(KERNEL) $(ISO)
+	rm -rf build $(KERNEL) $(ISO) test/__pycache__
 
-.PHONY: build disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build test disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

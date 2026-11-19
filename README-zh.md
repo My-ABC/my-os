@@ -50,7 +50,10 @@ make run-q35        # 使用 q35 机型运行（更好的 ACPI 支持）
 make run-q35-nographic  # 使用 q35 机型运行，串口输出到终端
 make run-iso        # 使用 q35 机型通过 ISO 启动并打开图形窗口
 make iso            # 生成iso文件
+make test           # 运行内核例程的宿主机测试
 ```
+
+`make test` 使用 Python `unittest` 逐个运行 `test/` 中的 shell 测试脚本。各 C 测试套件固定使用宿主机 `cc`，不会使用内核构建的交叉编译器；覆盖字符串函数、RTC 日期/时区计算和 ELF32 输入校验，并逐项打印测试名及 PASS/FAIL。测试不会启动 QEMU，也不覆盖特权硬件路径。
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：
 
