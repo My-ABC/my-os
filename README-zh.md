@@ -20,13 +20,20 @@
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
 - **ACPI 关机** — 通过 ACPI S5 状态关机，备用方案使用常见 ACPI I/O 端口
-- **Ring 3** — 实现了Ring3+测试ring3(低地址)
-- **syscall** — 实现系统调用为了Ring3
+- **Ring 3 进程** — 使用 PIT IRQ0 抢占式软件上下文切换，最多运行两个用户进程，每个进程有独立的内核栈和用户栈
+- **进程管理** — Shell 支持 `ps`、`fg <pid>`、`bg <pid>` 和 `kill <pid>`；Ring 3 进程默认在后台运行
+- **系统调用** — Ring 3 可输出文本，并通过 `SYS_GETPID` 查询当前进程 PID
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
 - **PMM** — 实现了PMM
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
+
+## 下载
+
+最新标签版本包含由 GitHub Actions 自动构建、可通过 GRUB 启动的 ISO：
+
+[下载 myos.iso](https://github.com/My-ABC/my-os/releases/latest/download/myos.iso) · [查看所有 Releases](https://github.com/My-ABC/my-os/releases)
 - **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零
 - **SVGA** — `svga_blue` 将 GRUB framebuffer 填充为蓝色
 
@@ -78,7 +85,7 @@ tick     获取PIT中的tick
 help     显示帮助
 clear    清屏
 hello    打印hello消息
-ring3    测试ring3在低地址
+ring3    在后台启动一个 Ring 3 进程
 ps       查看 Ring 3 进程
 fg       显示指定 Ring 3 进程输出（fg <pid>）
 bg       隐藏指定 Ring 3 进程输出（bg <pid>）

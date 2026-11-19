@@ -20,8 +20,9 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
 - **ACPI reboot** — resets through the FADT reset register, falling back to `0xCF9`, the keyboard controller, and finally a triple fault
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
-- **Ring 3** — impl Ring3+test ring3(low address)
-- **syscall** — impl syscall for the Ring3
+- **Ring 3 processes** — software context switching preempted by PIT IRQ0; run up to two user processes with separate kernel and user stacks
+- **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
+- **System calls** — Ring 3 can write output and query its process ID with `SYS_GETPID`
 - **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
@@ -29,6 +30,12 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **PMM** — impl PMM
 - **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
 - **heap allocator(user)** — impl heap allocator in the syscall
+
+## Download
+
+The latest tagged release includes a GRUB-bootable ISO built by GitHub Actions:
+
+[Download myos.iso](https://github.com/My-ABC/my-os/releases/latest/download/myos.iso) · [All releases](https://github.com/My-ABC/my-os/releases)
 
 ## Building
 
@@ -78,7 +85,7 @@ tick     get tick of PIT
 help     show help
 clear    clear screen
 hello    print hello message
-ring3    test ring3 on Low Address
+ring3    start one Ring 3 process in the background
 ps       list Ring 3 processes
 fg       show a Ring 3 process's output (fg <pid>)
 bg       hide a Ring 3 process's output (bg <pid>)
