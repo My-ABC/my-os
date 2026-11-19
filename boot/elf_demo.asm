@@ -9,7 +9,7 @@ elf_demo_start:
     dw 2
     dw 3
     dd 1
-    dd 0x00400000
+    dd 0x00500000
     dd 52
     dd 0
     dd 0
@@ -22,8 +22,8 @@ elf_demo_start:
 
     dd 1
     dd 0x100
-    dd 0x00400000
-    dd 0x00400000
+    dd 0x00500000
+    dd 0x00500000
     dd elf_demo_end - elf_demo_code
     dd elf_demo_end - elf_demo_code
     dd 5
@@ -32,7 +32,7 @@ elf_demo_start:
     times 0x100 - ($ - elf_demo_start) db 0
 elf_demo_code:
     mov eax, 1
-    mov ebx, 0x00400010
+    mov ebx, 0x00500010
     int 0x80
 .halt:
     jmp .halt

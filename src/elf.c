@@ -5,8 +5,6 @@
 #include "string.h"
 #include "ring3.h"
 
-#define ELF_USER_STACK_TOP 0x00801000U
-
 static int elf32_range_valid(uint32_t start, uint32_t length, uint32_t limit) {
     return start <= limit && length <= limit - start;
 }
@@ -114,10 +112,15 @@ int elf_run(const void *image, uint32_t image_size) {
         return result;
     }
 
-    serial_print("[ELF] Entering Ring 3 entry=");
+    serial_print("[ELF] Scheduling Ring 3 entry=");
     serial_print_hex(loaded.entry);
     serial_print("\n");
-    ring0_to_ring3((uint32_t *)ELF_USER_STACK_TOP,
-                   (void (*)(void))loaded.entry);
+    result = ring3_schedule_foreground((void (*)(void))loaded.entry,
+                                       loaded.image_start, loaded.image_end);
+    if (result != 0) {
+        elf32_release_pages(loaded.image_start, loaded.image_end);
+        serial_print("[ELF] Unable to schedule loaded image\n");
+        return -8;
+    }
     return 0;
 }

@@ -20,9 +20,9 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `src/kernel.c`: ordered platform initialization, diagnostics, demos, and shell startup.
 - `src/gdt.c`, `src/idt.c`, `src/tss.c`, `src/trap.c`, `src/isr_handlers.c`: descriptor tables, TSS stacks, exception handlers, and page faults.
 - `src/pic.c`, `src/pit.c`, `src/keyboard.c`, `src/io.c`: interrupt controller, timer, PS/2 input, and port I/O.
-- `src/ring3.c`, `src/syscall.c`: Ring 3 process slots, IRQ0 software switching, process controls, and system-call dispatch.
+- `src/ring3.c`, `src/syscall.c`: Ring 3 process slots, IRQ0 software switching, process controls, ELF image mapping ownership, and system-call dispatch.
 - `src/pmm.c`, `src/paging.c`, `src/heap.c`: physical frames, virtual mappings/TLB, and kernel allocation.
-- `src/elf.c`: ELF32 validation, user segment mapping, load, and launch.
+- `src/elf.c`: ELF32 validation, user segment mapping, load, and scheduling through the Ring 3 process manager.
 - `src/vga.c`, `src/vbe.c`, `src/ascii_font.c`: VGA text fallback, GRUB framebuffer console, and glyph data.
 - `src/serial.c`, `src/stdio.c`, `src/string.c`: COM1 I/O, formatting/input helpers, and freestanding string/memory functions.
 - `src/rtc.c`, `src/acpi.c`, `src/panic.c`: clock/time conversion, ACPI power control, and panic screen/reboot.
@@ -40,6 +40,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - Keep the kernel freestanding, 32-bit x86, and compatible with the existing C/NASM toolchain.
 - IRQ0's `struct irq_frame` layout and push/pop order must match `boot/interrupt.asm`. A timer interrupt inside a Ring 3 system call is executing on a kernel frame and must not be mistaken for a user context.
 - Ring 3 processes currently share one address space; they have separate user/kernel stacks but not independent memory isolation. Do not describe them as isolated processes.
+- Keep ELF user virtual ranges separate from linker-placed `.user.text`; ELF mappings belong to their scheduled process and must be released when it is killed.
 - Update TSS `esp0` whenever switching the active user kernel stack. Avoid freeing a stack while it is still active.
 - User mappings must remain below `USER_SPACE_END`; kernel mappings must not be made user-accessible.
 - Hardware-facing changes need explicit bounds/format checks and must preserve serial diagnostics and fallback behavior.

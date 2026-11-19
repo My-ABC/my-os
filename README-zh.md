@@ -34,7 +34,7 @@
 最新标签版本包含由 GitHub Actions 自动构建、可通过 GRUB 启动的 ISO：
 
 [下载 myos.iso](https://github.com/My-ABC/my-os/releases/latest/download/myos.iso) · [查看所有 Releases](https://github.com/My-ABC/my-os/releases)
-- **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零
+- **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零；`elf` 命令将其作为前台 Ring 3 任务调度并返回 shell
 - **SVGA** — `svga_blue` 将 GRUB framebuffer 填充为蓝色
 
 ## 构建
@@ -100,6 +100,10 @@ svga_blue 将 framebuffer 填充为蓝色
 每次运行 `ring3` 只会在后台启动一个 Ring 3 测试进程。进程仍由 PIT 定时器抢占调度，
 但默认不输出；运行 `fg <pid>` 显示指定进程的输出，`bg <pid>` 再次隐藏。
 `ps` 查看进程状态，`kill <pid>` 结束指定进程。
+
+`elf` 命令会以前台任务启动内置 ELF32 程序，因此可以看到其 `Hello from ELF32`
+系统调用输出，且 shell 不会被阻塞。使用 `bg <pid>` 隐藏输出，使用 `kill <pid>`
+结束程序；结束时会释放 ELF 用户映射，因此之后可以再次运行 `elf`。
 
 ## 目录结构
 

@@ -23,7 +23,7 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **Ring 3 processes** — software context switching preempted by PIT IRQ0; run up to two user processes with separate kernel and user stacks
 - **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
 - **System calls** — Ring 3 can write output and query its process ID with `SYS_GETPID`
-- **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing
+- **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; the `elf` command schedules it as a foreground Ring 3 task and returns to the shell
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
 - **Memory paging** — implemented full memory paging.
@@ -105,6 +105,11 @@ Each `ring3` command starts one Ring 3 demo process in the background. Processes
 are preemptively scheduled by the PIT; their output is hidden until `fg <pid>`
 is used. `bg <pid>` hides it again, `ps` lists process states, and
 `kill <pid>` terminates a process.
+
+The `elf` command starts the built-in ELF32 demo in the foreground, so its
+`Hello from ELF32` system-call output is visible while the shell remains
+responsive. Use `bg <pid>` to hide the output and `kill <pid>` to stop the
+demo; killing it releases its ELF user mappings so `elf` can be run again.
 
 ## Layout
 

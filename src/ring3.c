@@ -13,6 +13,8 @@ struct ring3_process {
     uint32_t pid;
     uint32_t state;
     uint32_t user_stack_top;
+    uint32_t image_start;
+    uint32_t image_end;
     struct irq_frame *frame;
 };
 
@@ -64,6 +66,20 @@ static void release_user_stack(uint32_t stack_top) {
     }
 }
 
+static void release_process_resources(struct ring3_process *process) {
+    release_user_stack(process->user_stack_top);
+    for (uint32_t address = process->image_start;
+         address < process->image_end; address += PAGE_SIZE) {
+        uint32_t physical = paging_get_page_physical(address);
+        if (physical != 0U) {
+            paging_unmap_page(address);
+            pmm_free_page((void *)(physical & ~(PAGE_SIZE - 1U)));
+        }
+    }
+    process->image_start = 0U;
+    process->image_end = 0U;
+}
+
 static int find_runnable_process(void) {
     for (uint32_t offset = 0; offset < RING3_PROCESS_COUNT; ++offset) {
         uint32_t index = (next_process + offset) % RING3_PROCESS_COUNT;
@@ -75,9 +91,25 @@ static int find_runnable_process(void) {
     return -1;
 }
 
-int ring3_schedule(void (*func)(void)) {
+static int ring3_schedule_internal(void (*func)(void),
+                                  uint32_t image_start, uint32_t image_end,
+                                  int foreground) {
     uint32_t flags = irq_save();
     uint32_t i;
+
+    if ((image_start == 0U) != (image_end == 0U) ||
+        (image_start != 0U &&
+         (image_start >= image_end ||
+          (image_start & (PAGE_SIZE - 1U)) != 0U ||
+          (image_end & (PAGE_SIZE - 1U)) != 0U ||
+          image_end > USER_SPACE_END ||
+          (image_start < USER_STACK_TOP_0 &&
+           image_end > USER_STACK_TOP_0 - PAGE_SIZE) ||
+          (image_start < USER_STACK_TOP_1 &&
+           image_end > USER_STACK_TOP_1 - PAGE_SIZE)))) {
+        irq_restore(flags);
+        return -1;
+    }
 
     for (i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].state == RING3_PROCESS_UNUSED ||
@@ -132,11 +164,23 @@ int ring3_schedule(void (*func)(void)) {
     if (next_pid == 0U) next_pid = 1U;
     processes[i].state = RING3_PROCESS_READY;
     processes[i].user_stack_top = stack_top;
+    processes[i].image_start = image_start;
+    processes[i].image_end = image_end;
     processes[i].frame = frame;
+    if (foreground) foreground_pid = processes[i].pid;
 
     next_process = i;
     irq_restore(flags);
     return 0;
+}
+
+int ring3_schedule(void (*func)(void)) {
+    return ring3_schedule_internal(func, 0U, 0U, 0);
+}
+
+int ring3_schedule_foreground(void (*func)(void),
+                             uint32_t image_start, uint32_t image_end) {
+    return ring3_schedule_internal(func, image_start, image_end, 1);
 }
 
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
@@ -151,6 +195,8 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
         if (process->state != RING3_PROCESS_DEAD) {
             process->frame = frame;
             process->state = RING3_PROCESS_READY;
+        } else {
+            release_process_resources(process);
         }
         current_process = -1;
         tss_set_kernel_stack((uint32_t)stack_top);
@@ -231,7 +277,9 @@ int ring3_kill(uint32_t pid) {
              processes[i].state == RING3_PROCESS_RUNNING)) {
             processes[i].state = RING3_PROCESS_DEAD;
             if (foreground_pid == pid) foreground_pid = 0U;
-            release_user_stack(processes[i].user_stack_top);
+            if (current_process != (int32_t)i) {
+                release_process_resources(&processes[i]);
+            }
             irq_restore(flags);
             return 0;
         }
