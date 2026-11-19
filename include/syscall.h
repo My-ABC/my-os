@@ -12,6 +12,7 @@
 #define SYS_TIME     6   // 获取 RTC 时间
 #define SYS_MEMORY   7   // 用户内存操作
 #define SYS_POWER    8   // 电源操作
+#define SYS_GETPID   9   // 获取当前 Ring 3 进程 ID
 
 #define MEMORY_MALLOC  1
 #define MEMORY_CALLOC  2
@@ -28,4 +29,5 @@ void *sys_realloc(void *ptr, uint32_t size);
 void sys_free(void *ptr);
 void sys_shutdown(void);
 void sys_reboot(void);
+uint32_t sys_getpid(void);
 #endif

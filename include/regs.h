@@ -11,4 +11,12 @@ struct registers {
     uint32_t eip, cs, eflags;
 } __attribute__((packed));
 
+// IRQ0 software-switch frame. Privilege-changing interrupts also have useresp/ss.
+struct irq_frame {
+    uint32_t gs, fs, es, ds;
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+    uint32_t int_no, err_code;
+    uint32_t eip, cs, eflags, useresp, ss;
+} __attribute__((packed));
+
 #endif

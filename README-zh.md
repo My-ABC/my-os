@@ -79,9 +79,17 @@ help     显示帮助
 clear    清屏
 hello    打印hello消息
 ring3    测试ring3在低地址
+ps       查看 Ring 3 进程
+fg       显示指定 Ring 3 进程输出（fg <pid>）
+bg       隐藏指定 Ring 3 进程输出（bg <pid>）
+kill     按 PID 结束 Ring 3 进程（kill <pid>）
 elf      装载并运行内置 ELF32 测试程序
 svga_blue 将 framebuffer 填充为蓝色
 ```
+
+每次运行 `ring3` 只会在后台启动一个 Ring 3 测试进程。进程仍由 PIT 定时器抢占调度，
+但默认不输出；运行 `fg <pid>` 显示指定进程的输出，`bg <pid>` 再次隐藏。
+`ps` 查看进程状态，`kill <pid>` 结束指定进程。
 
 ## 目录结构
 

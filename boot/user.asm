@@ -2,43 +2,60 @@ section .user.text progbits alloc exec nowrite
 
 global user_entry
 
+%define SYS_WRITE 1
+%define SYS_TIME 6
+%define SYS_GETPID 9
+
 user_entry:
-    mov eax, 7
-    mov ebx, 1
-    mov ecx, 64
+    sub esp, 64
+.run:
+    mov eax, SYS_TIME
     int 0x80
-    mov esi, eax
+    mov ebp, eax
 
-    mov eax, 7
-    mov ebx, 3
-    mov ecx, esi
-    mov edx, 4096
+    mov eax, SYS_GETPID
     int 0x80
-    mov edi, eax
+    mov ebx, eax
 
-    mov eax, 7
-    mov ebx, 4
-    mov ecx, edi
+    mov edi, esp
+    mov esi, user_prefix
+.copy_prefix:
+    lodsb
+    test al, al
+    jz .prefix_done
+    stosb
+    jmp .copy_prefix
+
+.prefix_done:
+    mov eax, ebx
+    xor ecx, ecx
+.digits:
+    xor edx, edx
+    mov ebx, 10
+    div ebx
+    push edx
+    inc ecx
+    test eax, eax
+    jnz .digits
+.print_digits:
+    pop eax
+    add al, '0'
+    stosb
+    loop .print_digits
+    mov byte [edi], 10
+    inc edi
+    mov byte [edi], 0
+
+    mov eax, SYS_WRITE
+    mov ebx, esp
     int 0x80
 
-    mov eax, 7
-    mov ebx, 2
-    mov ecx, 4
-    mov edx, 32
+.wait_next_second:
+    mov eax, SYS_TIME
     int 0x80
-    mov edi, eax
+    cmp eax, ebp
+    je .wait_next_second
+    jmp .run
 
-    mov eax, 7
-    mov ebx, 4
-    mov ecx, edi
-    int 0x80
-
-    mov eax, 1
-    mov ebx, user_message
-    int 0x80
-
-.halt:
-    jmp .halt
-
-user_message:
-    db "Hello from Ring 3 via int 0x80", 10, 0
+user_prefix:
+    db "RING3 is RUN, procss_id: ", 0

@@ -29,7 +29,11 @@ static cmd_t cmd_table[] = {
     {"help",     cmd_help,     "Show this help"},
     {"clear",    cmd_clear,    "Clear screen"},
     {"hello",    cmd_hello,    "Print hello message"},
-    {"ring3",    cmd_ring3,    "Enter Ring 3 user mode"},
+    {"ring3",    cmd_ring3,    "Start one Ring 3 process in background"},
+    {"ps",       cmd_ps,       "List Ring 3 processes"},
+    {"fg",       cmd_fg,       "Show a Ring 3 process in foreground"},
+    {"bg",       cmd_bg,       "Hide a Ring 3 process output"},
+    {"kill",     cmd_kill,     "Terminate a process by PID"},
     {"elf",      cmd_elf,      "Load the built-in ELF32 program"},
     {NULL, NULL, NULL}
 };
@@ -171,13 +175,117 @@ int cmd_hello(int argc, char *argv[]) {
 }
 
 int cmd_ring3(int argc, char *argv[]) {
-    // 将低地址用户代码页映射为 Ring 3 可执行页，用户栈由页错误按需建立。
+    (void)argc;
+    (void)argv;
     paging_map_page((uint32_t)user_entry, (uint32_t)user_entry,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    serial_print("[RING3] Entering user function at ");
+                    PAGE_PRESENT | PAGE_USER);
+    if (paging_get_page_physical((uint32_t)user_entry) == 0U) {
+        printf("Unable to map Ring 3 code\n");
+        return -1;
+    }
+    serial_print("[RING3] Scheduling user function at ");
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
-    ring0_to_ring3((uint32_t *)0x00801000, user_entry);
+    if (ring3_schedule(user_entry) != 0) {
+        printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
+        return -1;
+    }
+    printf("Started a Ring 3 process in background; use ps then fg <pid>\n");
+    serial_print("[RING3] Started one background process\n");
+    return 0;
+}
+
+int cmd_ps(int argc, char *argv[]) {
+    uint32_t pids[RING3_PROCESS_COUNT];
+    uint32_t states[RING3_PROCESS_COUNT];
+    (void)argc;
+    (void)argv;
+    ring3_process_list(pids, states, RING3_PROCESS_COUNT);
+    printf("PID  STATE\n");
+    serial_print("[PS] PID STATE\n");
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        if (pids[i] == 0U) continue;
+        const char *state = "UNUSED";
+        if (states[i] == RING3_PROCESS_READY) state = "READY";
+        else if (states[i] == RING3_PROCESS_RUNNING) state = "RUNNING";
+        else if (states[i] == RING3_PROCESS_DEAD) state = "DEAD";
+        printf("%d    %s%s\n", pids[i], state,
+               ring3_foreground_pid() == pids[i] ? " (FOREGROUND)" : "");
+        serial_print("[PS] ");
+        serial_print_dec(pids[i]);
+        serial_putchar(' ');
+        serial_print(state);
+        if (ring3_foreground_pid() == pids[i]) {
+            serial_print(" (FOREGROUND)");
+        }
+        serial_putchar('\n');
+    }
+    return 0;
+}
+
+int cmd_fg(int argc, char *argv[]) {
+    uint32_t pid = 0U;
+    if (argc != 2 || argv[1][0] == '\0') {
+        printf("Usage: fg <pid>\n");
+        return -1;
+    }
+    for (const char *p = argv[1]; *p; ++p) {
+        if (*p < '0' || *p > '9' || pid > (0xFFFFFFFFU - (*p - '0')) / 10U) {
+            printf("Invalid PID\n");
+            return -1;
+        }
+        pid = pid * 10U + (*p - '0');
+    }
+    if (ring3_set_foreground(pid) != 0) {
+        printf("No running process with PID %d\n", pid);
+        return -1;
+    }
+    printf("Process %d output is now visible\n", pid);
+    return 0;
+}
+
+int cmd_bg(int argc, char *argv[]) {
+    uint32_t pid = 0U;
+    if (argc != 2 || argv[1][0] == '\0') {
+        printf("Usage: bg <pid>\n");
+        return -1;
+    }
+    for (const char *p = argv[1]; *p; ++p) {
+        if (*p < '0' || *p > '9' || pid > (0xFFFFFFFFU - (*p - '0')) / 10U) {
+            printf("Invalid PID\n");
+            return -1;
+        }
+        pid = pid * 10U + (*p - '0');
+    }
+    if (ring3_set_background(pid) != 0) {
+        printf("No running process with PID %d\n", pid);
+        return -1;
+    }
+    printf("Process %d output is hidden\n", pid);
+    return 0;
+}
+
+int cmd_kill(int argc, char *argv[]) {
+    uint32_t pid = 0U;
+    if (argc != 2 || argv[1][0] == '\0') {
+        printf("Usage: kill <pid>\n");
+        return -1;
+    }
+    for (const char *p = argv[1]; *p; ++p) {
+        if (*p < '0' || *p > '9' || pid > (0xFFFFFFFFU - (*p - '0')) / 10U) {
+            printf("Invalid PID\n");
+            return -1;
+        }
+        pid = pid * 10U + (*p - '0');
+    }
+    if (ring3_kill(pid) != 0) {
+        printf("No running process with PID %d\n", pid);
+        return -1;
+    }
+    printf("Killed process %d\n", pid);
+    serial_print("[RING3] Killed PID ");
+    serial_print_dec(pid);
+    serial_print("\n");
     return 0;
 }
 

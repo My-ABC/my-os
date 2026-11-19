@@ -79,9 +79,18 @@ help     show help
 clear    clear screen
 hello    print hello message
 ring3    test ring3 on Low Address
+ps       list Ring 3 processes
+fg       show a Ring 3 process's output (fg <pid>)
+bg       hide a Ring 3 process's output (bg <pid>)
+kill     terminate a Ring 3 process by PID (kill <pid>)
 elf      load and run the built-in ELF32 test program
 svga_blue fill the framebuffer with blue
 ```
+
+Each `ring3` command starts one Ring 3 demo process in the background. Processes
+are preemptively scheduled by the PIT; their output is hidden until `fg <pid>`
+is used. `bg <pid>` hides it again, `ps` lists process states, and
+`kill <pid>` terminates a process.
 
 ## Layout
 

@@ -5,12 +5,21 @@
 
 #define VBE_FRAMEBUFFER_ADDRESS 0xE0000000U
 
+typedef uint16_t vbe_unaligned_u16_t __attribute__((aligned(1)));
+typedef uint32_t vbe_unaligned_u32_t __attribute__((aligned(1)));
+
 struct vbe_state {
     uint32_t framebuffer;
     uint32_t pitch;
     uint32_t width;
     uint32_t height;
     uint8_t bpp;
+    uint8_t red_position;
+    uint8_t red_mask_size;
+    uint8_t green_position;
+    uint8_t green_mask_size;
+    uint8_t blue_position;
+    uint8_t blue_mask_size;
     uint8_t valid;
 };
 
@@ -32,24 +41,48 @@ static uint32_t vbe_palette_color(uint8_t color) {
     return palette[color & 0x0FU];
 }
 
+static uint32_t vbe_encode_component(uint8_t component, uint8_t position,
+                                     uint8_t mask_size) {
+    uint32_t maximum = (1U << mask_size) - 1U;
+    uint32_t value = ((uint32_t)component * maximum + 127U) / 255U;
+    return value << position;
+}
+
+static uint32_t vbe_encode_color(uint32_t color) {
+    return vbe_encode_component((uint8_t)(color >> 16),
+                                vbe_state.red_position,
+                                vbe_state.red_mask_size) |
+           vbe_encode_component((uint8_t)(color >> 8),
+                                vbe_state.green_position,
+                                vbe_state.green_mask_size) |
+           vbe_encode_component((uint8_t)color,
+                                vbe_state.blue_position,
+                                vbe_state.blue_mask_size);
+}
+
+static void vbe_store_pixel(volatile uint8_t *pixel, uint32_t color) {
+    uint32_t encoded = vbe_encode_color(color);
+
+    if (vbe_state.bpp == 8) {
+        pixel[0] = (uint8_t)encoded;
+    } else if (vbe_state.bpp == 15 || vbe_state.bpp == 16) {
+        *(volatile vbe_unaligned_u16_t *)pixel = (uint16_t)encoded;
+    } else if (vbe_state.bpp == 24) {
+        pixel[0] = (uint8_t)encoded;
+        pixel[1] = (uint8_t)(encoded >> 8);
+        pixel[2] = (uint8_t)(encoded >> 16);
+    } else if (vbe_state.bpp == 32) {
+        *(volatile vbe_unaligned_u32_t *)pixel = encoded;
+    }
+}
+
 static void vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     volatile uint8_t *pixel;
     uint32_t bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
 
     pixel = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
             y * vbe_state.pitch + x * bytes_per_pixel;
-    if (vbe_state.bpp == 8) {
-        pixel[0] = (uint8_t)color;
-    } else if (vbe_state.bpp == 15 || vbe_state.bpp == 16) {
-        pixel[0] = (uint8_t)(((color >> 19) & 0x1FU) | ((color >> 5) & 0xE0U));
-        pixel[1] = (uint8_t)((color >> 3) & 0xFFU);
-    } else if (vbe_state.bpp == 24) {
-        pixel[0] = (uint8_t)color;
-        pixel[1] = (uint8_t)(color >> 8);
-        pixel[2] = (uint8_t)(color >> 16);
-    } else if (vbe_state.bpp == 32) {
-        *(volatile uint32_t *)pixel = color;
-    }
+    vbe_store_pixel(pixel, color);
 }
 
 static void vbe_map_framebuffer(const struct vbe_state *state) {
@@ -69,19 +102,8 @@ static void vbe_fill_blue(const struct vbe_state *state) {
     for (uint32_t row = 0; row < state->height; row++) {
         volatile uint8_t *line = framebuffer + (uint32_t)row * state->pitch;
         for (uint32_t column = 0; column < state->width; column++) {
-            volatile uint8_t *pixel = line + (uint32_t)column * bytes_per_pixel;
-            if (state->bpp == 8) {
-                pixel[0] = 1;
-            } else if (state->bpp == 15 || state->bpp == 16) {
-                pixel[0] = 0x1F;
-                pixel[1] = 0x00;
-            } else if (state->bpp == 24) {
-                pixel[0] = 0xFF;
-                pixel[1] = 0x00;
-                pixel[2] = 0x00;
-            } else if (state->bpp == 32) {
-                *(volatile uint32_t *)pixel = 0x000000FFU;
-            }
+            vbe_store_pixel(line + (uint32_t)column * bytes_per_pixel,
+                            vbe_palette_color(1U));
         }
     }
 }
@@ -144,8 +166,8 @@ static void vbe_scroll_up(void) {
                     volatile uint8_t *dst = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
                         (dst_y + glyph_y) * vbe_state.pitch + src_x * ((vbe_state.bpp + 7U) / 8U);
                     if (vbe_state.bpp == 32) {
-                        src_color = *(volatile uint32_t *)src;
-                        *(volatile uint32_t *)dst = src_color;
+                        src_color = *(volatile vbe_unaligned_u32_t *)src;
+                        *(volatile vbe_unaligned_u32_t *)dst = src_color;
                     } else {
                         uint32_t bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
                         for (uint32_t b = 0; b < bytes_per_pixel; b++) {
@@ -198,12 +220,47 @@ void vbe_set_color(uint8_t foreground, uint8_t background) {
 }
 
 void vbe_clear(void) {
+    uint32_t encoded_color;
+    volatile uint8_t *framebuffer;
+
     if (!vbe_available()) {
         return;
     }
-    for (uint32_t y = 0; y < vbe_state.height; y++) {
-        for (uint32_t x = 0; x < vbe_state.width; x++) {
-            vbe_put_pixel(x, y, vbe_background);
+
+    encoded_color = vbe_encode_color(vbe_background);
+    framebuffer = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS;
+    if (vbe_state.bpp == 32) {
+        for (uint32_t y = 0; y < vbe_state.height; y++) {
+            volatile vbe_unaligned_u32_t *row =
+                (volatile vbe_unaligned_u32_t *)(framebuffer + y * vbe_state.pitch);
+            for (uint32_t x = 0; x < vbe_state.width; x++) {
+                row[x] = encoded_color;
+            }
+        }
+    } else if (vbe_state.bpp == 15 || vbe_state.bpp == 16) {
+        for (uint32_t y = 0; y < vbe_state.height; y++) {
+            volatile vbe_unaligned_u16_t *row =
+                (volatile vbe_unaligned_u16_t *)(framebuffer + y * vbe_state.pitch);
+            for (uint32_t x = 0; x < vbe_state.width; x++) {
+                row[x] = (uint16_t)encoded_color;
+            }
+        }
+    } else if (vbe_state.bpp == 8) {
+        for (uint32_t y = 0; y < vbe_state.height; y++) {
+            volatile uint8_t *row = framebuffer + y * vbe_state.pitch;
+            for (uint32_t x = 0; x < vbe_state.width; x++) {
+                row[x] = (uint8_t)encoded_color;
+            }
+        }
+    } else if (vbe_state.bpp == 24) {
+        for (uint32_t y = 0; y < vbe_state.height; y++) {
+            volatile uint8_t *pixel = framebuffer + y * vbe_state.pitch;
+            for (uint32_t x = 0; x < vbe_state.width; x++) {
+                pixel[0] = (uint8_t)encoded_color;
+                pixel[1] = (uint8_t)(encoded_color >> 8);
+                pixel[2] = (uint8_t)(encoded_color >> 16);
+                pixel += 3U;
+            }
         }
     }
     vbe_cursor_x = 0;
@@ -257,8 +314,11 @@ void vbe_putchar(char c) {
 
 int vbe_initialize(uint32_t multiboot_info_addr) {
     uint32_t *mb_info = (uint32_t *)multiboot_info_addr;
+    uint8_t *mb_info_bytes = (uint8_t *)multiboot_info_addr;
     uint32_t flags;
     uint32_t framebuffer_high;
+    uint8_t framebuffer_type;
+    uint32_t bytes_per_pixel;
 
     vbe_state.valid = 0;
     if (multiboot_info_addr == 0U) {
@@ -278,12 +338,76 @@ int vbe_initialize(uint32_t multiboot_info_addr) {
     vbe_state.width = mb_info[25];
     vbe_state.height = mb_info[26];
     vbe_state.bpp = (uint8_t)mb_info[27];
+    framebuffer_type = mb_info_bytes[109];
+    if (framebuffer_type == 1U) {
+        /* GRUB aligns the color-info union to a 4-byte boundary. */
+        vbe_state.red_position = mb_info_bytes[112];
+        vbe_state.red_mask_size = mb_info_bytes[113];
+        vbe_state.green_position = mb_info_bytes[114];
+        vbe_state.green_mask_size = mb_info_bytes[115];
+        vbe_state.blue_position = mb_info_bytes[116];
+        vbe_state.blue_mask_size = mb_info_bytes[117];
+    }
+
+    if (vbe_state.bpp != 8U && vbe_state.bpp != 15U &&
+        vbe_state.bpp != 16U && vbe_state.bpp != 24U &&
+        vbe_state.bpp != 32U) {
+        serial_print("[VBE] Unsupported framebuffer depth\n");
+        return -1;
+    }
+
+    bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
 
     if (framebuffer_high != 0U || vbe_state.framebuffer == 0U ||
         vbe_state.width == 0U || vbe_state.height == 0U ||
-        vbe_state.pitch == 0U || vbe_state.bpp == 0U) {
+        vbe_state.pitch == 0U ||
+        framebuffer_type != 1U ||
+        vbe_state.width > vbe_state.pitch / bytes_per_pixel ||
+        vbe_state.red_mask_size == 0U || vbe_state.red_mask_size > 8U ||
+        vbe_state.green_mask_size == 0U || vbe_state.green_mask_size > 8U ||
+        vbe_state.blue_mask_size == 0U || vbe_state.blue_mask_size > 8U ||
+        vbe_state.red_position + vbe_state.red_mask_size > vbe_state.bpp ||
+        vbe_state.green_position + vbe_state.green_mask_size > vbe_state.bpp ||
+        vbe_state.blue_position + vbe_state.blue_mask_size > vbe_state.bpp) {
         serial_print("[VBE] Invalid GRUB framebuffer information\n");
+        serial_print("[VBE] bpp/type=");
+        serial_print_dec(vbe_state.bpp);
+        serial_print("/");
+        serial_print_dec(framebuffer_type);
+        serial_print(" pitch/width/height=");
+        serial_print_dec(vbe_state.pitch);
+        serial_print("/");
+        serial_print_dec(vbe_state.width);
+        serial_print("/");
+        serial_print_dec(vbe_state.height);
+        serial_print(" RGB=");
+        serial_print_dec(vbe_state.red_position);
+        serial_print(":");
+        serial_print_dec(vbe_state.red_mask_size);
+        serial_print("/");
+        serial_print_dec(vbe_state.green_position);
+        serial_print(":");
+        serial_print_dec(vbe_state.green_mask_size);
+        serial_print("/");
+        serial_print_dec(vbe_state.blue_position);
+        serial_print(":");
+        serial_print_dec(vbe_state.blue_mask_size);
+        serial_print("\n");
         return -1;
+    }
+
+    {
+        uint32_t red_mask =
+            ((1U << vbe_state.red_mask_size) - 1U) << vbe_state.red_position;
+        uint32_t green_mask =
+            ((1U << vbe_state.green_mask_size) - 1U) << vbe_state.green_position;
+        uint32_t blue_mask =
+            ((1U << vbe_state.blue_mask_size) - 1U) << vbe_state.blue_position;
+        if ((red_mask & green_mask) != 0U || (red_mask & blue_mask) != 0U ||
+            (green_mask & blue_mask) != 0U) {
+            serial_print("[VBE] Overlapping framebuffer color fields\n");
+            return -1;
+        }
     }
 
     vbe_state.valid = 1;
@@ -291,6 +415,19 @@ int vbe_initialize(uint32_t multiboot_info_addr) {
 
     serial_print("[VBE] GRUB framebuffer=0x");
     serial_print_hex(vbe_state.framebuffer);
+    serial_print("\n");
+    serial_print("[VBE] RGB fields R=");
+    serial_print_dec(vbe_state.red_position);
+    serial_print(":");
+    serial_print_dec(vbe_state.red_mask_size);
+    serial_print(" G=");
+    serial_print_dec(vbe_state.green_position);
+    serial_print(":");
+    serial_print_dec(vbe_state.green_mask_size);
+    serial_print(" B=");
+    serial_print_dec(vbe_state.blue_position);
+    serial_print(":");
+    serial_print_dec(vbe_state.blue_mask_size);
     serial_print("\n");
     return 0;
 }

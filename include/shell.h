@@ -41,6 +41,10 @@ int cmd_mkdir(int argc, char *argv[]);
 int cmd_rmdir(int argc, char *argv[]);
 int cmd_shutdown(int argc, char *argv[]);
 int cmd_ring3(int argc, char *argv[]);
+int cmd_ps(int argc, char *argv[]);
+int cmd_fg(int argc, char *argv[]);
+int cmd_bg(int argc, char *argv[]);
+int cmd_kill(int argc, char *argv[]);
 
 void start_shell(void);
 

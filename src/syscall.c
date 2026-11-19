@@ -7,6 +7,7 @@
 #include "paging.h"
 #include "pmm.h"
 #include "string.h"
+#include "ring3.h"
 
 #define USER_HEAP_START 0x01000000U
 #define USER_HEAP_END   0x40000000U
@@ -190,8 +191,11 @@ uint32_t syscall_handler() {
 
     switch (eax) {
         case SYS_WRITE: { // 参数: ebx: const char *str
-            serial_print("[SYSCALL] SYS_WRITE from Ring 3\n");
-            vga_print((const char*)ebx);
+            uint32_t pid = ring3_current_pid();
+            if (pid != 0U && pid == ring3_foreground_pid()) {
+                vga_print((const char *)ebx);
+                serial_print((const char *)ebx);
+            }
             return 0;
         }
         case SYS_READ: { // 参数: ebx: char *str, ecx: size_t size
@@ -245,6 +249,8 @@ uint32_t syscall_handler() {
                 acpi_reboot();
             }
             return 0;
+        case SYS_GETPID:
+            return ring3_current_pid();
 
         default:
             return -1;
@@ -286,4 +292,8 @@ void sys_shutdown(void) {
 
 void sys_reboot(void) {
     sys_call(SYS_POWER, POWER_REBOOT, 0, 0);
+}
+
+uint32_t sys_getpid(void) {
+    return sys_call(SYS_GETPID, 0, 0, 0);
 }
