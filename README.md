@@ -53,11 +53,16 @@ make iso            # gen iso file
 make test           # run host-side tests for kernel routines
 ```
 
-`make test` uses Python `unittest` to run each shell test script in `test/`. The C
-test suites use the host `cc` (independent of the kernel's `CC` cross-compiler)
-to exercise string routines, RTC date/time calculations, and ELF32 input
-validation. Each check prints its name and PASS/FAIL status. Tests do not boot
-QEMU or exercise privileged hardware paths.
+`make test` uses Python `unittest` to discover the Python cases and every shell
+suite in `test/`. C test suites compile with the host `cc` directly, independent
+of the kernel's `CC` cross-compiler. Host-executed checks cover string routines,
+RTC date/time calculations, ELF32 input validation, GDT/IDT descriptor
+encoding, and stubbed keyboard, PIC, PIT, and serial behavior. Static source and
+layout checks cover ACPI, heap, I/O, paging, panic, PMM, shell, syscall, traps,
+TSS, VBE, VGA, and the IRQ0 frame contract. These checks do not execute
+privileged instructions, access physical addresses, or boot QEMU; hardware
+behavior still requires emulator or device validation. C checks and named
+Python cases print clear case names and PASS/FAIL results.
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
 

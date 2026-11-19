@@ -39,7 +39,7 @@
 
 ## 构建
 
-依赖：`nasm`、i686 工具链、`qemu-system-x86`（运行与测试用）、`grub-pc-bin`、`xorriso`、`grub-common`。
+依赖：`nasm`、i686 工具链、Python 3 和宿主机 `cc`（测试用）、`qemu-system-x86`（运行用）、`grub-pc-bin`、`xorriso`、`grub-common`。
 
 ```bash
 make build          # -> myos.bin
@@ -53,7 +53,7 @@ make iso            # 生成iso文件
 make test           # 运行内核例程的宿主机测试
 ```
 
-`make test` 使用 Python `unittest` 逐个运行 `test/` 中的 shell 测试脚本。各 C 测试套件固定使用宿主机 `cc`，不会使用内核构建的交叉编译器；覆盖字符串函数、RTC 日期/时区计算和 ELF32 输入校验，并逐项打印测试名及 PASS/FAIL。测试不会启动 QEMU，也不覆盖特权硬件路径。
+`make test` 使用 Python `unittest` 自动发现 Python 用例，并运行 `test/` 中的每个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。可执行的宿主测试覆盖字符串函数、RTC 日期/时区计算、ELF32 输入校验、GDT/IDT 描述符编码，以及带硬件 I/O stub 的键盘、PIC、PIT 和串口行为。静态源码和布局检查覆盖 ACPI、heap、I/O、paging、panic、PMM、shell、syscall、trap、TSS、VBE、VGA 和 IRQ0 栈帧约定。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：
 
