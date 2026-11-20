@@ -1,3 +1,5 @@
+bits 32
+
 section .elf.demo progbits alloc nowrite
 
 global elf_demo_start

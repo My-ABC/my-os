@@ -8,6 +8,7 @@ size_t strlen(const char *s1);
 char *strchr(const char *s, int c);
 
 char *strcpy(char *dest, const char *scr);
+char *strncpy(char *dest, const char *src, size_t n);
 char *strcat(char *dest, const char *scr);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);

@@ -30,6 +30,8 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **PMM** — impl PMM
 - **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
 - **heap allocator(user)** — impl heap allocator in the syscall
+- **ATA PIO** — primary-master LBA28 sector read/write support
+- **FAT32** — file read/write/delete and directory create/remove support
 
 ## Download
 
@@ -55,15 +57,24 @@ make run-iso        # boot the ISO with q35 and a graphical window
 make iso            # gen iso file
 make test           # run host-side tests for kernel routines
 make test-qemu      # build and run the bounded headless QEMU integration suite
+make disk           # create disk.img as a 64 MB FAT32 image
+make run            # attach disk.img when it exists; otherwise boot without a disk
+make run-disk       # create disk.img if needed and boot -kernel with it attached
 ```
 
-`make test` uses Python `unittest` to discover the Python cases and every shell
-suite in `test/`. C test suites compile with the host `cc` directly, independent
-of the kernel's `CC` cross-compiler. Host-executed checks cover string routines,
-RTC date/time calculations, ELF32 input validation, GDT/IDT descriptor
-encoding, and stubbed keyboard, PIC, PIT, and serial behavior. Static source and
-layout checks cover ACPI, heap, I/O, paging, panic, PMM, shell, syscall, traps,
-TSS, VBE, VGA, and the IRQ0 frame contract. These checks do not execute
+At startup the kernel probes the primary-master ATA device. If a disk is
+present, it automatically runs the Shell disk initialization, which mounts a
+supported FAT32 volume. `make run` does not create a disk image; use `make disk`
+first if you want one.
+
+Tests are grouped by purpose under `test/`: `python/` contains the host Python
+tests and small source-contract suites, `c/` contains host C test programs,
+`shell/` contains the separate shell launchers for those C suites, and
+`support/` contains their shared compile helper and assertions. QEMU-only
+checks live under `integration/`; the runner, QEMU session, FAT32 test image,
+and behavior scenarios are separate modules. `make test` discovers Python
+tests, which in turn run each shell suite. C suites use host `cc` directly,
+independent of the kernel's `CC` cross-compiler. These checks do not execute
 privileged instructions, access physical addresses, or boot QEMU; hardware
 behavior still requires emulator or device validation. C checks and named
 Python cases print clear case names and PASS/FAIL results.
@@ -71,10 +82,12 @@ Python cases print clear case names and PASS/FAIL results.
 `make test` intentionally remains host-only, so it works without QEMU or the
 kernel cross-toolchain (it needs Python 3 and host `cc`). `make test-qemu`
 requires the kernel build tools (`nasm` and an i686 compiler/linker), Python 3,
-and `qemu-system-i386`; it builds `myos.bin`, starts
+`mkfs.fat`, and `qemu-system-i386`; it builds `myos.bin`, starts
 `qemu-system-i386` in headless TCG mode, and drives the PS/2 keyboard through
-QEMU's monitor while checking COM1 output. It exercises startup, shell input,
-Ring 3 scheduling/listing/foreground/background/termination, and ELF32 loading,
+QEMU's monitor while checking COM1 output. It attaches a generated FAT32 IDE disk
+and exercises startup, shell input, ATA/FAT32 write/read commands, and runs an ELF demo assembled from
+`boot/elf_demo.asm` after placing it in the test disk image. It also covers Ring 3
+scheduling/listing/foreground/background/termination and ELF32 loading,
 execution, cleanup, and reload. The harness has an overall timeout, bounded
 startup/serial/monitor waits, reports each named PASS/FAIL check, and terminates
 QEMU on completion or failure. QEMU is a separate required prerequisite for
@@ -124,7 +137,20 @@ bg       hide a Ring 3 process's output (bg <pid>)
 kill     terminate a Ring 3 process by PID (kill <pid>)
 elf      load and run the built-in ELF32 test program
 svga_blue fill the framebuffer with blue
+disk     initialize ATA and detect FAT32
+ls       list the current FAT32 directory, or `ls <path>` for another directory
+cat      print a FAT32 file
+write    write text to a FAT32 file
+rm       delete a FAT32 file
+cd       change the FAT32 directory
+mkdir    create a FAT32 directory
+rmdir    remove an empty FAT32 directory; `rmdir -f <dir>` removes recursively
+run      load and run a disk ELF32 file
 ```
+
+When a FAT32 disk is mounted, the shell prompt shows its current path (for
+example, `myos / >` or `myos /folder >`). Use `cd ..` to move to the parent
+directory. Without a mounted FAT32 disk, the prompt remains `myos >`.
 
 Each `ring3` command starts one Ring 3 demo process in the background. Processes
 are preemptively scheduled by the PIT; their output is hidden until `fg <pid>`
@@ -139,11 +165,17 @@ demo; killing it releases its ELF user mappings so `elf` can be run again.
 ## Layout
 
 ```
-boot/     Multiboot header, kernel entry, interrupt stubs (NASM)
-src/      kernel, VGA, serial, IDT, PIC, PIT, keyboard, RTC, panic, ACPI, shell
-include/  hardware headers and freestanding type definitions
-scripts/  CI/CD files
-linker.ld 1 MB load address and section layout
+boot/             Multiboot header, startup, and interrupt stubs (NASM)
+src/kernel.c      kernel initialization and top-level startup
+src/arch/x86/     x86 descriptors, interrupts, and port I/O
+src/mm/           physical/virtual memory and heap
+src/os/           shell, ELF loading, Ring 3, and system calls
+src/drivers/      ATA, console, keyboard, timer, RTC, and display drivers
+src/fs/           FAT32 filesystem
+src/lib/          freestanding C library routines
+include/          headers grouped to mirror src/ subsystems
+scripts/          CI/CD files
+linker.ld         1 MB load address and section layout
 ```
 
 ## Notes

@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def asm_hex_values(source, instruction):
@@ -30,8 +30,8 @@ class ElfRing3RegressionTests(unittest.TestCase):
         self.assertRegex(elf_demo, r"mov ebx,\s*0x00500010")
 
     def test_elf_run_uses_foreground_scheduler_and_tracks_image_for_cleanup(self):
-        elf_source = (ROOT / "src" / "elf.c").read_text()
-        ring3_source = (ROOT / "src" / "ring3.c").read_text()
+        elf_source = (ROOT / "src" / "os" / "elf.c").read_text()
+        ring3_source = (ROOT / "src" / "os" / "ring3.c").read_text()
 
         self.assertIn("ring3_schedule_foreground", elf_source)
         self.assertNotIn("ring0_to_ring3", elf_source)

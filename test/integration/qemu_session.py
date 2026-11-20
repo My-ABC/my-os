@@ -1,30 +1,19 @@
-#!/usr/bin/env python3
-"""Bounded headless QEMU smoke/integration test for MyOS."""
-
-import argparse
-import os
 import re
 import shutil
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_TIMEOUT = 75.0
+from common import IntegrationFailure, ROOT
 
 
-class IntegrationFailure(RuntimeError):
-    pass
-
-
-class QemuIntegration:
-    def __init__(self, qemu, kernel, timeout):
+class QemuSession:
+    def __init__(self, qemu, kernel, disk, timeout):
         self.qemu = qemu
         self.kernel = kernel
+        self.disk = disk
         self.timeout = timeout
         self.deadline = time.monotonic() + timeout
         self.serial_data = bytearray()
@@ -46,21 +35,25 @@ class QemuIntegration:
         if self.remaining() <= 0:
             raise IntegrationFailure(f"overall timeout ({self.timeout:g}s) expired")
 
-    def connect_unix(self, path):
+    def connect_monitor(self):
         end = min(self.deadline, time.monotonic() + 10)
         while time.monotonic() < end:
             self.check_running()
             client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             try:
-                client.connect(path)
+                client.connect(self.monitor_path)
                 client.setblocking(False)
                 return client
             except (FileNotFoundError, ConnectionRefusedError):
                 client.close()
                 time.sleep(0.05)
-        raise IntegrationFailure(f"timed out connecting to QEMU monitor: {path}")
+        raise IntegrationFailure(
+            f"timed out connecting to QEMU monitor: {self.monitor_path}"
+        )
 
     def start(self):
+        if self.remaining() <= 0:
+            raise IntegrationFailure(f"overall timeout ({self.timeout:g}s) expired")
         if not Path(self.kernel).is_file():
             raise IntegrationFailure(f"kernel image does not exist: {self.kernel}")
         qemu_path = shutil.which(self.qemu)
@@ -84,23 +77,26 @@ class QemuIntegration:
             "-display", "none",
             "-no-reboot",
             "-no-shutdown",
+            "-drive", f"file={self.disk},format=raw,if=ide",
             "-serial", f"tcp:127.0.0.1:{serial_port},server=off,nodelay=on",
             "-monitor", f"unix:{self.monitor_path},server=on,wait=off",
         ]
-        self.process = subprocess.Popen(
-            command, cwd=ROOT, stdin=subprocess.DEVNULL,
-            stdout=self.qemu_log, stderr=subprocess.STDOUT,
-        )
         try:
+            self.process = subprocess.Popen(
+                command, cwd=ROOT,
+                stdin=subprocess.DEVNULL, stdout=self.qemu_log,
+                stderr=subprocess.STDOUT,
+            )
             self.serial_client, _ = serial_listener.accept()
         except socket.timeout as error:
-            serial_listener.close()
-            raise IntegrationFailure("timed out waiting for QEMU serial connection") from error
+            raise IntegrationFailure(
+                "timed out waiting for QEMU serial connection"
+            ) from error
         finally:
             serial_listener.close()
         self.serial_client.setblocking(False)
 
-        self.monitor = self.connect_unix(self.monitor_path)
+        self.monitor = self.connect_monitor()
         self.monitor_read_until(b"(qemu)", 5)
         self.pass_check("QEMU started; headless serial and monitor connected")
 
@@ -129,11 +125,15 @@ class QemuIntegration:
     def send_line(self, line):
         key_names = {
             " ": "spc",
+            ".": "dot",
+            "-": "minus",
+            "/": "slash",
             "\n": "ret",
         }
         for char in line + "\n":
             key = key_names.get(char, char)
-            if not (key in ("spc", "ret") or re.fullmatch(r"[a-z0-9]", key)):
+            if not (key in ("spc", "dot", "minus", "slash", "ret") or
+                    re.fullmatch(r"[a-z0-9]", key)):
                 raise IntegrationFailure(f"unsupported test key: {char!r}")
             self.send_key(key)
             time.sleep(0.015)
@@ -188,58 +188,9 @@ class QemuIntegration:
     def serial_text(self):
         return self.serial_data.decode("ascii", errors="replace")
 
-    def pass_check(self, name):
+    @staticmethod
+    def pass_check(name):
         print(f"PASS: {name}", flush=True)
-
-    def run_checks(self):
-        self.wait_for("MyOS v0.0.1", timeout=15)
-        self.wait_for("[HEAP] calloc/realloc succeeded", timeout=5)
-        self.wait_for("Beijing time (UTC+8)", timeout=5)
-        self.pass_check("kernel startup, memory setup, and timer/RTC path reached")
-        # start_shell prints only on VGA; COM1 is used to prove command execution.
-        self.read_serial(0.3)
-
-        self.send_line("secho qemushellcommandok")
-        self.wait_for("qemushellcommandok")
-        self.pass_check("keyboard-driven shell command executes")
-
-        self.send_line("ring3")
-        self.wait_for("[RING3] Started one background process")
-        self.send_line("ps")
-        self.wait_for_regex(rb"\[PS\] 1 (?:READY|RUNNING)")
-        self.pass_check("Ring 3 scheduling and process listing")
-
-        self.send_line("fg 1")
-        self.wait_for("RING3 is RUN, procss_id: 1", timeout=5)
-        self.pass_check("foreground Ring 3 system-call output")
-        self.send_line("bg 1")
-        before = len(self.serial_data)
-        self.read_serial(1.3)
-        if b"RING3 is RUN, procss_id: 1" in self.serial_data[before:]:
-            raise IntegrationFailure("Ring 3 output continued after bg 1")
-        self.pass_check("background command suppresses Ring 3 output")
-        self.send_line("kill 1")
-        self.wait_for("[RING3] Killed PID 1")
-        ps_start = len(self.serial_data)
-        self.send_line("ps")
-        self.wait_for_regex(rb"\[PS\] 1 DEAD", start=ps_start)
-        if re.search(rb"\[PS\] 1 (?:READY|RUNNING)", self.serial_data[ps_start:]):
-            raise IntegrationFailure("killed Ring 3 process remains runnable")
-        self.pass_check("kill reclaims a Ring 3 process")
-
-        self.send_line("elf")
-        self.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
-        self.wait_for("Hello from ELF32", timeout=5)
-        self.pass_check("ELF32 load, Ring 3 execution, and SYS_WRITE")
-        self.send_line("kill 2")
-        self.wait_for("[RING3] Killed PID 2")
-        self.send_line("elf")
-        self.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
-        self.wait_for("Hello from ELF32", timeout=5)
-        self.pass_check("ELF image mappings can be released and loaded again")
-        self.send_line("kill 3")
-        self.wait_for("[RING3] Killed PID 3")
-        self.pass_check("ELF process termination")
 
     def diagnostics(self):
         self.qemu_log.flush()
@@ -263,30 +214,3 @@ class QemuIntegration:
                 self.process.wait(timeout=3)
         self.qemu_log.close()
         self.tempdir.cleanup()
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-i386"))
-    parser.add_argument("--kernel", default=str(ROOT / "myos.bin"))
-    parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
-    args = parser.parse_args()
-    if args.timeout <= 0:
-        parser.error("--timeout must be positive")
-
-    test = QemuIntegration(args.qemu, args.kernel, args.timeout)
-    try:
-        test.start()
-        test.run_checks()
-        print("PASS: QEMU integration suite", flush=True)
-        return 0
-    except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:
-        print(f"FAIL: QEMU integration suite: {error}", file=sys.stderr)
-        print(test.diagnostics(), file=sys.stderr)
-        return 1
-    finally:
-        test.close()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

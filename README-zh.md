@@ -28,6 +28,8 @@
 - **PMM** — 实现了PMM
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
+- **ATA PIO** — 支持主盘的 LBA28 扇区读取与写入
+- **FAT32** — 支持文件读取、写入、删除及目录创建、删除
 
 ## 下载
 
@@ -54,17 +56,27 @@ make run-iso        # 使用 q35 机型通过 ISO 启动并打开图形窗口
 make iso            # 生成iso文件
 make test           # 运行内核例程的宿主机测试
 make test-qemu      # 构建内核并运行有时限的无头 QEMU 集成测试
+make disk           # 创建 64 MB FAT32 格式的 disk.img
+make run            # 有 disk.img 就挂载，否则不连接磁盘
+make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并连接磁盘
 ```
 
-`make test` 使用 Python `unittest` 自动发现 Python 用例，并运行 `test/` 中的每个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。可执行的宿主测试覆盖字符串函数、RTC 日期/时区计算、ELF32 输入校验、GDT/IDT 描述符编码，以及带硬件 I/O stub 的键盘、PIC、PIT 和串口行为。静态源码和布局检查覆盖 ACPI、heap、I/O、paging、panic、PMM、shell、syscall、trap、TSS、VBE、VGA 和 IRQ0 栈帧约定。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
+内核启动时会探测主盘 ATA 设备；检测到磁盘后会自动执行 Shell 的磁盘
+初始化逻辑并尝试挂载 FAT32。`make run` 不会自动创建磁盘镜像；需要磁盘时
+先运行 `make disk`。
+
+测试按用途整理在 `test/` 下：`python/` 放宿主 Python 用例和源码合约检查，`c/` 放宿主 C 测试程序，`shell/` 放各 C 测试对应的独立启动脚本，`support/` 放共享编译器脚本和断言头文件。只在 QEMU 中运行的检查位于 `integration/`，其中入口、QEMU 会话、FAT32 测试镜像和行为场景分别放在独立模块中。`make test` 自动发现 Python 用例，并由它们运行各个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
 
 `make test` 特意保持为纯宿主机测试，不需要 QEMU 或内核交叉工具链
 （需要 Python 3 和宿主机 `cc`）。`make test-qemu` 需要内核构建工具
-（`nasm` 及 i686 编译器/链接器）、Python 3 和 `qemu-system-i386`；它会构建
+（`nasm` 及 i686 编译器/链接器）、Python 3、`mkfs.fat` 和
+`qemu-system-i386`；它会构建
 `myos.bin`，以无头 TCG 模式启动
 `qemu-system-i386`，通过 QEMU monitor 驱动 PS/2 键盘，并检查 COM1 串口输出。
-测试覆盖启动、Shell 输入、Ring 3 调度/列表/前后台切换/结束，以及 ELF32
-装载、执行、清理和重新装载。测试有整体时限，并为启动、串口和 monitor 等待
+测试会挂载自动生成的 FAT32 IDE 磁盘，并覆盖启动、Shell 输入、ATA/FAT32
+文件写入与读取；它还会把由 `boot/elf_demo.asm` 汇编生成的 ELF 程序放入测试
+磁盘，再通过 `run demo.elf` 执行。其余检查覆盖 Ring 3 调度/列表/前后台切换/
+结束，以及 ELF32 装载、执行、清理和重新装载。测试有整体时限，并为启动、串口和 monitor 等待
 设置超时；每项检查都会输出具名 PASS/FAIL，结束或失败时都会终止 QEMU。
 该目标需要单独安装 QEMU；可通过 `make test-qemu QEMU=/path/to/qemu`
 指定可执行文件。测试使用一种 QEMU PC/TCG 配置，不能替代其他固件、真实硬件
@@ -111,7 +123,20 @@ bg       隐藏指定 Ring 3 进程输出（bg <pid>）
 kill     按 PID 结束 Ring 3 进程（kill <pid>）
 elf      装载并运行内置 ELF32 测试程序
 svga_blue 将 framebuffer 填充为蓝色
+disk     初始化 ATA 并检测 FAT32
+ls       列出当前目录；`ls <路径>` 列出指定目录
+cat      输出 FAT32 文件内容
+write    向 FAT32 文件写入文本
+rm       删除 FAT32 文件
+cd       切换 FAT32 目录
+mkdir    创建 FAT32 目录
+rmdir    删除空 FAT32 目录；`rmdir -f <目录>` 递归删除目录及其内容
+run      装载并运行磁盘中的 ELF32 文件
 ```
+
+挂载 FAT32 磁盘时，Shell 提示符会显示当前路径，例如 `myos / >` 或
+`myos /1 >`，运行 `cd ..` 可返回上一级目录。没有挂载 FAT32 磁盘时，
+提示符保持为 `myos >`。
 
 每次运行 `ring3` 只会在后台启动一个 Ring 3 测试进程。进程仍由 PIT 定时器抢占调度，
 但默认不输出；运行 `fg <pid>` 显示指定进程的输出，`bg <pid>` 再次隐藏。
@@ -124,11 +149,17 @@ svga_blue 将 framebuffer 填充为蓝色
 ## 目录结构
 
 ```
-boot/     Multiboot 头、内核入口、中断桩 (NASM)
-src/      内核、VGA、串口、IDT、PIC、PIT、键盘、RTC、蓝屏、ACPI、shell
-include/  硬件抽象头文件与 freestanding 类型定义
-scripts/  CI/CD文件
-linker.ld 1MB 加载地址与段布局
+boot/             Multiboot 头、启动代码和中断桩 (NASM)
+src/kernel.c      内核初始化和顶层启动流程
+src/arch/x86/     x86 描述符、中断和端口 I/O
+src/mm/           物理/虚拟内存与堆
+src/os/           shell、ELF 装载、Ring 3 和系统调用
+src/drivers/      ATA、控制台、键盘、定时器、RTC 和显示驱动
+src/fs/           FAT32 文件系统
+src/lib/          freestanding C 标准库函数
+include/          按 src/ 子系统对应分类的头文件
+scripts/          CI/CD 文件
+linker.ld         1MB 加载地址与段布局
 ```
 
 ## 说明

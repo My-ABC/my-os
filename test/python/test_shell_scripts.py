@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 
 
-TEST_DIR = Path(__file__).resolve().parent
-SHELL_TESTS = sorted(TEST_DIR.glob("*.sh"))
+ROOT = Path(__file__).resolve().parents[2]
+SHELL_TESTS = sorted((ROOT / "test" / "shell").glob("*.sh"))
 
 
 class ShellScriptTests(unittest.TestCase):

@@ -17,6 +17,7 @@
 #include "pmm.h"
 #include "heap.h"
 #include "vbe.h"
+#include "ata.h"
 
 void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
@@ -39,6 +40,13 @@ void kmain(uint32_t multiboot_info) {
     
     // 初始化 VGA
     vga_init();
+
+    serial_print("[DISK] Probing ATA primary master\n");
+    if (ata_init()) {
+        cmd_disk(1, 0);
+    } else {
+        serial_print("[DISK] ATA primary master not found\n");
+    }
     
     printf("MyOS v0.2\n");
     printf("==========\n\n");

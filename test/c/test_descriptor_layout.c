@@ -2,8 +2,8 @@
 
 /* Include the real implementations so their private descriptor tables can be
  * checked without executing LGDT/LIDT or any other privileged instruction. */
-#include "../src/gdt.c"
-#include "../src/idt.c"
+#include "../../src/arch/x86/gdt.c"
+#include "../../src/arch/x86/idt.c"
 
 int main(void) {
     gdt_set_entry(2, 0x12345678U, 0xABCDEU, 0x9AU, 0xC0U);

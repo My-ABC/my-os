@@ -7,7 +7,10 @@ LD := $(shell if command -v i686-elf-ld >/dev/null 2>&1; then echo i686-elf-ld; 
 AS := $(shell if command -v nasm >/dev/null 2>&1; then echo nasm; else echo "nasm not found"; exit 1; fi)
 
 
-CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g -Iinclude
+INCLUDE_DIRS = include include/arch/x86 include/drivers include/fs include/lib \
+	include/mm include/os
+CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g \
+	$(addprefix -I,$(INCLUDE_DIRS))
 
 # PANIC_DEMO=1 时内核启动后主动触发 INT3, 用于演示/测试蓝屏
 ifdef PANIC_DEMO
@@ -30,8 +33,8 @@ ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
 # 自动查找所有 .c 和 .asm 文件
-C_SRCS = $(wildcard src/*.c)
-ASM_SRCS = $(wildcard boot/*.asm)
+C_SRCS = $(shell find src -type f -name '*.c' -print)
+ASM_SRCS = $(filter-out boot/gdt.asm boot/paging.asm,$(wildcard boot/*.asm))
 
 # 自动生成目标文件列表
 C_OBJS = $(patsubst src/%.c, build/%.o, $(C_SRCS))
@@ -51,14 +54,14 @@ build: $(OBJS)
 	$(LD) $(LDFLAGS) $^ -o $(KERNEL)
 
 test:
-	python3 -m unittest discover -s test -p 'test_*.py' -v
+	python3 -m unittest discover -s test/python -p 'test_*.py' -v
 
 test-qemu: build
-	python3 test/run_qemu_integration.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
+	python3 test/integration/run_qemu_integration.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
 
 # 编译 C 文件
 build/%.o: src/%.c
-	mkdir -p build
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 编译汇编文件
@@ -76,9 +79,15 @@ build/paging_asm.o: boot/paging.asm
 	mkdir -p build
 	$(AS) $(ASFLAGS) $< -o $@
 
-# 运行：通过 GRUB ISO 启动，保留 GRUB 提供的 framebuffer 信息
+# 运行：通过 GRUB ISO 启动；仅在已有镜像时附加 FAT32 IDE 磁盘
 run: iso
-	qemu-system-i386 -cdrom $(ISO) -serial stdio
+	@if test -f "$(DISK)"; then \
+		echo "Attaching disk image: $(DISK)"; \
+		qemu-system-i386 -boot order=d -cdrom $(ISO) -drive file="$(DISK)",format=raw,if=ide -serial stdio; \
+	else \
+		echo "No disk image found at $(DISK); booting without an IDE disk"; \
+		qemu-system-i386 -boot order=d -cdrom $(ISO) -serial stdio; \
+	fi
 
 # 直接 -kernel 启动，不经过 GRUB，仅用于启动链调试
 run-kernel: build
@@ -142,6 +151,7 @@ run-iso: iso
 
 # 清理
 clean:
-	rm -rf build $(KERNEL) $(ISO) test/__pycache__
+	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
+		test/python/__pycache__ test/integration/__pycache__
 
 .PHONY: build test test-qemu disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

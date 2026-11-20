@@ -1,4 +1,4 @@
-// src/tss.c
+// src/arch/x86/tss.c
 #include "tss.h"
 #include "gdt.h"
 #include "serial.h"

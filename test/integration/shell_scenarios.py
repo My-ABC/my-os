@@ -1,0 +1,71 @@
+def check_startup(session):
+    session.wait_for("MyOS v0.0.1", timeout=15)
+    session.wait_for(
+        "[DISK] ATA primary master and FAT32 filesystem initialized",
+        timeout=10,
+    )
+    session.wait_for("[HEAP] calloc/realloc succeeded", timeout=5)
+    session.wait_for("Beijing time (UTC+8)", timeout=5)
+    session.pass_check("kernel startup, memory setup, and timer/RTC path reached")
+    session.read_serial(0.3)
+
+    session.send_line("secho qemushellcommandok")
+    session.wait_for("qemushellcommandok")
+    session.pass_check("keyboard-driven shell command executes")
+
+
+def check_storage_and_shell(session):
+    session.send_line("disk")
+    session.wait_for("ATA primary master and FAT32 filesystem initialized")
+    session.pass_check("ATA primary master and FAT32 filesystem initialize")
+    session.send_line("write testtest hello")
+    session.wait_for("Wrote 5 bytes")
+    session.read_serial(1.0)
+    session.send_line("cat testtest")
+    session.wait_for("hello")
+    session.pass_check("FAT32 file write and read commands")
+    session.send_line("cd missing")
+    session.wait_for("[SHELL] Directory not found: /missing")
+    session.send_line("ls missing")
+    session.wait_for("[LS] Unable to list /missing")
+    session.pass_check("cd rejects missing directories without creating them")
+
+    session.send_line("mkdir folder")
+    session.send_line("cd folder")
+    session.wait_for("[SHELL] CWD /folder")
+    session.send_line("mkdir sub")
+    session.send_line("write child hello")
+    session.wait_for("[FAT32] Wrote 5 bytes to /folder/child")
+    session.send_line("write sub/nested content")
+    session.wait_for("[FAT32] Wrote 7 bytes to /folder/sub/nested")
+    session.send_line("ls")
+    session.wait_for("[LS] Listing /folder")
+    session.wait_for("[LS] ENTRY CHILD 5 bytes")
+    session.wait_for("[LS] ENTRY SUB/ <DIR>")
+    session.send_line("ls /")
+    session.wait_for("[LS] ENTRY FOLDER/ <DIR>")
+    explicit_ls_start = len(session.serial_data)
+    session.send_line("ls /folder")
+    session.wait_for_regex(rb"\[LS\] ENTRY CHILD 5 bytes", start=explicit_ls_start)
+    session.pass_check("ls lists the current directory or its explicit argument")
+    session.send_line("cd ..")
+    session.wait_for("[SHELL] CWD /")
+    session.pass_check("FAT32 cd parent navigation returns to root")
+
+    session.send_line("rmdir folder")
+    session.wait_for("[RMDIR] Failed to remove /folder")
+    session.send_line("rmdir -f folder")
+    session.wait_for("[RMDIR] Removed recursively /folder")
+    session.send_line("ls folder")
+    session.wait_for("[LS] Unable to list /folder")
+    session.pass_check("rmdir -f recursively removes nested files and directories")
+
+
+def check_run_from_disk(session):
+    run_start = len(session.serial_data)
+    session.send_line("run demo.elf")
+    session.wait_for_regex(rb"\[ELF\] Loaded ELF32 entry=", start=run_start)
+    session.wait_for_regex(rb"Hello from ELF32", start=run_start)
+    session.pass_check("run loads and executes ELF32 from the FAT32 disk")
+    session.send_line("kill 4")
+    session.wait_for("[RING3] Killed PID 4")

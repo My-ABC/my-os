@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+BUILD_DIR=$(mktemp -d)
+trap 'rm -rf "$BUILD_DIR"' EXIT HUP INT TERM
+
+cc -std=c99 -Wall -Wextra -Wno-pointer-to-int-cast \
+    -Wno-int-to-pointer-cast -fno-builtin -ffunction-sections -fdata-sections \
+    -I"$ROOT/include" -I"$ROOT/include/arch/x86" -I"$ROOT/include/drivers" \
+    -I"$ROOT/include/fs" -I"$ROOT/include/lib" -I"$ROOT/include/mm" \
+    -I"$ROOT/include/os" \
+    -I"$ROOT/test/support" "$@" \
+    -Wl,--gc-sections -o "$BUILD_DIR/test"
+"$BUILD_DIR/test"
