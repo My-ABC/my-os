@@ -77,7 +77,13 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Establish a device subsystem**
   - [ ] Design common device, bus, and driver registration/probing interfaces.
   - [ ] Add device-resource management, driver matching, lifecycle management, and error recovery.
-  - [ ] Evaluate and implement PCI enumeration to support future network-card and other PCI drivers.
+  - [ ] Evaluate and implement PCI enumeration to support future network-card and other PCI drivers. (Promoted to the dedicated "Implement PCI bus enumeration" item below.)
+- [ ] **Implement PCI bus enumeration**
+  - [ ] Add PCI configuration-space access (mechanism 1, ports `0xCF8`/`0xCFC`) with read/write helpers.
+  - [ ] Enumerate buses/devices/functions, read vendor/device IDs, and class codes; log the bus map over serial.
+  - [ ] Discover and assign BARs (memory and I/O windows) without conflicting with existing ISA devices.
+  - [ ] Provide basic INTx interrupt routing so PCI devices can signal the PIC/APIC.
+  - [ ] Validate against QEMU `-device` fixtures (e1000, ich9-ahci, qemu-xhci, bochs-display) per `docs/en/11-driver-gaps.md`.
 - [ ] **Complete ACPI support**
   - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
   - [ ] Parse MADT to provide processor and interrupt-controller information.
