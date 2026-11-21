@@ -23,6 +23,7 @@
 - **Ring 3 进程** — 使用 PIT IRQ0 抢占式软件上下文切换，最多运行两个用户进程，每个进程有独立的内核栈和用户栈
 - **进程管理** — Shell 支持 `ps`、`fg <pid>`、`bg <pid>` 和 `kill <pid>`；Ring 3 进程默认在后台运行
 - **系统调用** — Ring 3 可输出文本、通过 `SYS_GETPID` 查询进程 PID，并用 `SYS_YIELD` 主动让出 CPU
+- **信号** — `SIGINT`/`SIGKILL` 及每进程 pending 状态；Ctrl+C 向前台进程投递 `SIGINT`，用户注册的 handler 经 restorer 跳板和 `SYS_SIGRETURN` 执行
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
 - **PAE 分页** — 使用 64 位 PAE 页目录/页表项、32 字节 PDPT 和 32 位 CR3，并通过映射窗口访问高端物理页与页表。PMM 支持 64 GiB 以下的物理地址（36 位 PAE 上限）；实际可用内存由 Multiboot 内存图决定。当前启动阶段要求 Multiboot 信息块和内存图缓冲区位于低 16 MiB。可选的 `make test-qemu-highmem` 会在 QEMU `-m 6G` 下启动，分配 4 GiB 以上的真实物理页，验证 PAE 映射及读写，然后释放该页；标准 QEMU 集成测试仍使用 128 MiB。
@@ -166,8 +167,9 @@ FAT32 长文件名支持 `help_aaaaa.1234` 这样的 ASCII 名称。通过 Shell
 因此仍能输入 `bg <pid>` 或 `kill <pid>`。进程退出或切到后台后会重新显示提示符。
 
 `elf` 命令会以前台任务启动内置 ELF32 程序，因此可以看到其 `Hello from ELF32`
-系统调用输出。程序随后通过 `SYS_EXIT` 自行退出，退出时会释放 ELF 用户映射，
-因此之后可以再次运行 `elf`。
+系统调用输出。程序安装 `SIGINT` 处理器后进入等待；按 Ctrl+C 后处理器打印
+`Bye` 并通过 `SYS_EXIT` 退出，退出时会释放 ELF 用户映射，因此之后可以再次
+运行 `elf`。
 
 ## 目录结构
 
