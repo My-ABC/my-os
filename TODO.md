@@ -121,7 +121,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Handle I/O failures, concurrent faults, dirty pages, and exhausted swap space.
   - [ ] Integrate only after block/page caches and reliable page-fault handling are in place.
 
-## Networking and Graphics
+## Networking
 
 - [ ] **Implement a network stack**
   - [ ] Provide a network-device interface and support at least one network-card driver.
@@ -129,10 +129,18 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Implement IPv4, routing, and basic ICMP.
   - [ ] Implement UDP and design a user-space socket interface.
   - [ ] Implement TCP state, retransmission, flow control, and connection management.
-- [ ] **Establish a graphics subsystem**
+
+## Graphics and GUI
+
+- [ ] **Establish a kernel graphics subsystem**
   - [ ] Abstract framebuffers and display devices; improve graphics-mode and pixel-format management.
+  - [ ] Provide a unified screen/region abstraction shared by VGA text mode and VBE modes.
+- [ ] **Implement window management and input dispatch**
   - [ ] Implement window management, compositing, input-event dispatch, and focus management.
-  - [ ] Provide user-space drawing/window interfaces and build a basic GUI.
+  - [ ] Define a virtual-canvas or multi-window layout model for graphical output.
+- [ ] **Build the user-space GUI layer**
+  - [ ] Provide user-space drawing/window interfaces via syscalls or shared-memory buffers.
+  - [ ] Build a basic GUI toolkit or widget set and example applications.
 
 ## Executables, Security, and User-Space Ecosystem
 
