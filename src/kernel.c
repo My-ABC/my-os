@@ -143,20 +143,20 @@ void kmain(uint32_t multiboot_info) {
         serial_print("[HEAP] kmalloc failed\n");
     }
 
-        char *heap_reuse = (char *)kmalloc(100);
-        if (heap_reuse != 0) {
-            serial_print("[HEAP] free-list reuse succeeded\n");
-            kfree(heap_reuse);
-        }
+    char *heap_reuse = (char *)kmalloc(100);
+    if (heap_reuse != 0) {
+        serial_print("[HEAP] free-list reuse succeeded\n");
+        kfree(heap_reuse);
+    }
 
-        char *heap_resize = (char *)kcalloc(8, 16);
+    char *heap_resize = (char *)kcalloc(8, 16);
+    if (heap_resize != 0) {
+        heap_resize = (char *)krealloc(heap_resize, 8192);
         if (heap_resize != 0) {
-            heap_resize = (char *)krealloc(heap_resize, 8192);
-            if (heap_resize != 0) {
-                serial_print("[HEAP] calloc/realloc succeeded\n");
-                kfree(heap_resize);
-            }
+            serial_print("[HEAP] calloc/realloc succeeded\n");
+            kfree(heap_resize);
         }
+    }
 
     uint64_t test_phys = pmm_alloc_page();
     paging_map_page(0x00800000U, test_phys,

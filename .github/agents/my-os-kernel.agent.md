@@ -25,7 +25,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `src/mm/`: physical frames, virtual mappings/TLB, and kernel heap allocation.
 - `src/os/`: panic handling, ELF loading, Ring 3 processes, and system calls.
 - `src/shell/`: interactive shell (`shell.c`) with its public header in `include/shell/`.
-- `docs/`: hand-written bilingual references split by language — `docs/en/` (`syscall_abi.md` for the `int 0x80` call numbers/argument registers/ABI limitations, `shell_command.md` for every shell command and FAT32 path semantics) and `docs/zh/` (the Chinese translations). No README index inside `docs/`; each pair cross-links to its translation.
+- `docs/`: hand-written bilingual documentation split by language — `docs/en/` and `docs/zh/` mirror each other. `architecture.md` is the numbered-series index; `01-boot.md` through `10-build-and-test.md` cover boot, memory, interrupts, the syscall ABI (`04-syscall-abi.md`), Ring 3 processes, the shell (`06-shell.md`), the shell command table (`07-shell-commands.md`), FAT32 (`08-filesystem.md`), drivers, and build/test. **Whenever the syscall ABI or shell commands/behavior change, update `04-syscall-abi.md` and `07-shell-commands.md` (both languages) in the same change.**
 - `src/drivers/`: ATA PIO, keyboard, PIC/PIT, RTC, serial, VGA/VBE, ACPI, and font data.
 - `src/fs/`: FAT32 split into `fat32_core.c` (sector/cluster IO, FAT chains, mount), `fat32_name.c` (8.3/LFN/UTF-16 name codec), `fat32_dir.c` (directory entries, paths, mkdir/rmdir), and `fat32.c` (public file operations); shared internals live in `fat32_int.h` (`g_fs`, `g_sector`, `g_cluster`, cross-file prototypes).
 - `src/lib/`: freestanding standard-library string and stdio routines.

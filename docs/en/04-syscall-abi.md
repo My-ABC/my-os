@@ -3,7 +3,7 @@
 This document records the actual behavior of the `int 0x80` system-call interface, for Ring 3 programs and future ABI stabilization work.
 Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`, and the assembly entry stub is `syscall` in `boot/interrupt.asm`.
 
-中文版本: [中文版](../zh/syscall_abi.md)
+中文版本: [中文版](../zh/04-syscall-abi.md)
 
 ## Calling convention
 

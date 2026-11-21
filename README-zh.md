@@ -180,7 +180,7 @@ src/drivers/      ATA、控制台、键盘、定时器、RTC 和显示驱动
 src/fs/           FAT32 文件系统
 src/lib/          freestanding C 标准库函数
 include/          按 src/ 子系统对应分类的头文件
-docs/             ABI 与 shell 命令参考（中英双语）
+docs/             中英双语架构文档与参考（en/ + zh/）
 scripts/          CI/CD 文件
 linker.ld         1MB 加载地址与段布局
 [TODO.md](./TODO.md) 英文项目路线图 | [TODO-zh.md](./TODO-zh.md) 中文项目路线图
