@@ -114,6 +114,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Add per-CPU state, Local APIC timers, and inter-processor interrupts.
   - [ ] Add SMP synchronization primitives for the scheduler, memory manager, devices, and caches.
   - [ ] Support cross-core task scheduling and add multicore QEMU regression tests.
+  - [ ] Add Hyper-Threading awareness: enumerate logical processors per core via CPUID leaf 0xB/0x1F and avoid treating SMT siblings as fully independent cores for scheduling decisions.
 - [ ] **Implement swap and disk paging**
   - [ ] Define swap-space and page-state/ownership management.
   - [ ] Implement controlled page-out, page-in, and replacement policies.
@@ -144,6 +145,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Implement capabilities or equivalent fine-grained authorization.
   - [ ] Provide sandbox boundaries and resource limits for process/device access.
   - [ ] Security-test system calls, path resolution, shared memory, and inter-process interfaces.
+- [ ] **Evaluate VT-x virtualization**
+  - [ ] Check VMX support via CPUID and enable VMX operation (CR4.VMXE, VMXON region).
+  - [ ] Build minimal VMCS setup to run a guest in VMX non-root operation.
+  - [ ] Define goals first (e.g. userspace sandboxing vs. a full hypervisor); do not start without a concrete use case.
 - [ ] **Port a standard user-space environment**
   - [ ] Design and stabilize the system-call ABI required by libc.
   - [ ] Port musl libc.
