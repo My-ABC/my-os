@@ -117,7 +117,7 @@ make run
 ## shell使用
 ```
 命令列表：
-time     获取时间
+time     获取时间（time 12 为 12 小时 AM/PM）
 panic    触发INT 3
 echo     打印文字到屏幕和串口
 reboot   ACPI重启

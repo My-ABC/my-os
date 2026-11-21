@@ -136,7 +136,7 @@ Building with `make PANIC_DEMO=1` makes the kernel trigger `int $0x03` right aft
 ## shell use
 ```
 command list:
-time     get time
+time     get time (time 12 for 12-hour AM/PM)
 panic    call the INT3
 echo     print text on screen and COM1 serial
 reboot   use ACPI to reboot
