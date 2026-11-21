@@ -61,7 +61,8 @@ Disposition handling in `sig_deliverable_mask()`:
   `KEYBOARD_KEY_SIGINT` (0x05) control byte instead of `'c'`. The
   shell input loop consumes it and calls `ring3_signal_send()` with
   `SIGINT` for the foreground process; with no foreground process the
-  byte is ignored. If a `SYS_READ`/`SYS_GETCHAR` wait loop reads the
+  byte is ignored. The shell echoes `^C` whenever it consumes the
+  byte. If a `SYS_READ`/`SYS_GETCHAR` wait loop reads the
   byte first, it delivers `SIGINT` to itself instead, so a process
   blocked on keyboard input is still interrupted (subject to its
   disposition).

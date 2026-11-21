@@ -933,6 +933,8 @@ static void shell_read_line(char *line, int size) {
 
         char c = keyboard_getchar();
         if (c == KEYBOARD_KEY_SIGINT) {
+            printf("^C\n");
+            serial_print("^C\n");
             uint32_t fg = ring3_foreground_pid();
             if (fg != 0U) {
                 ring3_signal_send(fg, SIGINT);
