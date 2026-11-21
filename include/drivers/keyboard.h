@@ -11,6 +11,7 @@
 #define KEYBOARD_KEY_DOWN  0x02
 #define KEYBOARD_KEY_LEFT  0x03
 #define KEYBOARD_KEY_RIGHT 0x04
+#define KEYBOARD_KEY_SIGINT 0x05  /* Ctrl+C */
 
 void keyboard_init(void);
 

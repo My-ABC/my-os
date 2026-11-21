@@ -43,6 +43,8 @@ English: [English version](../en/04-syscall-abi.md)
 | 19 | `SYS_GETCWD` | `ebx` = `buf`，`ecx` = `size` | 路径长度（不含 NUL）或 -1 | 把当前工作目录（含 NUL）复制到用户缓冲区；`size` 必须 ≥ 长度+1。 |
 | 20 | `SYS_CHDIR` | `ebx` = 路径字符串 | 0 或 -1 | 切换工作目录；目标必须是已存在的目录。 |
 | 21 | `SYS_YIELD` | 无 | 0 | 主动让出 CPU，保存当前 Ring 3 上下文并返回 Shell；进程之后由 PIT 调度恢复。 |
+| 22 | `SYS_KILL` | `ebx`=pid、`ecx`=信号编号 | 0 或 -1 | 向进程发送信号（置为 pending）。 |
+| 23 | `SYS_SIGNAL` | `ebx`=信号编号、`ecx`=处理器（0=默认、1=忽略、否则为用户地址） | 0 或 -1 | 设置当前进程对某信号的处置；`SIGKILL`/`SIGSTOP` 不可捕获。 |
 
 ## `SYS_MEMORY`（7）子操作码 — `ebx`
 
@@ -75,6 +77,10 @@ English: [English version](../en/04-syscall-abi.md)
 ## 进程退出（`SYS_EXIT`）
 
 `SYS_EXIT` 调用 `ring3_terminate_current()`：释放该进程的用户栈与 ELF 映像页、标记 DEAD、清除前台 PID（若是），并把保存的内核 `irq_frame` 写入全局 `syscall_exit_frame`。`syscall` 桩检测到该值非零时不再 `popad`/`iret` 回用户态，而是把 `esp` 切到该内核帧并复用 IRQ0 的出栈序列直接恢复 Shell 上下文——与 ISR14 杀进程的路径相同。`syscall_exit_frame` 在每次 `syscall_handler` 入口清零。
+
+## Signals (basic)
+
+Ctrl+C in the shell sends `SIGINT` (2) to the foreground Ring 3 process. Per-process `sig_pending`/`sig_blocked`/`sig_handler[]` state lives in `ring3.c`; `ring3_signal_scan` runs on every PIT tick and terminates processes with a fatal unblocked pending signal, while `SYS_READ`/`SYS_GETCHAR` wait loops poll `ring3_signal_pending_fatal` so a blocked process can also be killed. `SYS_IGN` clears pending bits, ignore-by-default signals (`SIGCHLD`/`SIGURG`/`SIGWINCH`/`SIGIO`) are dropped, and custom user handlers are stored but not yet invoked. Signal numbers follow Linux numbering (`include/os/signal.h`); there is no `sigprocmask`/`sigpending` syscall yet.
 
 ## 已知限制（ABI 稳定化前需解决）
 

@@ -25,6 +25,8 @@
 #define SYS_GETCWD   19  // 获取当前工作目录
 #define SYS_CHDIR    20  // 切换当前工作目录
 #define SYS_YIELD    21  // 主动让出 CPU
+#define SYS_KILL     22  // 向进程发送信号 (ebx=pid, ecx=sig)
+#define SYS_SIGNAL   23  // 注册信号处理器 (ebx=sig, ecx=handler)
 
 #define MEMORY_MALLOC  1
 #define MEMORY_CALLOC  2

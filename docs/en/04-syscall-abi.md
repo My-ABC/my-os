@@ -43,6 +43,8 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 19 | `SYS_GETCWD` | `ebx` = `buf`, `ecx` = `size` | path length (excluding NUL) or -1 | Copies the current working directory (NUL included) into the user buffer; `size` must be ≥ length+1. |
 | 20 | `SYS_CHDIR` | `ebx` = path string | 0 or -1 | Changes the working directory; the target must be an existing directory. |
 | 21 | `SYS_YIELD` | none | 0 | Voluntarily yields the CPU, saving the current Ring 3 context and returning to the shell; the process is resumed by PIT scheduling. |
+| 22 | `SYS_KILL` | `ebx`=pid, `ecx`=signal number | 0 or -1 | Sends a signal to a process (marks it pending). |
+| 23 | `SYS_SIGNAL` | `ebx`=signal number, `ecx`=handler (0=default, 1=ignore, else user address) | 0 or -1 | Sets the current process's disposition for a signal; `SIGKILL`/`SIGSTOP` cannot be caught. |
 
 ## `SYS_MEMORY` (7) sub-operation codes — `ebx`
 
@@ -75,6 +77,10 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 ## Process exit (`SYS_EXIT`)
 
 `SYS_EXIT` calls `ring3_terminate_current()`: it releases the process's user stack and ELF image pages, marks it DEAD, clears the foreground PID (if any), and stores the saved kernel `irq_frame` into the global `syscall_exit_frame`. When the `syscall` stub sees a nonzero value it skips `popad`/`iret` back to user mode, switches `esp` to that kernel frame, and replays the IRQ0 epilogue to resume the shell context — the same path ISR14 uses to kill a process. `syscall_exit_frame` is cleared at the top of every `syscall_handler` invocation.
+
+## Signals (basic)
+
+Ctrl+C in the shell sends `SIGINT` (2) to the foreground Ring 3 process. Per-process `sig_pending`/`sig_blocked`/`sig_handler[]` state lives in `ring3.c`; `ring3_signal_scan` runs on every PIT tick and terminates processes with a fatal unblocked pending signal, while `SYS_READ`/`SYS_GETCHAR` wait loops poll `ring3_signal_pending_fatal` so a blocked process can also be killed. `SYS_IGN` clears pending bits, ignore-by-default signals (`SIGCHLD`/`SIGURG`/`SIGWINCH`/`SIGIO`) are dropped, and custom user handlers are stored but not yet invoked. Signal numbers follow Linux numbering (`include/os/signal.h`); there is no `sigprocmask`/`sigpending` syscall yet.
 
 ## Known limitations (to resolve before stabilizing the ABI)
 

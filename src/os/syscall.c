@@ -8,6 +8,8 @@
 #include "pmm.h"
 #include "string.h"
 #include "ring3.h"
+#include "signal.h"
+#include "keyboard.h"
 #include "fat32.h"
 #include "heap.h"
 
@@ -18,6 +20,44 @@
 /* Set by SYS_EXIT; the syscall stub switches to this kernel frame instead
  * of returning to the exiting process. */
 uint32_t syscall_exit_frame;
+
+/* Returns 1 after marking the current process for termination via the
+ * saved kernel frame (same mechanism as SYS_EXIT). */
+static int sys_signal_fatal_abort(void) {
+    if (!ring3_signal_pending_fatal()) return 0;
+    struct irq_frame *frame = ring3_terminate_current();
+    if (frame != 0) syscall_exit_frame = (uint32_t)frame;
+    return 1;
+}
+
+/* gets() variant that aborts when a fatal signal becomes pending. */
+static void sys_gets(char *buf, int size) {
+    int i = 0;
+    while (i < size - 1) {
+        char c = keyboard_getchar();
+        if (c == 0) {
+            if (sys_signal_fatal_abort()) return;
+            __asm__ volatile ("hlt" ::: "memory");
+            continue;
+        }
+        if (c == '\n' || c == '\r') {
+            buf[i] = '\0';
+            putchar('\n');
+            return;
+        } else if (c == '\b') {
+            if (i > 0) {
+                i--;
+                putchar('\b');
+                putchar(' ');
+                putchar('\b');
+            }
+        } else {
+            buf[i++] = c;
+            putchar(c);
+        }
+    }
+    buf[i] = '\0';
+}
 uint32_t syscall_switch_frame;
 
 struct sysfs_fd {
@@ -346,12 +386,16 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             return 0;
         }
         case SYS_READ: { // 参数: ebx: char *str, ecx: size_t size
-            gets((char*)ebx, ecx);
+            sys_gets((char*)ebx, ecx);
             return 0;
         }
         case SYS_GETCHAR: {
-            int c = getchar();
-            return c;
+            for (;;) {
+                char c = keyboard_getchar();
+                if (c != 0) return (uint8_t)c;
+                if (sys_signal_fatal_abort()) return 0;
+                __asm__ volatile ("hlt" ::: "memory");
+            }
         }
         case SYS_CLEAR: {
             vga_clear();
@@ -406,6 +450,10 @@ uint32_t syscall_handler(struct irq_frame *frame) {
         case SYS_YIELD:
             syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
             return 0;
+        case SYS_KILL:
+            return ring3_signal_send(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
+        case SYS_SIGNAL:
+            return ring3_signal_set_handler(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
         case SYS_FOPEN:
             return (uint32_t)sysfs_fopen(ebx, ecx);
         case SYS_FCLOSE: {

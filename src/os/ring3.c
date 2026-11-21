@@ -1,4 +1,5 @@
 #include "ring3.h"
+#include "signal.h"
 #include "paging.h"
 #include "pmm.h"
 #include "tss.h"
@@ -16,6 +17,9 @@ struct ring3_process {
     uint32_t user_stack_top;
     uint32_t image_start;
     uint32_t image_end;
+    uint32_t sig_pending;
+    uint32_t sig_blocked;
+    uint32_t sig_handler[NSIG];
     struct irq_frame *frame;
 };
 
@@ -169,6 +173,11 @@ static int ring3_schedule_internal(void (*func)(void),
     processes[i].user_stack_top = stack_top;
     processes[i].image_start = image_start;
     processes[i].image_end = image_end;
+    processes[i].sig_pending = 0U;
+    processes[i].sig_blocked = 0U;
+    for (uint32_t s = 0; s < NSIG; ++s) {
+        processes[i].sig_handler[s] = SIG_DFL;
+    }
     processes[i].frame = frame;
     if (foreground) foreground_pid = processes[i].pid;
 
@@ -188,6 +197,7 @@ int ring3_schedule_foreground(void (*func)(void),
 
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     irq_handler(32);
+    ring3_signal_scan(frame);
 
     if (current_process >= 0 && (frame->cs & 3U) != 3U) {
         return frame;
@@ -344,4 +354,92 @@ int ring3_kill(uint32_t pid) {
     }
     irq_restore(flags);
     return -1;
+}
+
+/* ---- signals ---- */
+
+static int sig_fatal_default(uint32_t sig) {
+    return !SIG_DEFAULT_IGNORE(sig);
+}
+
+/* Custom handlers are stored but user-mode delivery is not implemented
+ * yet, so their pending bits stay set; SIG_IGN clears the bit and
+ * SIG_DFL-on-ignore-by-default signals are dropped. */
+static uint32_t sig_deliverable_mask(struct ring3_process *p) {
+    uint32_t mask = p->sig_pending & ~p->sig_blocked;
+    uint32_t out = 0;
+    for (uint32_t s = 1; s < NSIG; ++s) {
+        uint32_t bit = 1U << s;
+        if ((mask & bit) == 0U) continue;
+        if (p->sig_handler[s] == SIG_IGN) {
+            p->sig_pending &= ~bit;
+        } else if (p->sig_handler[s] == SIG_DFL &&
+                   sig_fatal_default(s)) {
+            out |= bit;
+        } else if (p->sig_handler[s] > SIG_IGN) {
+            /* keep pending until handler delivery exists */
+        } else if (!sig_fatal_default(s)) {
+            p->sig_pending &= ~bit;
+        }
+    }
+    return out;
+}
+
+int ring3_signal_send(uint32_t pid, uint32_t sig) {
+    if (sig == 0U || sig >= NSIG) return -1;
+    uint32_t flags = irq_save();
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        if (processes[i].pid == pid &&
+            (processes[i].state == RING3_PROCESS_READY ||
+             processes[i].state == RING3_PROCESS_RUNNING)) {
+            processes[i].sig_pending |= 1U << sig;
+            irq_restore(flags);
+            return 0;
+        }
+    }
+    irq_restore(flags);
+    return -1;
+}
+
+int ring3_signal_set_handler(uint32_t sig, uint32_t handler) {
+    if (sig == 0U || sig >= NSIG || SIG_UNCATCHABLE(sig)) return -1;
+    if (handler > SIG_IGN && handler >= USER_SPACE_END) return -1;
+    if (current_process < 0) return -1;
+    uint32_t flags = irq_save();
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    p->sig_handler[sig] = handler;
+    irq_restore(flags);
+    return 0;
+}
+
+/* 1 if the current process has a fatal signal pending that is not
+ * blocked and not ignored. Blocking syscalls poll this to abort. */
+uint32_t ring3_signal_pending_fatal(void) {
+    if (current_process < 0) return 0U;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    return sig_deliverable_mask(p) != 0U ? 1U : 0U;
+}
+
+/* Called from IRQ0 before context selection. Marks processes with a
+ * fatal unblocked pending signal DEAD. The current process is only
+ * marked when the interrupted frame is a user frame; a kernel frame
+ * means the process is inside a syscall, whose wait loop checks
+ * ring3_signal_pending_fatal itself. */
+void ring3_signal_scan(struct irq_frame *frame) {
+    int current_kernel_frame =
+        current_process >= 0 && (frame->cs & 3U) != 3U;
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        struct ring3_process *p = &processes[i];
+        if (p->state != RING3_PROCESS_READY &&
+            p->state != RING3_PROCESS_RUNNING) {
+            continue;
+        }
+        if (sig_deliverable_mask(p) == 0U) continue;
+        if ((int32_t)i == current_process && current_kernel_frame) continue;
+        p->state = RING3_PROCESS_DEAD;
+        if (foreground_pid == p->pid) foreground_pid = 0U;
+        if ((int32_t)i != current_process) {
+            release_process_resources(p);
+        }
+    }
 }

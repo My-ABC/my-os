@@ -207,6 +207,25 @@ void keyboard_irq(void) {
         return;
     }
 
+    // Ctrl: 扫描集1 0x1D/0x9D, 扫描集2 0x14 (F0 0x14 为释放)
+    if (scancode == 0x1D) {
+        ctrl_pressed = 1;
+        return;
+    }
+    if (scancode == 0x9D) {
+        ctrl_pressed = 0;
+        return;
+    }
+    if (current_scancode_set == 2 && scancode == 0x14) {
+        if (release) {
+            ctrl_pressed = 0;
+            release = 0;
+        } else {
+            ctrl_pressed = 1;
+        }
+        return;
+    }
+
     if (current_scancode_set == 1 && (scancode & 0x80)) {  // 扫描集1的断码
         // 检查是否是修饰键释放（已在上面处理）
         return;
@@ -246,6 +265,11 @@ void keyboard_irq(void) {
 
     // 应用 Shift 和 Caps Lock 转换
     c = apply_modifiers(c, shift_pressed, caps_lock_on);
+
+    // Ctrl+C 产生 SIGINT 控制字节而不是字符 'c'
+    if (ctrl_pressed && (c == 'c' || c == 'C')) {
+        c = KEYBOARD_KEY_SIGINT;
+    }
 
     uint32_t next = (head + 1) % BUFFER_SIZE;
     if (next != tail) {
