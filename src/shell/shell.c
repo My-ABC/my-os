@@ -28,7 +28,6 @@ static cmd_t cmd_table[] = {
     {"echo",     cmd_echo,     "Print text"},
     {"reboot",   cmd_reboot,   "Reboot system"},
     {"shutdown", cmd_shutdown, "Shutdown system"},
-    {"secho",    cmd_secho,    "Print text to serial"},
     {"tick",     cmd_tick,     "Show PIT tick count"},
     {"help",     cmd_help,     "Show this help"},
     {"clear",    cmd_clear,    "Clear screen"},
@@ -183,9 +182,14 @@ int cmd_svga_blue(int argc, char *argv[]) {
 int cmd_echo(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         printf("%s", argv[i]);
-        if (i < argc - 1) printf(" ");
+        serial_print(argv[i]);
+        if (i < argc - 1) {
+            printf(" ");
+            serial_putchar(' ');
+        }
     }
     printf("\n");
+    serial_putchar('\n');
     return 0;
 }
 
@@ -198,15 +202,6 @@ int cmd_reboot(int argc, char *argv[]) {
 int cmd_shutdown(int argc, char *argv[]) {
     printf("Shutting down...\n");
     acpi_shutdown();
-    return 0;
-}
-
-int cmd_secho(int argc, char *argv[]) {
-    for (int i = 1; i < argc; i++) {
-        serial_print(argv[i]);
-        if (i < argc - 1) serial_putchar(' ');
-    }
-    serial_putchar('\n');
     return 0;
 }
 

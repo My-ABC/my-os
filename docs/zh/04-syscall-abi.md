@@ -45,6 +45,7 @@ English: [English version](../en/04-syscall-abi.md)
 | 21 | `SYS_YIELD` | 无 | 0 | 主动让出 CPU，保存当前 Ring 3 上下文并返回 Shell；进程之后由 PIT 调度恢复。 |
 | 22 | `SYS_KILL` | `ebx`=pid、`ecx`=信号编号 | 0 或 -1 | 向进程发送信号（置为 pending）。 |
 | 23 | `SYS_SIGNAL` | `ebx`=信号编号、`ecx`=处理器（0=默认、1=忽略、否则为用户地址） | 0 或 -1 | 设置当前进程对某信号的处置；`SIGKILL` 不可捕获。 |
+| 24 | `SYS_SIGRETURN` | 无 | 恢复的 `eax` | 恢复投递信号 handler 时保存的上下文。仅由内核放置的 restorer 桩在 handler 返回后调用；无活动 handler 时返回 -1。 |
 
 ## `SYS_MEMORY`（7）子操作码 — `ebx`
 
@@ -81,9 +82,9 @@ English: [English version](../en/04-syscall-abi.md)
 ## 信号
 
 信号机制详见 [12-signals.md](12-signals.md)：信号编号、每进程
-pending/blocked/handler 状态、Ctrl+C `SIGINT` 投递、
-`SYS_KILL`/`SYS_SIGNAL`，以及当前限制（自定义 handler 已存储但尚未
-调用）。
+pending/blocked/handler 状态、Ctrl+C `SIGINT` 投递、经
+`SYS_SIGRETURN` 的用户态 handler 调用、`SYS_KILL`/`SYS_SIGNAL`，
+以及当前限制。
 
 ## 已知限制（ABI 稳定化前需解决）
 

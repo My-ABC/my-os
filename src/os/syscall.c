@@ -30,18 +30,27 @@ static int sys_signal_fatal_abort(void) {
     return 1;
 }
 
-/* gets() variant that aborts when a fatal signal becomes pending. */
-static void sys_gets(char *buf, int size) {
+/* Returns 1 when the wait loop must stop: either a fatal signal killed
+ * the process, or a handled signal redirected `frame` into its handler
+ * (the in-flight syscall is abandoned, like an interrupted call). */
+static int sys_signal_check(struct irq_frame *frame) {
+    if (sys_signal_fatal_abort()) return 1;
+    if (ring3_signal_deliver_current(frame)) return 1;
+    return 0;
+}
+
+/* gets() variant that stops when a signal is delivered or fatal. */
+static void sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
     while (i < size - 1) {
         char c = keyboard_getchar();
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
-            if (sys_signal_fatal_abort()) return;
+            if (sys_signal_check(frame)) return;
             continue;
         }
         if (c == 0) {
-            if (sys_signal_fatal_abort()) return;
+            if (sys_signal_check(frame)) return;
             __asm__ volatile ("hlt" ::: "memory");
             continue;
         }
@@ -391,7 +400,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             return 0;
         }
         case SYS_READ: { // 参数: ebx: char *str, ecx: size_t size
-            sys_gets((char*)ebx, ecx);
+            sys_gets((char*)ebx, ecx, frame);
             return 0;
         }
         case SYS_GETCHAR: {
@@ -401,11 +410,11 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     /* Ctrl+C read by the syscall itself: deliver SIGINT
                      * to ourselves, then honor the disposition. */
                     ring3_signal_send(ring3_current_pid(), SIGINT);
-                    if (sys_signal_fatal_abort()) return 0;
+                    if (sys_signal_check(frame)) return 0;
                     continue;
                 }
                 if (c != 0) return (uint8_t)c;
-                if (sys_signal_fatal_abort()) return 0;
+                if (sys_signal_check(frame)) return 0;
                 __asm__ volatile ("hlt" ::: "memory");
             }
         }
@@ -466,6 +475,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             return ring3_signal_send(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
         case SYS_SIGNAL:
             return ring3_signal_set_handler(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
+        case SYS_SIGRETURN:
+            return ring3_signal_sigreturn(frame);
         case SYS_FOPEN:
             return (uint32_t)sysfs_fopen(ebx, ecx);
         case SYS_FCLOSE: {

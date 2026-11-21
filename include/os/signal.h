@@ -2,6 +2,7 @@
 #define _SIGNAL_H
 
 #include "stdint.h"
+#include "regs.h"
 
 /* Implemented signal numbers; other values are reserved */
 #define SIGINT    2
@@ -23,6 +24,8 @@
 int  ring3_signal_send(uint32_t pid, uint32_t sig);
 int  ring3_signal_set_handler(uint32_t sig, uint32_t handler);
 uint32_t ring3_signal_pending_fatal(void);
+int  ring3_signal_deliver_current(struct irq_frame *frame);
+uint32_t ring3_signal_sigreturn(struct irq_frame *frame);
 void ring3_signal_scan(struct irq_frame *frame);
 
 #endif

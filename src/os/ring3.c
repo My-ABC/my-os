@@ -3,6 +3,8 @@
 #include "paging.h"
 #include "pmm.h"
 #include "tss.h"
+#include "string.h"
+#include "serial.h"
 
 #define RING3_KERNEL_STACK_SIZE 8192U
 #define USER_DATA_SELECTOR      0x23U
@@ -10,6 +12,9 @@
 #define USER_STACK_SIZE         0x8000U
 #define USER_STACK_TOP_0        0x00810000U
 #define USER_STACK_TOP_1        0x00820000U
+/* Fixed user page holding the signal restorer stub (mov eax,SYS_SIGRETURN;
+ * int 0x80). Shared by all processes because they share one address space. */
+#define USER_SIG_TRAMPOLINE     0x00900000U
 
 struct ring3_process {
     uint32_t pid;
@@ -20,6 +25,8 @@ struct ring3_process {
     uint32_t sig_pending;
     uint32_t sig_blocked;
     uint32_t sig_handler[NSIG];
+    uint32_t sig_active;            /* signal number whose handler is running, 0 = none */
+    struct irq_frame sig_saved_frame; /* interrupted context restored by sigreturn */
     struct irq_frame *frame;
 };
 
@@ -178,6 +185,7 @@ static int ring3_schedule_internal(void (*func)(void),
     for (uint32_t s = 0; s < NSIG; ++s) {
         processes[i].sig_handler[s] = SIG_DFL;
     }
+    processes[i].sig_active = 0U;
     processes[i].frame = frame;
     if (foreground) foreground_pid = processes[i].pid;
 
@@ -362,27 +370,110 @@ static int sig_fatal_default(uint32_t sig) {
     return !SIG_DEFAULT_IGNORE(sig);
 }
 
-/* Custom handlers are stored but user-mode delivery is not implemented
- * yet, so their pending bits stay set; SIG_IGN clears the bit and
- * SIG_DFL-on-ignore-by-default signals are dropped. */
-static uint32_t sig_deliverable_mask(struct ring3_process *p) {
+/* Classify pending & ~blocked signals: clears ignored bits, returns the
+ * fatal-default mask, and reports the lowest-numbered signal that has a
+ * custom handler (0 when none). */
+static uint32_t sig_actionable(struct ring3_process *p, uint32_t *handled) {
     uint32_t mask = p->sig_pending & ~p->sig_blocked;
-    uint32_t out = 0;
+    uint32_t fatal = 0;
+    *handled = 0;
     for (uint32_t s = 1; s < NSIG; ++s) {
         uint32_t bit = 1U << s;
         if ((mask & bit) == 0U) continue;
         if (p->sig_handler[s] == SIG_IGN) {
             p->sig_pending &= ~bit;
-        } else if (p->sig_handler[s] == SIG_DFL &&
-                   sig_fatal_default(s)) {
-            out |= bit;
-        } else if (p->sig_handler[s] > SIG_IGN) {
-            /* keep pending until handler delivery exists */
-        } else if (!sig_fatal_default(s)) {
-            p->sig_pending &= ~bit;
+        } else if (p->sig_handler[s] == SIG_DFL) {
+            if (sig_fatal_default(s)) {
+                fatal |= bit;
+            } else {
+                p->sig_pending &= ~bit;
+            }
+        } else if (*handled == 0U) {
+            *handled = s;
         }
     }
-    return out;
+    return fatal;
+}
+
+static int sig_trampoline_ready;
+
+/* The restorer is a fixed user page shared by all processes: it invokes
+ * SYS_SIGRETURN, which restores the frame saved at delivery time. Bytes
+ * after int 0x80 are NOPs; falling through hits an unmapped page and the
+ * fault path kills the process. */
+static int sig_ensure_trampoline(void) {
+    if (sig_trampoline_ready) return 1;
+    uint64_t physical = pmm_alloc_page();
+    if (physical == 0U) return 0;
+    paging_map_page(USER_SIG_TRAMPOLINE, physical,
+                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_get_page_physical(USER_SIG_TRAMPOLINE) == 0U) {
+        pmm_free_page(physical);
+        return 0;
+    }
+    volatile uint8_t *code = (volatile uint8_t *)USER_SIG_TRAMPOLINE;
+    /* mov eax, SYS_SIGRETURN ; int 0x80 */
+    code[0] = 0xB8U;
+    code[1] = 24U;
+    code[2] = 0U;
+    code[3] = 0U;
+    code[4] = 0U;
+    code[5] = 0xCDU;
+    code[6] = 0x80U;
+    for (uint32_t i = 7; i < PAGE_SIZE; ++i) code[i] = 0x90U;
+    sig_trampoline_ready = 1;
+    return 1;
+}
+
+static int sig_ensure_user_page(uint32_t addr) {
+    uint32_t page = addr & ~(PAGE_SIZE - 1U);
+    if (paging_get_page_physical(page) != 0U) return 1;
+    uint64_t physical = pmm_alloc_page();
+    if (physical == 0U) return 0;
+    paging_map_page(page, physical,
+                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_get_page_physical(page) == 0U) {
+        pmm_free_page(physical);
+        return 0;
+    }
+    memset((void *)(uintptr_t)page, 0, PAGE_SIZE);
+    return 1;
+}
+
+/* Redirect `frame` so the process resumes inside its handler for `sig`.
+ * The interrupted context is kept in sig_saved_frame and restored by
+ * SYS_SIGRETURN; the handler sees a normal cdecl frame
+ * ([esp]=restorer, [esp+4]=sig) on the user stack. */
+static int sig_deliver(struct ring3_process *p, uint32_t sig,
+                       struct irq_frame *frame) {
+    if ((frame->cs & 3U) != 3U || p->sig_active != 0U ||
+        !sig_ensure_trampoline()) {
+        return 0;
+    }
+    uint32_t sp = (frame->useresp - 16U) & ~0xFU;
+    if (!sig_ensure_user_page(sp) || !sig_ensure_user_page(sp + 4U)) {
+        return 0;
+    }
+
+    p->sig_saved_frame = *frame;
+    p->sig_active = sig;
+    p->sig_blocked |= 1U << sig;
+    p->sig_pending &= ~(1U << sig);
+
+    volatile uint32_t *stack = (volatile uint32_t *)sp;
+    stack[0] = USER_SIG_TRAMPOLINE;
+    stack[1] = sig;
+
+    frame->eip = p->sig_handler[sig];
+    frame->useresp = sp;
+    serial_print("[SIG] Deliver sig ");
+    serial_print_dec(sig);
+    serial_print(" to pid ");
+    serial_print_dec(p->pid);
+    serial_print(" handler=");
+    serial_print_hex(p->sig_handler[sig]);
+    serial_putchar('\n');
+    return 1;
 }
 
 int ring3_signal_send(uint32_t pid, uint32_t sig) {
@@ -417,14 +508,47 @@ int ring3_signal_set_handler(uint32_t sig, uint32_t handler) {
 uint32_t ring3_signal_pending_fatal(void) {
     if (current_process < 0) return 0U;
     struct ring3_process *p = &processes[(uint32_t)current_process];
-    return sig_deliverable_mask(p) != 0U ? 1U : 0U;
+    uint32_t handled;
+    return sig_actionable(p, &handled) != 0U ? 1U : 0U;
+}
+
+/* Deliver a pending handled signal into the current process's live
+ * frame. Returns 1 when `frame` was redirected to the handler, which
+ * abandons the in-flight syscall the same way an interrupted call would. */
+int ring3_signal_deliver_current(struct irq_frame *frame) {
+    if (current_process < 0) return 0;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    uint32_t handled = 0U;
+    if (sig_actionable(p, &handled) != 0U || handled == 0U) return 0;
+    return sig_deliver(p, handled, frame);
+}
+
+/* SYS_SIGRETURN: restore the context saved when the running handler was
+ * delivered. Returns the restored eax so the syscall epilogue preserves
+ * the interrupted context's value. */
+uint32_t ring3_signal_sigreturn(struct irq_frame *frame) {
+    if (current_process < 0) return (uint32_t)-1;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    if (p->sig_active == 0U) return (uint32_t)-1;
+    uint32_t sig = p->sig_active;
+    struct irq_frame saved = p->sig_saved_frame;
+    p->sig_active = 0U;
+    p->sig_blocked &= ~(1U << sig);
+    *frame = saved;
+    serial_print("[SIG] sigreturn pid ");
+    serial_print_dec(p->pid);
+    serial_print(" sig ");
+    serial_print_dec(sig);
+    serial_putchar('\n');
+    return saved.eax;
 }
 
 /* Called from IRQ0 before context selection. Marks processes with a
- * fatal unblocked pending signal DEAD. The current process is only
- * marked when the interrupted frame is a user frame; a kernel frame
- * means the process is inside a syscall, whose wait loop checks
- * ring3_signal_pending_fatal itself. */
+ * fatal unblocked pending signal DEAD and redirects processes with a
+ * pending custom-handler signal into their handler. The current process
+ * is only touched when the interrupted frame is a user frame; a kernel
+ * frame means the process is inside a syscall, whose wait loop calls
+ * ring3_signal_deliver_current itself. */
 void ring3_signal_scan(struct irq_frame *frame) {
     int current_kernel_frame =
         current_process >= 0 && (frame->cs & 3U) != 3U;
@@ -434,12 +558,22 @@ void ring3_signal_scan(struct irq_frame *frame) {
             p->state != RING3_PROCESS_RUNNING) {
             continue;
         }
-        if (sig_deliverable_mask(p) == 0U) continue;
-        if ((int32_t)i == current_process && current_kernel_frame) continue;
-        p->state = RING3_PROCESS_DEAD;
-        if (foreground_pid == p->pid) foreground_pid = 0U;
-        if ((int32_t)i != current_process) {
-            release_process_resources(p);
+        uint32_t handled = 0U;
+        uint32_t fatal = sig_actionable(p, &handled);
+        int is_current = (int32_t)i == current_process;
+        if (is_current && current_kernel_frame) continue;
+        if (fatal != 0U) {
+            p->state = RING3_PROCESS_DEAD;
+            if (foreground_pid == p->pid) foreground_pid = 0U;
+            if (!is_current) {
+                release_process_resources(p);
+            }
+            continue;
+        }
+        if (handled == 0U) continue;
+        struct irq_frame *target = is_current ? frame : p->frame;
+        if (target != 0 && sig_deliver(p, handled, target)) {
+            /* frame redirected; nothing else to do this tick */
         }
     }
 }
