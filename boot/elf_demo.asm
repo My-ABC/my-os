@@ -33,13 +33,33 @@ elf_demo_start:
 
     times 0x100 - ($ - elf_demo_start) db 0
 elf_demo_code:
-    mov eax, 1
-    mov ebx, 0x00500020
+    ; Install the SIGINT handler first, so "Hello" also means "armed".
+    mov eax, 23        ; SYS_SIGNAL
+    mov ebx, 2         ; SIGINT
+    mov ecx, bye_handler - elf_demo_code + 0x00500000
     int 0x80
-    mov eax, 10        ; SYS_EXIT: terminate instead of looping forever
+
+    mov eax, 1
+    mov ebx, hello_msg - elf_demo_code + 0x00500000
+    int 0x80
+
+    ; Wait for SIGINT; the handler prints "Bye" and exits.
+.wait:
+    mov eax, 21        ; SYS_YIELD
+    int 0x80
+    jmp .wait
+
+bye_handler:
+    mov eax, 1
+    mov ebx, bye_msg - elf_demo_code + 0x00500000
+    int 0x80
+    mov eax, 10        ; SYS_EXIT
     int 0x80
 .halt:
     jmp .halt
-    times 0x120 - ($ - elf_demo_start) db 0
+    times 0x160 - ($ - elf_demo_start) db 0
+hello_msg:
     db "Hello from ELF32", 10, 0
+bye_msg:
+    db "Bye", 10, 0
 elf_demo_end:

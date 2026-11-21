@@ -300,6 +300,11 @@ def check_run_from_disk(session):
     session.send_line("run demo.elf")
     session.wait_for_regex(rb"\[ELF\] Loaded ELF32 entry=", start=run_start)
     session.wait_for_regex(rb"Hello from ELF32", start=run_start)
+    # demo.elf is the same image as the built-in demo: it waits for
+    # SIGINT, whose handler prints "Bye" and exits.
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    session.monitor_read_until(b"(qemu)", 3)
+    session.wait_for("Bye", timeout=8)
     session.pass_check("run loads and executes ELF32 from the FAT32 disk")
     ps_start = len(session.serial_data)
     session.send_line("ps")

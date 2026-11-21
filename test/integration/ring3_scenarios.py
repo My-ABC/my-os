@@ -41,18 +41,21 @@ def check_ring3_and_builtin_elf(session):
         raise IntegrationFailure("SIGINT-killed Ring 3 process remains runnable")
     session.pass_check("Ctrl+C SIGINT terminates the foreground Ring 3 process")
 
-    session.send_line("elf")
-    session.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
-    session.wait_for("Hello from ELF32", timeout=5)
-    session.pass_check("ELF32 load, Ring 3 execution, SYS_WRITE, and SYS_EXIT")
-    ps_start = len(session.serial_data)
-    session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 2 DEAD", start=ps_start, timeout=5)
-    session.send_line("elf")
-    session.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
-    session.wait_for("Hello from ELF32", timeout=5)
-    ps_start = len(session.serial_data)
-    session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 3 DEAD", start=ps_start, timeout=5)
-    session.pass_check("ELF image mappings can be released and loaded again")
-    session.pass_check("ELF process termination")
+    # The built-in ELF demo installs a SIGINT handler that prints "Bye"
+    # and exits; Ctrl+C must reach it through the signal mechanism.
+    for expected_pid in (b"2", b"3"):
+        elf_start = len(session.serial_data)
+        session.send_line("elf")
+        session.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
+        session.wait_for("Hello from ELF32", timeout=5)
+        session.monitor.sendall(b"sendkey ctrl-c\n")
+        session.monitor_read_until(b"(qemu)", 3)
+        session.wait_for_regex(rb"\[SIG\] Deliver sig 2", start=elf_start,
+                               timeout=8)
+        session.wait_for("Bye", timeout=5)
+        ps_start = len(session.serial_data)
+        session.send_line("ps")
+        session.wait_for_regex(rb"\[PS\] " + expected_pid + rb" DEAD",
+                               start=ps_start, timeout=8)
+    session.pass_check("ELF32 load, Ring 3 execution, SIGINT handler, "
+                       "and SYS_EXIT")
