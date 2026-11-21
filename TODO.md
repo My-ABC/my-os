@@ -97,6 +97,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Discover and assign BARs (memory and I/O windows) without conflicting with existing ISA devices.
   - [ ] Provide basic INTx interrupt routing so PCI devices can signal the PIC/APIC.
   - [ ] Validate against QEMU `-device` fixtures (e1000, ich9-ahci, qemu-xhci, bochs-display) per `docs/en/11-driver-gaps.md`.
+- [ ] **Add GPU support**
+  - [ ] Enumerate display-class PCI devices and identify GPU candidates (bochs-display, virtio-gpu, VMware SVGA, QXL).
+  - [ ] Extend the framebuffer abstraction to cover GPU-provided scanout surfaces.
+  - [ ] Evaluate 2D/3D acceleration paths (bochs 2D, virtio-gpu, or a userspace graphics stack); keep the scope experimental.
 - [ ] **Complete ACPI support**
   - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
   - [ ] Parse MADT to provide processor and interrupt-controller information.

@@ -97,6 +97,10 @@
   - [ ] 发现并分配 BAR（内存和 I/O 窗口），不与现有 ISA 设备冲突。
   - [ ] 提供基础的 INTx 中断路由，让 PCI 设备能向 PIC/APIC 发信号。
   - [ ] 按 `docs/zh/11-driver-gaps.md` 用 QEMU `-device` 设备（e1000、ich9-ahci、qemu-xhci、bochs-display）验证。
+- [ ] **增加 GPU 支持**
+  - [ ] 枚举显示类 PCI 设备并识别 GPU 候选（bochs-display、virtio-gpu、VMware SVGA、QXL）。
+  - [ ] 扩展 framebuffer 抽象以覆盖 GPU 提供的扫描输出表面。
+  - [ ] 评估 2D/3D 加速路径（bochs 2D、virtio-gpu 或用户态图形栈）；范围保持实验性。
 - [ ] **完善 ACPI**
   - [ ] 将 ACPI 表发现、映射、长度/校验和验证整理为通用且有界的接口。
   - [ ] 解析 MADT，提供处理器和中断控制器信息。
