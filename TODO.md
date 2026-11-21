@@ -46,6 +46,11 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces.
   - [ ] Add system calls for file, directory, console, time, and device access.
   - [ ] Add host and QEMU tests for the ABI and invalid-argument handling.
+- [ ] **Implement a signal mechanism**
+  - [ ] Define signal numbers, delivery semantics (synchronous faults vs timer-driven delivery), and per-process pending/blocked signal state.
+  - [ ] Add system calls to send a signal to a process and to register/replace a user-mode handler (or an equivalent event/wait interface).
+  - [ ] Ensure delivery cannot corrupt the `irq_frame` contract or an in-flight syscall; terminate the process on unhandled fatal signals.
+  - [ ] Cover delivery, blocking, and termination with QEMU tests.
 - [ ] **Complete the Shell and migrate it to Ring 3**
   - [ ] Gradually move command parsing, interaction, and built-ins out of the kernel.
   - [ ] Use system calls to access the console, filesystem, processes, and devices.
