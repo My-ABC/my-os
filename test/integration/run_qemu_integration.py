@@ -42,6 +42,7 @@ def main():
         check_ring3_and_builtin_elf(session)
         check_run_from_disk(session)
         print("PASS: QEMU integration suite", flush=True)
+        print("ALL PASS", flush=True)
         return 0
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:
         print(f"FAIL: QEMU integration suite: {error}", file=sys.stderr)

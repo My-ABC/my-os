@@ -12,6 +12,8 @@ def check_ring3_and_builtin_elf(session):
     session.wait_for("RING3 is RUN, procss_id: 1", timeout=5)
     session.pass_check("foreground Ring 3 system-call output")
     session.send_line("bg 1")
+    session.send_line("secho bg-sentinel")
+    session.wait_for("bg-sentinel", timeout=5)
     before = len(session.serial_data)
     session.read_serial(1.3)
     if b"RING3 is RUN, procss_id: 1" in session.serial_data[before:]:
