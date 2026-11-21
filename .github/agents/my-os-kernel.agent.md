@@ -23,7 +23,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `src/kernel.c`: keep the kernel entry and top-level initialization here.
 - `src/arch/x86/`: x86 descriptor tables, interrupt/trap handlers, TSS, and port I/O.
 - `src/mm/`: physical frames, virtual mappings/TLB, and kernel heap allocation.
-- `src/os/`: shell commands, panic handling, ELF loading, Ring 3 processes, and system calls. `syscall_abi.md` (English) and `syscall_abi-zh.md` (Chinese) document the current `int 0x80` call numbers, argument registers, and known ABI limitations.
+- `src/os/`: shell commands, panic handling, ELF loading, Ring 3 processes, and system calls. `syscall_abi.md` (English) and `syscall_abi-zh.md` (Chinese) document the current `int 0x80` call numbers, argument registers, and known ABI limitations. `shell_command.md` (English) and `shell_command-zh.md` (Chinese) document every shell command, its arguments, and FAT32 path semantics.
 - `src/drivers/`: ATA PIO, keyboard, PIC/PIT, RTC, serial, VGA/VBE, ACPI, and font data.
 - `src/fs/`: FAT32 split into `fat32_core.c` (sector/cluster IO, FAT chains, mount), `fat32_name.c` (8.3/LFN/UTF-16 name codec), `fat32_dir.c` (directory entries, paths, mkdir/rmdir), and `fat32.c` (public file operations); shared internals live in `fat32_int.h` (`g_fs`, `g_sector`, `g_cluster`, cross-file prototypes).
 - `src/lib/`: freestanding standard-library string and stdio routines.
