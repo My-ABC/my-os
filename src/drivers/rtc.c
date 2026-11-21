@@ -92,8 +92,10 @@ void rtc_read_time(rtc_time_t *time) {
         }
     }
 
-    // 处理12小时制：12 AM -> 0，12 PM -> 12
-    if (!is_24h) {
+    // 处理12小时制：12 AM -> 0，12 PM -> 12。
+    // 但有些 RTC 的状态位不可靠：12 小时制下小时值只可能是 1-12，
+    // 解码结果 >12 说明实际是 24 小时值，直接采用。
+    if (!is_24h && time->hour <= 12) {
         time->hour %= 12;
         if (is_pm) {
             time->hour += 12;
