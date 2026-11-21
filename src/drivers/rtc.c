@@ -69,16 +69,6 @@ void rtc_read_time(rtc_time_t *time) {
         time->hour &= 0x7F;
     }
 
-    serial_print("[RTC] raw statusB=0x");
-    serial_print_hex(status_b);
-    serial_print(" is_bcd=");
-    serial_print_dec(is_bcd);
-    serial_print(" is_24h=");
-    serial_print_dec(is_24h);
-    serial_print(" hour=");
-    serial_print_dec(time->hour);
-    serial_print("\n");
-
     // 转换BCD码为十进制
     if (is_bcd) {
         time->second = bcd_to_dec(time->second);
