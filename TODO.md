@@ -166,10 +166,13 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Check VMX support via CPUID and enable VMX operation (CR4.VMXE, VMXON region).
   - [ ] Build minimal VMCS setup to run a guest in VMX non-root operation.
   - [ ] Define goals first (e.g. userspace sandboxing vs. a full hypervisor); do not start without a concrete use case.
-- [ ] **Port a standard user-space environment**
+- [ ] **Define the user-space ABI and toolchain**
   - [ ] Design and stabilize the system-call ABI required by libc.
-  - [ ] Port musl libc.
   - [ ] Establish a basic user-space compile, link, and packaging toolchain.
+- [ ] **Port musl libc**
+  - [ ] Port musl libc and adapt its syscall layer to MyOS.
+  - [ ] Validate core libc facilities (stdio, malloc, string, time) with tests.
+- [ ] **Port user-space command-line tools**
   - [ ] Port and validate a set of basic command-line tools.
 
 ## 64-bit Mode
