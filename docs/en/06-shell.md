@@ -27,7 +27,9 @@ via `start_shell()`.
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped, an unterminated
-  quote runs to end of line).
+  quote runs to end of line). Every argument then goes through
+  `shell_unescape_arg()`: `\n` becomes a real newline and `\\` a literal
+  backslash; any other `\x` sequence is left untouched.
 - Dispatch is an exact `strcmp` against `cmd_table` (name, handler,
   one-line description); unknown input prints `Unknown command`.
 - Prompt: `myos <cwd> > ` when FAT32 is mounted, `myos > ` otherwise.

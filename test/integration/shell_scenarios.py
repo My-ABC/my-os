@@ -62,6 +62,24 @@ def check_shell_quoted_args(session):
     session.pass_check("shell double quotes preserve spaces inside an argument")
 
 
+def check_shell_escapes(session):
+    # \n becomes a real newline and \\ a literal backslash inside args.
+    session.send_line("write esc a\\nb")
+    session.wait_for("Wrote 3 bytes to /esc", timeout=10)
+    esc_read = len(session.serial_data)
+    session.send_line("cat esc")
+    # serial_putchar expands '\n' to CRLF on the wire
+    session.wait_for_regex(b"a\r\nb", start=esc_read)
+    session.send_line("rm esc")
+    session.send_line("write esc2 x\\\\y")
+    session.wait_for("Wrote 3 bytes to /esc2", timeout=10)
+    esc2_read = len(session.serial_data)
+    session.send_line("cat esc2")
+    session.wait_for_regex(b"x\\\\y", start=esc2_read)
+    session.send_line("rm esc2")
+    session.pass_check("shell \\n and \\\\ escapes expand in arguments")
+
+
 def check_storage_and_shell(session):
     session.send_line("disk")
     session.wait_for("ATA primary master and FAT32 filesystem initialized")

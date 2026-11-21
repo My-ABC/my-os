@@ -104,6 +104,25 @@ static int split_line(char *line, char *argv[], int max_args) {
     return argc;
 }
 
+// 展开参数中的转义序列（原地压缩）: \n -> 换行, \\ -> 反斜杠;
+// 其余 \x 保持原样, 行尾单独的 \ 也按字面量处理。
+static void shell_unescape_arg(char *arg) {
+    char *r = arg;
+    char *w = arg;
+    while (*r != '\0') {
+        if (*r == '\\' && r[1] == 'n') {
+            *w++ = '\n';
+            r += 2;
+        } else if (*r == '\\' && r[1] == '\\') {
+            *w++ = '\\';
+            r += 2;
+        } else {
+            *w++ = *r++;
+        }
+    }
+    *w = '\0';
+}
+
 // 命令实现
 int cmd_time(int argc, char *argv[]) {
     rtc_time_t now;
@@ -1006,6 +1025,9 @@ void start_shell(void) {
         shell_read_line(line, sizeof(line));
         shell_history_push(line);
         argc = split_line(line, argv, 16);
+        for (int i = 0; i < argc; ++i) {
+            shell_unescape_arg(argv[i]);
+        }
         if (argc == 0) continue;
         int found = 0;
         for (int i = 0; cmd_table[i].name != NULL; i++) {

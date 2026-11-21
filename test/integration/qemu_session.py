@@ -131,6 +131,7 @@ class QemuSession:
             "_": "shift-minus",
             "/": "slash",
             '"': "shift-apostrophe",
+            "\\": "backslash",
             "\n": "ret",
         }
         return key_names.get(char, char)
@@ -138,7 +139,7 @@ class QemuSession:
     def send_named_key(self, key):
         if not (key in ("spc", "dot", "minus", "shift-minus",
                         "slash", "ret", "left", "right", "up", "down",
-                        "backspace", "shift-apostrophe") or
+                        "backspace", "shift-apostrophe", "backslash") or
                 re.fullmatch(r"[a-z0-9]", key)):
             raise IntegrationFailure(f"unsupported test key: {key!r}")
         self.send_key(key)
