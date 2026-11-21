@@ -10,6 +10,7 @@ from pathlib import Path
 
 from common import IntegrationFailure, ROOT
 from fat32_image import create_test_disk
+from framework import QemuTestCase
 from qemu_session import QemuSession
 from page_fault_scenarios import (
     check_kernel_fault_panic,
@@ -18,12 +19,9 @@ from page_fault_scenarios import (
 )
 from ring3_scenarios import check_ring3_and_builtin_elf
 from shell_scenarios import (
+    ShellInputEditingTest,
     check_fs_syscalls,
     check_run_from_disk,
-    check_shell_history,
-    check_shell_line_editing,
-    check_shell_escapes,
-    check_shell_quoted_args,
     check_startup,
     check_storage_and_shell,
 )
@@ -32,12 +30,27 @@ from shell_scenarios import (
 DEFAULT_TIMEOUT = 150.0
 
 
+def _run_check(check, session):
+    if isinstance(check, type) and issubclass(check, QemuTestCase):
+        case = check(session)
+        case.setUp()
+        try:
+            for name in sorted(dir(case)):
+                if name.startswith("test_"):
+                    getattr(case, name)()
+                    session.pass_check(f"{check.__name__}.{name}")
+        finally:
+            case.tearDown()
+    else:
+        check(session)
+
+
 def run_session(checks, qemu, kernel, disk, timeout):
     session = QemuSession(qemu, kernel, disk, timeout)
     try:
         session.start()
         for check in checks:
-            check(session)
+            _run_check(check, session)
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:
         print(f"FAIL: {error}", file=sys.stderr)
         print(session.diagnostics(), file=sys.stderr)
@@ -50,10 +63,7 @@ def run_main_session(qemu, kernel, disk, timeout):
     run_session(
         [
             check_startup,
-            check_shell_history,
-            check_shell_line_editing,
-            check_shell_quoted_args,
-            check_shell_escapes,
+            ShellInputEditingTest,
             check_storage_and_shell,
             check_ring3_and_builtin_elf,
             check_run_from_disk,
