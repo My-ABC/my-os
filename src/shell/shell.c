@@ -10,6 +10,7 @@
 #include "serial.h"
 #include "paging.h"
 #include "ring3.h"
+#include "signal.h"
 #include "elf.h"
 #include "vbe.h"
 #include "ata.h"
@@ -931,6 +932,16 @@ static void shell_read_line(char *line, int size) {
         }
 
         char c = keyboard_getchar();
+        if (c == KEYBOARD_KEY_SIGINT) {
+            uint32_t fg = ring3_foreground_pid();
+            if (fg != 0U) {
+                ring3_signal_send(fg, SIGINT);
+                serial_print("[SHELL] Sent SIGINT to PID ");
+                serial_print_dec(fg);
+                serial_putchar('\n');
+            }
+            continue;
+        }
         if (!origin_valid) {
             /* No prompt origin (foreground Ring 3 task): keep the old
              * append-only echo behavior and ignore editing keys. */

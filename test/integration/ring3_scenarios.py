@@ -27,15 +27,17 @@ def check_ring3_and_builtin_elf(session):
     if b"RING3 is RUN, procss_id: 1" in session.serial_data[before:]:
         raise IntegrationFailure("Ring 3 output continued after bg 1")
     session.pass_check("background command suppresses Ring 3 output")
-    session.send_line("kill 1")
-    session.wait_for("[RING3] Killed PID 1")
+    session.send_line("fg 1")
+    # Ctrl+C delivers SIGINT to the foreground process and kills it.
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    session.monitor_read_until(b"(qemu)", 3)
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 1 DEAD", start=ps_start)
+    session.wait_for_regex(rb"\[PS\] 1 DEAD", start=ps_start, timeout=8)
     if b"[PS] 1 READY" in session.serial_data[ps_start:] or \
             b"[PS] 1 RUNNING" in session.serial_data[ps_start:]:
-        raise IntegrationFailure("killed Ring 3 process remains runnable")
-    session.pass_check("kill reclaims a Ring 3 process")
+        raise IntegrationFailure("SIGINT-killed Ring 3 process remains runnable")
+    session.pass_check("Ctrl+C SIGINT terminates the foreground Ring 3 process")
 
     session.send_line("elf")
     session.wait_for("[ELF] Loaded ELF32 entry=", timeout=8)
