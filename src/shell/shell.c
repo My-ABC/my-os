@@ -85,14 +85,31 @@ static int split_line(char *line, char *argv[], int max_args) {
         while (*p == ' ') p++;
         if (*p == '\0') break;
         if (*p == '"') {
+            /* 找闭引号时跳过 \" 转义, 它不结束引号 */
             char *close = p + 1;
-            while (*close != '\0' && *close != '"') ++close;
+            while (*close != '\0') {
+                if (*close == '\\' && close[1] != '\0') {
+                    close += 2;
+                    continue;
+                }
+                if (*close == '"') break;
+                ++close;
+            }
             /* 引号分组要求非空内容; "" 和未闭合的 " 都按字面量处理 */
             if (*close == '"' && close != p + 1) {
                 argv[argc++] = ++p;
-                while (*p != '"') ++p;
-                *p = '\0';
-                ++p;
+                while (*p != '\0') {
+                    if (*p == '\\' && p[1] != '\0') {
+                        p += 2;
+                        continue;
+                    }
+                    if (*p == '"') break;
+                    ++p;
+                }
+                if (*p == '"') {
+                    *p = '\0';
+                    ++p;
+                }
                 continue;
             }
         }

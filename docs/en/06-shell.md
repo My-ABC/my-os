@@ -28,7 +28,8 @@ via `start_shell()`.
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped), but only when the
   quoted content is non-empty — `""`, unterminated `"`, and `"` anywhere
-  else in a word are all literal. Every argument then goes through
+  else in a word are all literal. `\"` inside a quoted argument does not
+  close it. Every argument then goes through
   `shell_unescape_arg()`: `\n` becomes a real newline, `\\` a literal
   backslash, and `\"` a literal `"`; any other `\x` sequence prints an
   `unknown escape` warning and is kept literally.

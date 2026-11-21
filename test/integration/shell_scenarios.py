@@ -91,6 +91,13 @@ def check_shell_escapes(session):
     session.wait_for('"""', timeout=10)
     session.send_line('secho \\"\\"\\"')
     session.wait_for('"""', timeout=10)
+    # \" inside quotes does not terminate the quoted argument.
+    q1 = len(session.serial_data)
+    session.send_line('secho "\\"\\""')
+    session.wait_for_regex(b'""\r?\n', start=q1, timeout=10)
+    q2 = len(session.serial_data)
+    session.send_line('secho "\\""')
+    session.wait_for_regex(b'"\r?\n', start=q2, timeout=10)
     session.pass_check("shell \\n, \\\\, and \\\" escapes expand in arguments")
 
 
