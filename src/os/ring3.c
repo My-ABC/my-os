@@ -6,8 +6,9 @@
 #define RING3_KERNEL_STACK_SIZE 8192U
 #define USER_DATA_SELECTOR      0x23U
 #define USER_CODE_SELECTOR      0x1BU
-#define USER_STACK_TOP_0        0x00802000U
-#define USER_STACK_TOP_1        0x00804000U
+#define USER_STACK_SIZE         0x8000U
+#define USER_STACK_TOP_0        0x00810000U
+#define USER_STACK_TOP_1        0x00820000U
 
 struct ring3_process {
     uint32_t pid;
@@ -58,11 +59,13 @@ static void irq_restore(uint32_t flags) {
 }
 
 static void release_user_stack(uint32_t stack_top) {
-    uint32_t address = stack_top - PAGE_SIZE;
-    uint64_t physical = paging_get_page_physical(address);
-    if (physical != 0U) {
-        paging_unmap_page(address);
-        pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
+    for (uint32_t address = stack_top - USER_STACK_SIZE;
+         address < stack_top; address += PAGE_SIZE) {
+        uint64_t physical = paging_get_page_physical(address);
+        if (physical != 0U) {
+            paging_unmap_page(address);
+            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
+        }
     }
 }
 
@@ -104,9 +107,9 @@ static int ring3_schedule_internal(void (*func)(void),
           (image_end & (PAGE_SIZE - 1U)) != 0U ||
           image_end > USER_SPACE_END ||
           (image_start < USER_STACK_TOP_0 &&
-           image_end > USER_STACK_TOP_0 - PAGE_SIZE) ||
+           image_end > USER_STACK_TOP_0 - USER_STACK_SIZE) ||
           (image_start < USER_STACK_TOP_1 &&
-           image_end > USER_STACK_TOP_1 - PAGE_SIZE)))) {
+           image_end > USER_STACK_TOP_1 - USER_STACK_SIZE)))) {
         irq_restore(flags);
         return -1;
     }
@@ -267,6 +270,39 @@ int ring3_set_background(uint32_t pid) {
     }
     irq_restore(flags);
     return -1;
+}
+
+int ring3_user_range_permitted(uint32_t addr) {
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        struct ring3_process *process = &processes[i];
+        if (process->state != RING3_PROCESS_READY &&
+            process->state != RING3_PROCESS_RUNNING) {
+            continue;
+        }
+        if (process->image_start != 0U &&
+            addr >= process->image_start && addr < process->image_end) {
+            return 1;
+        }
+        if (addr >= process->user_stack_top - USER_STACK_SIZE &&
+            addr < process->user_stack_top) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+struct irq_frame *ring3_terminate_current(void) {
+    if (current_process < 0) return 0;
+    struct ring3_process *process = &processes[(uint32_t)current_process];
+    uint32_t pid = process->pid;
+    process->state = RING3_PROCESS_DEAD;
+    if (foreground_pid == pid) foreground_pid = 0U;
+    release_process_resources(process);
+    current_process = -1;
+    tss_set_kernel_stack((uint32_t)stack_top);
+    struct irq_frame *frame = kernel_frame;
+    kernel_frame = 0;
+    return frame;
 }
 
 int ring3_kill(uint32_t pid) {

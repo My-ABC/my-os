@@ -22,6 +22,11 @@
 #define POWER_SHUTDOWN 1
 #define POWER_REBOOT   2
 
+// 用户堆虚拟地址范围（供页错误按需映射做范围判定）
+#define USER_HEAP_START 0x01000000U
+#define USER_HEAP_END   0x40000000U
+uint32_t sys_user_heap_contains(uint32_t addr);
+
 uint32_t sys_call(int call_number, uint32_t arg1, uint32_t arg2, uint32_t arg3);
 void *sys_malloc(uint32_t size);
 void *sys_calloc(uint32_t nmemb, uint32_t size);

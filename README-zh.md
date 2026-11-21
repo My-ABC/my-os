@@ -40,6 +40,7 @@
 
 [下载 myos.iso](https://github.com/My-ABC/my-os/releases/latest/download/myos.iso) · [查看所有 Releases](https://github.com/My-ABC/my-os/releases)
 - **ELF32** — 校验并装载内存中的 i386 ELF 可加载段，支持用户页权限与 BSS 清零；`elf` 命令将其作为前台 Ring 3 任务调度并返回 shell
+- **页错误处理** — ISR14 仅对已登记的用户范围（ELF 镜像、32 KiB 用户栈、用户堆）按需映射并清零页面；非法用户访问或保护违规会终止对应进程，内核态非法缺页进入 panic
 - **SVGA** — `svga_blue` 将 GRUB framebuffer 填充为蓝色
 
 ## 构建

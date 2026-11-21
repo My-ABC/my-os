@@ -17,6 +17,8 @@ uint32_t ring3_process_list(uint32_t *pids, uint32_t *states, uint32_t capacity)
 int ring3_set_foreground(uint32_t pid);
 int ring3_set_background(uint32_t pid);
 int ring3_kill(uint32_t pid);
+int ring3_user_range_permitted(uint32_t addr);
+struct irq_frame *ring3_terminate_current(void);
 
 #define RING3_PROCESS_UNUSED 0U
 #define RING3_PROCESS_READY  1U

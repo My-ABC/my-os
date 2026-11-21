@@ -158,10 +158,15 @@ void kmain(uint32_t multiboot_info) {
             }
         }
 
+    uint64_t test_phys = pmm_alloc_page();
+    paging_map_page(0x00800000U, test_phys,
+                    PAGE_PRESENT | PAGE_WRITABLE);
     uint32_t *test_ptr = (uint32_t *)0x00800000;
     *test_ptr = 0x12345678;
     serial_print("Write succeeded!\n");
     serial_printf("ptr value: %d\n", *test_ptr);
+    paging_unmap_page(0x00800000U);
+    pmm_free_page(test_phys);
 
     vga_print_info("Remapping PIC...");
     pic_remap();

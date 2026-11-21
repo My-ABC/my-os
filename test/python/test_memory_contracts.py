@@ -67,7 +67,8 @@ class MemoryContractTests(unittest.TestCase):
 
     def test_syscall_dispatch_and_user_heap_bounds(self):
         text = source("src/os/syscall.c")
-        self.assertIn("#define USER_HEAP_END   0x40000000U", text)
+        header = source("include/os/syscall.h")
+        self.assertIn("#define USER_HEAP_END   0x40000000U", header)
         self.assertIn("address + pages * PAGE_SIZE < address", text)
         body = function_body(text, "syscall_handler")
         for call in ("SYS_WRITE", "SYS_GETPID", "SYS_MEMORY", "SYS_POWER"):

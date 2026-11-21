@@ -33,13 +33,13 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Kernel, User Space, and System Calls
 
-- [ ] **Complete ISR14 page-fault handling**
-  - [ ] Distinguish user- and kernel-mode faults using the error code and interrupted privilege level.
-  - [ ] Demand-map pages only for registered ELF segments, the user heap, and the user stack.
-  - [ ] Distinguish unmapped pages from protection violations; terminate the process on illegal user access and panic on illegal kernel faults.
-  - [ ] Zero user pages before mapping and correctly release resources when allocation or mapping fails.
-  - [ ] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior.
-  - Existing entry point: [isr14_handler](./src/arch/x86/trap.c).
+- [x] **Complete ISR14 page-fault handling**
+  - [x] Distinguish user- and kernel-mode faults using the error code and interrupted privilege level.
+  - [x] Demand-map pages only for registered ELF segments, the user heap, and the user stack.
+  - [x] Distinguish unmapped pages from protection violations; terminate the process on illegal user access and panic on illegal kernel faults.
+  - [x] Zero user pages before mapping and correctly release resources when allocation or mapping fails.
+  - [ ] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior. (QEMU covers demand mapping, out-of-range access, and protection violations via `stack.elf`/`faultu.elf`/`faultp.elf`; kernel-fault and OOM paths are implemented but not yet runtime-tested.)
+  - Entry point: [isr14_handler](./src/arch/x86/trap.c).
 - [ ] **Complete the user-space and system-call interfaces**
   - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes.
   - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers.

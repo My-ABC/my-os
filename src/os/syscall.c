@@ -9,8 +9,6 @@
 #include "string.h"
 #include "ring3.h"
 
-#define USER_HEAP_START 0x01000000U
-#define USER_HEAP_END   0x40000000U
 #define USER_BLOCK_MAGIC 0x55534552U
 
 struct user_block {
@@ -175,6 +173,10 @@ static void *user_realloc(void *ptr, uint32_t size) {
     memcpy(new_ptr, ptr, copy_size);
     user_free(ptr);
     return new_ptr;
+}
+
+uint32_t sys_user_heap_contains(uint32_t addr) {
+    return addr >= USER_HEAP_START && addr < USER_HEAP_END;
 }
 
 uint32_t syscall_handler() {

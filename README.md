@@ -24,6 +24,7 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
 - **System calls** — Ring 3 can write output and query its process ID with `SYS_GETPID`
 - **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; the `elf` command schedules it as a foreground Ring 3 task and returns to the shell
+- **Page-fault handling** — ISR14 demand-maps only registered user ranges (ELF image, 32 KiB user stack, user heap) with zeroed pages, kills processes on illegal user access or protection violations, and panics on illegal kernel faults
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
 - **Memory paging** — implemented full memory paging.

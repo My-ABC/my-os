@@ -57,7 +57,23 @@ isr14:
     push esp
     call isr14_handler
     add esp, 4
+    test eax, eax
+    jnz .isr14_switch
     pop eax
+    popa
+    add esp, 8
+    iret
+.isr14_switch:
+    ; isr14_handler 返回了要切换到的内核 irq_frame, 复用 IRQ0 的出栈序列
+    mov esp, eax
+    pop eax
+    mov gs, ax
+    pop eax
+    mov fs, ax
+    pop eax
+    mov es, ax
+    pop eax
+    mov ds, ax
     popa
     add esp, 8
     iret

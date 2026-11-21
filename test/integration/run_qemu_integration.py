@@ -11,6 +11,7 @@ from pathlib import Path
 from common import IntegrationFailure, ROOT
 from fat32_image import create_test_disk
 from qemu_session import QemuSession
+from page_fault_scenarios import check_page_faults
 from ring3_scenarios import check_ring3_and_builtin_elf
 from shell_scenarios import (
     check_run_from_disk,
@@ -41,6 +42,7 @@ def main():
         check_storage_and_shell(session)
         check_ring3_and_builtin_elf(session)
         check_run_from_disk(session)
+        check_page_faults(session)
         print("PASS: QEMU integration suite", flush=True)
         print("ALL PASS", flush=True)
         return 0
