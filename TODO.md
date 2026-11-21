@@ -131,7 +131,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Implement IPv4, routing, and basic ICMP.
   - [ ] Implement UDP.
   - [ ] Implement TCP state, retransmission, flow control, and connection management.
-- [ ] **Add experimental IPv6 support**
+- [ ] **Add IPv6 support** (experimental)
   - [ ] Implement ICMPv6, Neighbor Discovery, and stateless autoconfiguration for a single link.
   - [ ] Add IPv6 support on top of the user-space socket interface.
 - [ ] **Design the user-space socket interface**
