@@ -10,6 +10,9 @@ global fault_demo_end
 ;   0 = stack.elf  : grow the user stack to force demand mapping, then halt
 ;   1 = faultu.elf : print a marker, then touch an unregistered user address
 ;   2 = faultp.elf : print a marker, then write to its own read-only code page
+;   3 = oom.elf    : exhaust the user heap, then fault until demand mapping fails
+;   4 = kfault.elf : pass an unregistered user pointer to SYS_WRITE so the
+;                    kernel faults while dereferencing it (panic demo)
 %ifndef FAULT_MODE
 %define FAULT_MODE 0
 %endif
@@ -20,6 +23,8 @@ global fault_demo_end
 %define VBASE (LOAD_ADDR - 0x100)
 
 %define SYS_WRITE 1
+%define SYS_MEMORY 7
+%define MEMORY_MALLOC 1
 
 fault_demo_start:
     db 0x7F, "ELF", 1, 1, 1, 0
@@ -66,11 +71,51 @@ fault_demo_code:
     mov ebx, unmapped_msg + VBASE
     int 0x80
     mov eax, [0x80000000]
-%else
+%elif FAULT_MODE = 2
     mov eax, SYS_WRITE
     mov ebx, prot_msg + VBASE
     int 0x80
     mov dword [fault_demo_code + VBASE], 0
+%elif FAULT_MODE = 3
+    mov eax, SYS_WRITE
+    mov ebx, oom_msg + VBASE
+    int 0x80
+    ; Drain physical memory through the global user heap. Large blocks go
+    ; first; once they fail, 4 KiB blocks shrink the remainder to at most
+    ; one free page. Blocks are intentionally leaked: heap memory is not
+    ; reclaimed when a process dies.
+    mov ecx, 0x00100000
+.big:
+    mov eax, SYS_MEMORY
+    mov ebx, MEMORY_MALLOC
+    int 0x80
+    test eax, eax
+    jnz .big
+    mov ecx, 0x00001000
+.small:
+    mov eax, SYS_MEMORY
+    mov ebx, MEMORY_MALLOC
+    int 0x80
+    test eax, eax
+    jnz .small
+    ; 0x30000000 sits inside USER_HEAP_* but was never allocated, so each
+    ; touch is a permitted demand-map fault. With the PMM empty the handler
+    ; must kill this process instead of mapping the page.
+    mov edi, 0x30000000
+.touch:
+    mov dword [edi], 0x4F4F4D21
+    add edi, 0x1000
+    cmp edi, 0x3FF00000
+    jb .touch
+%else
+    mov eax, SYS_WRITE
+    mov ebx, kfault_msg + VBASE
+    int 0x80
+    ; 0x50000000 is a user address outside every registered range; the
+    ; syscall handler dereferences it in kernel mode and must panic.
+    mov eax, SYS_WRITE
+    mov ebx, 0x50000000
+    int 0x80
 %endif
 .halt:
     jmp .halt
@@ -78,6 +123,8 @@ fault_demo_code:
 stack_ok:     db "STACK-OK", 10, 0
 unmapped_msg: db "UNMAPPED-NEXT", 10, 0
 prot_msg:     db "PROT-NEXT", 10, 0
+oom_msg:      db "OOM-NEXT", 10, 0
+kfault_msg:   db "KFAULT-NEXT", 10, 0
 
     times 0x200 - ($ - fault_demo_start) db 0
 fault_demo_end:

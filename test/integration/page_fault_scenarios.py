@@ -48,3 +48,52 @@ def check_page_faults(session):
     session.send_line("secho page-fault-suite-ok")
     session.wait_for("page-fault-suite-ok")
     session.pass_check("shell survives page-fault process termination")
+
+
+def check_user_oom(session):
+    # oom.elf drains the user heap through SYS_MEMORY until the PMM is
+    # empty, then touches permitted-but-unmapped heap pages. The demand
+    # mapper must fail and kill only that process. Heap blocks leak on
+    # process death, so this scenario must stay last in the session: no
+    # later check may need fresh physical pages.
+    oom_start = len(session.serial_data)
+    session.send_line("run oom.elf")
+    session.wait_for_regex(rb"OOM-NEXT", start=oom_start, timeout=15)
+    session.wait_for_regex(
+        rb"\[PAGE FAULT\] Out of memory for user page",
+        start=oom_start, timeout=60,
+    )
+    session.pass_check("out-of-memory demand-map fault terminates the process")
+
+    ps_start = len(session.serial_data)
+    session.send_line("ps")
+    session.wait_for_regex(rb"\[PS\] 8 DEAD", start=ps_start, timeout=5)
+    session.pass_check("oom.elf is reaped after the out-of-memory kill")
+
+    session.send_line("secho oom-suite-ok")
+    session.wait_for("oom-suite-ok")
+    session.pass_check("shell survives the out-of-memory termination")
+
+
+def check_kernel_fault_panic(session):
+    # kfault.elf passes an unregistered user pointer to SYS_WRITE; the
+    # syscall handler dereferences it in kernel mode, which must panic.
+    # A panic reboots the machine, so this scenario needs a fresh session
+    # and must run after all other checks.
+    session.wait_for("MyOS v0.0.1", timeout=15)
+    session.wait_for(
+        "[DISK] ATA primary master and FAT32 filesystem initialized",
+        timeout=10,
+    )
+    session.read_serial(0.5)
+    session.send_line("secho panic-suite-ready")
+    session.wait_for("panic-suite-ready")
+
+    panic_start = len(session.serial_data)
+    session.send_line("run kfault.elf")
+    session.wait_for_regex(rb"KFAULT-NEXT", start=panic_start, timeout=10)
+    session.wait_for("*** STOP: KERNEL PANIC ***", timeout=10)
+    session.wait_for_regex(
+        rb"Illegal kernel page fault", start=panic_start, timeout=10,
+    )
+    session.pass_check("kernel-mode page fault panics with a register dump")

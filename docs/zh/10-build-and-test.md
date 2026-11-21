@@ -38,9 +38,11 @@
 socket 读取输出（`qemu_session.py`）。场景模块：`shell_scenarios.py`
 （启动、存储、`cp`/`mv`/`cp -r`、LFN 大小写）、`ring3_scenarios.py`、
 `page_fault_scenarios.py`（`fault_demo.asm` 汇编出的
-`stack.elf`/`faultu.elf`/`faultp.elf`）。全部通过时输出
-`PASS: QEMU integration suite` 和 `ALL PASS`；`DEFAULT_TIMEOUT`
-为 150 秒。
+`stack.elf`/`faultu.elf`/`faultp.elf`/`oom.elf`/`kfault.elf`）。全部
+通过时输出 `PASS: QEMU integration suite` 和 `ALL PASS`；
+`DEFAULT_TIMEOUT` 为 150 秒。测试使用两个 QEMU 会话：主套件以用户堆
+OOM 杀进程收尾（堆块在进程死亡时泄漏，后续检查不能再申请新页），
+内核态缺页 panic 由独立的第二个会话验证，因为 panic 会重启机器。
 
 ## 高位内存测试（`make test-qemu-highmem`）
 

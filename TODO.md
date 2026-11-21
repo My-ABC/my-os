@@ -38,7 +38,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [x] Demand-map pages only for registered ELF segments, the user heap, and the user stack.
   - [x] Distinguish unmapped pages from protection violations; terminate the process on illegal user access and panic on illegal kernel faults.
   - [x] Zero user pages before mapping and correctly release resources when allocation or mapping fails.
-  - [ ] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior. (QEMU covers demand mapping, out-of-range access, and protection violations via `stack.elf`/`faultu.elf`/`faultp.elf`; kernel-fault and OOM paths are implemented but not yet runtime-tested.)
+  - [x] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior. (QEMU covers all five via `stack.elf`/`faultu.elf`/`faultp.elf`/`oom.elf`/`kfault.elf`; the kernel-fault panic runs in a dedicated second session because it reboots the machine.)
   - Entry point: [isr14_handler](./src/arch/x86/trap.c).
 - [ ] **Complete the user-space and system-call interfaces**
   - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes.

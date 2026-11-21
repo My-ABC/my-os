@@ -114,7 +114,8 @@ def create_test_disk(directory):
     add_root_file(disk_path, "demo.elf", demo_path.read_bytes())
 
     for mode, filename in ((0, "stack.elf"), (1, "faultu.elf"),
-                           (2, "faultp.elf")):
+                           (2, "faultp.elf"), (3, "oom.elf"),
+                           (4, "kfault.elf")):
         fault_path = Path(directory) / filename
         subprocess.run(
             [nasm, "-f", "bin", f"-DFAULT_MODE={mode}",

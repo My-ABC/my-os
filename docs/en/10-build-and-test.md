@@ -40,9 +40,14 @@ plus `-MMD -MP` dependency tracking. Optional defines: `PANIC_DEMO`,
 monitor `sendkey`, and reads output over the serial TCP socket
 (`qemu_session.py`). Scenario modules: `shell_scenarios.py` (boot,
 storage, `cp`/`mv`/`cp -r`, LFN case), `ring3_scenarios.py`,
-`page_fault_scenarios.py` (`stack.elf`/`faultu.elf`/`faultp.elf` from
-`fault_demo.asm`). A passing run ends with `PASS: QEMU integration
-suite` and `ALL PASS`; `DEFAULT_TIMEOUT` is 150 s.
+`page_fault_scenarios.py` (`stack.elf`/`faultu.elf`/`faultp.elf`/
+`oom.elf`/`kfault.elf` from `fault_demo.asm`). A passing run ends with
+`PASS: QEMU integration suite` and `ALL PASS`; `DEFAULT_TIMEOUT` is
+150 s. Two QEMU sessions are used: the main suite ends with the
+user-heap OOM kill (heap blocks leak on process death, so no later
+check may need fresh pages), and a dedicated second session verifies
+that a kernel-mode page fault panics, since the panic reboots the
+machine.
 
 ## High-memory test (`make test-qemu-highmem`)
 
