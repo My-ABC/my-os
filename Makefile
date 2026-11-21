@@ -8,7 +8,7 @@ AS := $(shell if command -v nasm >/dev/null 2>&1; then echo nasm; else echo "nas
 
 
 INCLUDE_DIRS = include include/arch/x86 include/drivers include/fs include/lib \
-	include/mm include/os
+	include/mm include/os include/shell
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g \
 	$(addprefix -I,$(INCLUDE_DIRS))
 CFLAGS += -MMD -MP

@@ -196,7 +196,8 @@ boot/             Multiboot header, startup, and interrupt stubs (NASM)
 src/kernel.c      kernel initialization and top-level startup
 src/arch/x86/     x86 descriptors, interrupts, and port I/O
 src/mm/           physical/virtual memory and heap
-src/os/           shell, ELF loading, Ring 3, and system calls
+src/os/           ELF loading, Ring 3, and system calls
+src/shell/        interactive shell and command reference
 src/drivers/      ATA, console, keyboard, timer, RTC, and display drivers
 src/fs/           FAT32 filesystem
 src/lib/          freestanding C library routines

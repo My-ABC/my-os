@@ -174,7 +174,8 @@ boot/             Multiboot 头、启动代码和中断桩 (NASM)
 src/kernel.c      内核初始化和顶层启动流程
 src/arch/x86/     x86 描述符、中断和端口 I/O
 src/mm/           物理/虚拟内存与堆
-src/os/           shell、ELF 装载、Ring 3 和系统调用
+src/os/           ELF 装载、Ring 3 和系统调用
+src/shell/        交互式 shell 与命令参考
 src/drivers/      ATA、控制台、键盘、定时器、RTC 和显示驱动
 src/fs/           FAT32 文件系统
 src/lib/          freestanding C 标准库函数

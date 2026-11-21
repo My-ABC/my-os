@@ -11,7 +11,7 @@ def fat32_source():
 
 class StorageAndShellContractTests(unittest.TestCase):
     def test_shell_commands_and_argument_count_sentinel(self):
-        text = source("src/os/shell.c")
+        text = source("src/shell/shell.c")
         for command in ('{"time"', '{"panic"', '{"ring3"', '{"kill"', '{"elf"',
                         '{"disk"', '{"ls"', '{"cat"', '{"write"', '{"cp"',
                         '{"mv"', '{"rm"', '{"cd"', '{"mkdir"', '{"rmdir"',
@@ -23,7 +23,7 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn("argv[argc] = NULL", body)
 
     def test_shell_cd_normalizes_parent_path_and_prompt_shows_current_directory(self):
-        text = source("src/os/shell.c")
+        text = source("src/shell/shell.c")
         resolver = function_body(text, "disk_resolve_path")
         self.assertIn("component_length == 2U", resolver)
         self.assertIn("output[output_length - 1U] != '/'", resolver)
@@ -35,12 +35,12 @@ class StorageAndShellContractTests(unittest.TestCase):
                       function_body(text, "cmd_cd"))
 
     def test_ls_defaults_to_current_path_and_accepts_explicit_path(self):
-        body = function_body(source("src/os/shell.c"), "cmd_ls")
+        body = function_body(source("src/shell/shell.c"), "cmd_ls")
         self.assertIn("argc > 1 ? argv[1] : disk_cwd", body)
         self.assertIn("fat32_list_directory(path, fat32_print_entry)", body)
 
     def test_cp_recursive_uses_two_pass_directory_walk(self):
-        text = source("src/os/shell.c")
+        text = source("src/shell/shell.c")
         body = function_body(text, "cmd_cp")
         self.assertIn('strcmp(argv[1], "-r") == 0', body)
         self.assertIn("cp_recursive_copy(src, dst_final, 0U)", body)
@@ -52,7 +52,7 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn("int fat32_is_directory(const char *path)", fat32)
 
     def test_rmdir_force_option_uses_recursive_directory_removal(self):
-        body = function_body(source("src/os/shell.c"), "cmd_rmdir")
+        body = function_body(source("src/shell/shell.c"), "cmd_rmdir")
         self.assertIn('strcmp(argv[1], "-f") == 0', body)
         self.assertIn("fat32_remove_directory_recursive(path)", body)
         self.assertIn("disk_path_contains_current(path)", body)
