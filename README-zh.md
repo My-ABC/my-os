@@ -1,4 +1,4 @@
-[English](README.md) | 中文
+[English](README.md) | 中文 | [文档](docs/zh/)
 
 # MyOS
 
