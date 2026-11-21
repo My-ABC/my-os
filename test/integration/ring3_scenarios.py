@@ -32,6 +32,7 @@ def check_ring3_and_builtin_elf(session):
     session.monitor.sendall(b"sendkey ctrl-c\n")
     session.monitor_read_until(b"(qemu)", 3)
     session.wait_for("^C", timeout=5)
+    # Note: the redrawn prompt is VGA-only and not visible on serial.
     ps_start = len(session.serial_data)
     session.send_line("ps")
     session.wait_for_regex(rb"\[PS\] 1 DEAD", start=ps_start, timeout=8)

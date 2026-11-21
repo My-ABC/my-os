@@ -363,6 +363,23 @@ int cmd_kill(int argc, char *argv[]) {
     return 0;
 }
 
+/* Map elf_run/elf32_load result codes to distinct messages. */
+static void shell_print_elf_error(int result) {
+    const char *msg;
+    switch (result) {
+        case -1: msg = "not an ELF32 image"; break;
+        case -2: msg = "unsupported ELF class, type, or machine"; break;
+        case -3: msg = "malformed ELF headers"; break;
+        case -4: msg = "invalid program segment"; break;
+        case -5: msg = "no valid entry point"; break;
+        case -6: msg = "image address range already in use"; break;
+        case -7: msg = "out of memory while loading"; break;
+        case -8: msg = "cannot start process (slots full or out of memory)"; break;
+        default: msg = "unknown error"; break;
+    }
+    printf("ELF32 load failed: %s\n", msg);
+}
+
 int cmd_elf(int argc, char *argv[]) {
     uint32_t size = (uint32_t)(elf_demo_end - elf_demo_start);
     int result;
@@ -371,7 +388,7 @@ int cmd_elf(int argc, char *argv[]) {
 
     result = elf_run(elf_demo_start, size);
     if (result != 0) {
-        printf("ELF32 load failed\n");
+        shell_print_elf_error(result);
         return result;
     }
     return 0;
@@ -828,11 +845,15 @@ int cmd_run(int argc, char *argv[]) {
     }
     uint32_t size = 0U;
     int result = fat32_read_file(path, image, FAT32_MAX_FILE_SIZE, &size);
-    if (result == 0) result = elf_run(image, size);
-    kfree(image);
     if (result != 0) {
-        printf("Failed to load ELF32 file %s\n", path);
+        printf("Failed to read file %s\n", path);
+    } else {
+        result = elf_run(image, size);
+        if (result != 0) {
+            shell_print_elf_error(result);
+        }
     }
+    kfree(image);
     return result;
 }
 
@@ -942,6 +963,14 @@ static void shell_read_line(char *line, int size) {
                 serial_print_dec(fg);
                 serial_putchar('\n');
             }
+            /* Discard the line being edited; the loop redraws the
+             * prompt once no foreground process remains. */
+            length = 0;
+            cursor = 0;
+            history_index = -1;
+            line[0] = '\0';
+            prompt_visible = 0;
+            origin_valid = 0;
             continue;
         }
         if (!origin_valid) {
