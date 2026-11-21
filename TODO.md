@@ -129,6 +129,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Implement link and network protocols**
   - [ ] Implement Ethernet and ARP.
   - [ ] Implement IPv4, routing, and basic ICMP.
+  - [ ] Implement ICMP echo request/reply so user programs can implement `ping`.
   - [ ] Implement UDP.
   - [ ] Implement TCP state, retransmission, flow control, and connection management.
 - [ ] **Add IPv6 support** (experimental)
@@ -136,7 +137,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Add IPv6 support on top of the user-space socket interface.
 - [ ] **Design the user-space socket interface**
   - [ ] Define the syscall/socket ABI for user programs.
-  - [ ] Implement user-space network tools and validate them with QEMU user-mode networking.
+  - [ ] Implement user-space network tools (including `ping`) and validate them with QEMU user-mode networking.
 
 ## Graphics and GUI
 
