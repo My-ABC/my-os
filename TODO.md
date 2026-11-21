@@ -105,6 +105,10 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Concurrency and Memory
 
+- [ ] **Add SSE support**
+  - [ ] Enable SSE in CR4/XCR0 as needed and validate availability (CPUID).
+  - [ ] Provide aligned/unaligned load-store and arithmetic helpers for kernel and user code.
+  - [ ] Add QEMU tests covering SSE context save/restore across context switches.
 - [ ] **Implement SMP / multicore support**
   - [ ] Enumerate processors through MADT and start application processors.
   - [ ] Add per-CPU state, Local APIC timers, and inter-processor interrupts.
