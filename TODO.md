@@ -174,6 +174,8 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Validate core libc facilities (stdio, malloc, string, time) with tests.
 - [ ] **Port user-space command-line tools**
   - [ ] Port and validate a set of basic command-line tools.
+- [ ] **Port glibc**
+  - > **Deprecated — not planned for now.** glibc's dynamic-linker, NSS, and locale architecture is far heavier than musl; revisit only if a concrete program requires glibc-only extensions.
 
 ## 64-bit Mode
 
