@@ -77,6 +77,15 @@ def check_shell_escapes(session):
     session.send_line("cat esc2")
     session.wait_for_regex(b"x\\\\y", start=esc2_read)
     session.send_line("rm esc2")
+    # Unterminated quote stays literal; mid-word quote is literal too.
+    session.send_line('secho "111')
+    session.wait_for('"111', timeout=10)
+    session.send_line('secho 111"')
+    session.wait_for('111"', timeout=10)
+    # Invalid escape warns, then the argument is kept literal.
+    session.send_line('secho "111\\y222"')
+    session.wait_for("unknown escape '\\y'", timeout=10)
+    session.wait_for("111\\y222", timeout=10)
     session.pass_check("shell \\n and \\\\ escapes expand in arguments")
 
 

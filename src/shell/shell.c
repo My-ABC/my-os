@@ -85,13 +85,16 @@ static int split_line(char *line, char *argv[], int max_args) {
         while (*p == ' ') p++;
         if (*p == '\0') break;
         if (*p == '"') {
-            argv[argc++] = ++p;
-            while (*p && *p != '"') p++;
-            if (*p == '"') {
+            char *close = p + 1;
+            while (*close != '\0' && *close != '"') ++close;
+            if (*close == '"') {
+                argv[argc++] = ++p;
+                while (*p != '"') ++p;
                 *p = '\0';
-                p++;
+                ++p;
+                continue;
             }
-            continue;
+            /* 未闭合引号: '"' 按字面量处理, 落入普通参数扫描 */
         }
         argv[argc++] = p;
         while (*p && *p != ' ') p++;
@@ -105,7 +108,7 @@ static int split_line(char *line, char *argv[], int max_args) {
 }
 
 // 展开参数中的转义序列（原地压缩）: \n -> 换行, \\ -> 反斜杠;
-// 其余 \x 保持原样, 行尾单独的 \ 也按字面量处理。
+// 其余 \x 保持原样并打印警告, 行尾单独的 \ 也按字面量处理。
 static void shell_unescape_arg(char *arg) {
     char *r = arg;
     char *w = arg;
@@ -117,6 +120,12 @@ static void shell_unescape_arg(char *arg) {
             *w++ = '\\';
             r += 2;
         } else {
+            if (*r == '\\' && r[1] != '\0') {
+                printf("Warning: unknown escape '\\%c' kept literal\n", r[1]);
+                serial_print("Warning: unknown escape '\\");
+                serial_putchar(r[1]);
+                serial_print("' kept literal\n");
+            }
             *w++ = *r++;
         }
     }
