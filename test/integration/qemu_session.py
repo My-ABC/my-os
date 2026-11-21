@@ -127,12 +127,14 @@ class QemuSession:
             " ": "spc",
             ".": "dot",
             "-": "minus",
+            "_": "shift-minus",
             "/": "slash",
             "\n": "ret",
         }
         for char in line + "\n":
             key = key_names.get(char, char)
-            if not (key in ("spc", "dot", "minus", "slash", "ret") or
+            if not (key in ("spc", "dot", "minus", "shift-minus",
+                            "slash", "ret") or
                     re.fullmatch(r"[a-z0-9]", key)):
                 raise IntegrationFailure(f"unsupported test key: {char!r}")
             self.send_key(key)

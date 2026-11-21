@@ -1,3 +1,6 @@
+from common import IntegrationFailure
+
+
 def check_startup(session):
     session.wait_for("MyOS v0.0.1", timeout=15)
     session.wait_for(
@@ -24,6 +27,43 @@ def check_storage_and_shell(session):
     session.send_line("cat testtest")
     session.wait_for("hello")
     session.pass_check("FAT32 file write and read commands")
+
+    session.send_line("write help_aaaaa.1234 lfn works")
+    session.wait_for("[FAT32] Wrote 9 bytes to /help_aaaaa.1234")
+    lfn_ls_start = len(session.serial_data)
+    session.send_line("ls")
+    session.wait_for_regex(
+        rb"\[LS\] ENTRY help_aaaaa\.1234 9 bytes", start=lfn_ls_start
+    )
+    lfn_read_start = len(session.serial_data)
+    session.send_line("cat help_aaaaa.1234")
+    session.wait_for_regex(rb"lfn works", start=lfn_read_start)
+    lfn_delete_start = len(session.serial_data)
+    session.send_line("rm help_aaaaa.1234")
+    session.send_line("ls")
+    session.send_line("secho lfn-removal-check")
+    session.wait_for("lfn-removal-check")
+    if b"[LS] ENTRY help_aaaaa.1234" in session.serial_data[lfn_delete_start:]:
+        raise IntegrationFailure("FAT32 rm left the long filename in the directory")
+    session.pass_check("FAT32 LFN write, list, lookup, and delete")
+
+    session.send_line("mkdir long_directory_name")
+    session.send_line("cd long_directory_name")
+    session.wait_for("[SHELL] CWD /long_directory_name")
+    session.send_line("write child lfn")
+    session.wait_for("[FAT32] Wrote 3 bytes to /long_directory_name/child")
+    session.send_line("cd ..")
+    session.wait_for("[SHELL] CWD /")
+    lfn_directory_delete_start = len(session.serial_data)
+    session.send_line("rmdir -f long_directory_name")
+    session.send_line("ls")
+    session.send_line("secho lfn-directory-removal-check")
+    session.wait_for("lfn-directory-removal-check")
+    if b"[LS] ENTRY long_directory_name/" in \
+            session.serial_data[lfn_directory_delete_start:]:
+        raise IntegrationFailure("FAT32 rmdir left the long directory in place")
+    session.pass_check("FAT32 LFN directory lookup and recursive deletion")
+
     session.send_line("cd missing")
     session.wait_for("[SHELL] Directory not found: /missing")
     session.send_line("ls missing")

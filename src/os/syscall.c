@@ -55,11 +55,11 @@ static uint32_t user_restore_pages(struct user_block *block) {
     for (uint32_t page = 1U; page < block->pages; ++page) {
         uint32_t virtual_addr = block_addr + page * PAGE_SIZE;
         if (paging_get_page_physical(virtual_addr) == 0U) {
-            void *physical = pmm_alloc_page();
-            if (physical == 0) {
+            uint64_t physical = pmm_alloc_page();
+            if (physical == 0U) {
                 return 0;
             }
-            paging_map_page(virtual_addr, (uint32_t)physical,
+            paging_map_page(virtual_addr, physical,
                             PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
         }
     }
@@ -93,20 +93,20 @@ static void *user_alloc(uint32_t size) {
     }
 
     for (uint32_t page = 0; page < pages; ++page) {
-        void *physical = pmm_alloc_page();
-        if (physical == 0) {
+        uint64_t physical = pmm_alloc_page();
+        if (physical == 0U) {
             while (page > 0U) {
                 --page;
                 uint32_t virtual_addr = address + page * PAGE_SIZE;
-                uint32_t physical_addr = paging_get_page_physical(virtual_addr);
+                uint64_t physical_addr = paging_get_page_physical(virtual_addr);
                 paging_unmap_page(virtual_addr);
                 if (physical_addr != 0U) {
-                    pmm_free_page((void *)(physical_addr & ~(PAGE_SIZE - 1U)));
+                    pmm_free_page(physical_addr & ~(uint64_t)(PAGE_SIZE - 1U));
                 }
             }
             return 0;
         }
-        paging_map_page(address + page * PAGE_SIZE, (uint32_t)physical,
+        paging_map_page(address + page * PAGE_SIZE, physical,
                         PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
     }
 
@@ -136,10 +136,10 @@ static void user_free(void *ptr) {
 
     for (uint32_t page = 1U; page < block->pages; ++page) {
         uint32_t virtual_addr = (uint32_t)block + page * PAGE_SIZE;
-        uint32_t physical_addr = paging_get_page_physical(virtual_addr);
+        uint64_t physical_addr = paging_get_page_physical(virtual_addr);
         paging_unmap_page(virtual_addr);
         if (physical_addr != 0U) {
-            pmm_free_page((void *)(physical_addr & ~(PAGE_SIZE - 1U)));
+            pmm_free_page(physical_addr & ~(uint64_t)(PAGE_SIZE - 1U));
         }
     }
 

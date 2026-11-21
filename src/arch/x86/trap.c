@@ -21,9 +21,9 @@ void isr14_handler(struct registers* regs) {
 
     if ((regs->err_code & 0x1U) == 0U) {
         uint32_t flags = PAGE_PRESENT | PAGE_WRITABLE;
-        void *physical_page = pmm_alloc_page();
+        uint64_t physical_page = pmm_alloc_page();
 
-        if (physical_page == 0) {
+        if (physical_page == 0U) {
             panic_blue_screen("Out of physical memory", regs);
             return;
         }
@@ -32,7 +32,7 @@ void isr14_handler(struct registers* regs) {
             flags |= PAGE_USER;
         }
 
-        paging_map_page(fault_addr, (uint32_t)physical_page, flags);
+        paging_map_page(fault_addr, physical_page, flags);
         serial_print("[PAGE FAULT] Allocated and mapped physical page\n");
         return;
     }

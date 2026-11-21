@@ -81,7 +81,7 @@ int main(void) {
     return finish_test_suite("ELF tests");
 }
 
-uint32_t paging_get_page_physical(uint32_t address) {
+uint64_t paging_get_page_physical(uint32_t address) {
     (void)address;
     return 0;
 }
@@ -90,17 +90,17 @@ void paging_unmap_page(uint32_t address) {
     (void)address;
 }
 
-void paging_map_page(uint32_t virtual_addr, uint32_t physical_addr, uint32_t flags) {
+void paging_map_page(uint32_t virtual_addr, uint64_t physical_addr, uint32_t flags) {
     (void)virtual_addr;
     (void)physical_addr;
     (void)flags;
 }
 
-void *pmm_alloc_page(void) {
-    return 0;
+uint64_t pmm_alloc_page(void) {
+    return 0U;
 }
 
-void pmm_free_page(void *address) {
+void pmm_free_page(uint64_t address) {
     (void)address;
 }
 

@@ -25,11 +25,14 @@
 - **系统调用** — Ring 3 可输出文本，并通过 `SYS_GETPID` 查询当前进程 PID
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
+- **PAE 分页** — 使用 64 位 PAE 页目录/页表项、32 字节 PDPT 和 32 位 CR3，并通过映射窗口访问高端物理页与页表。PMM 支持 64 GiB 以下的物理地址（36 位 PAE 上限）；实际可用内存由 Multiboot 内存图决定。当前启动阶段要求 Multiboot 信息块和内存图缓冲区位于低 16 MiB。宿主 PMM 测试覆盖高于 4 GiB 的页分配；QEMU 集成测试目前使用 128 MiB
 - **PMM** — 实现了PMM
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
 - **ATA PIO** — 支持主盘的 LBA28 扇区读取与写入
-- **FAT32** — 支持文件读取、写入、删除及目录创建、删除
+- **FAT32** — 支持文件和目录操作、ASCII 长文件名（LFN，遵循 FAT32 的
+  255 个 UTF-16 代码单元上限）及 8.3 短别名；Shell 路径缓冲区会进一步限制
+  可输入长度；非 ASCII 的 UTF-16LE 字符显示为 `?`
 
 ## 下载
 
@@ -65,7 +68,7 @@ make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并�
 初始化逻辑并尝试挂载 FAT32。`make run` 不会自动创建磁盘镜像；需要磁盘时
 先运行 `make disk`。
 
-测试按用途整理在 `test/` 下：`python/` 放宿主 Python 用例和源码合约检查，`c/` 放宿主 C 测试程序，`shell/` 放各 C 测试对应的独立启动脚本，`support/` 放共享编译器脚本和断言头文件。只在 QEMU 中运行的检查位于 `integration/`，其中入口、QEMU 会话、FAT32 测试镜像和行为场景分别放在独立模块中。`make test` 自动发现 Python 用例，并由它们运行各个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
+测试按用途整理在 `test/` 下：`python/` 放宿主 Python 用例和源码合约检查，`c/` 放宿主 C 测试程序，`shell/` 放各 C 测试对应的独立启动脚本，`support/` 放共享编译器脚本和断言头文件。只在 QEMU 中运行的检查位于 `integration/`，其中入口、QEMU 会话、FAT32 测试镜像和行为场景分别放在独立模块中。`make test` 自动发现 Python 用例，并由它们运行各个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。PMM 宿主测试还会验证 4 GiB 以上物理页的分配与释放。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
 
 `make test` 特意保持为纯宿主机测试，不需要 QEMU 或内核交叉工具链
 （需要 Python 3 和宿主机 `cc`）。`make test-qemu` 需要内核构建工具
@@ -133,6 +136,10 @@ mkdir    创建 FAT32 目录
 rmdir    删除空 FAT32 目录；`rmdir -f <目录>` 递归删除目录及其内容
 run      装载并运行磁盘中的 ELF32 文件
 ```
+
+FAT32 长文件名支持 `help_aaaaa.1234` 这样的 ASCII 名称。磁盘上使用
+UTF-16LE LFN 目录项并关联自动生成的 8.3 短别名。Shell 当前接受 ASCII
+文件名；Shell 路径缓冲区限制可输入长度，非 ASCII 的 UTF-16 字符显示为 `?`。
 
 挂载 FAT32 磁盘时，Shell 提示符会显示当前路径，例如 `myos / >` 或
 `myos /1 >`，运行 `cd ..` 可返回上一级目录。没有挂载 FAT32 磁盘时，

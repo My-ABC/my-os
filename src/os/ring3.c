@@ -59,10 +59,10 @@ static void irq_restore(uint32_t flags) {
 
 static void release_user_stack(uint32_t stack_top) {
     uint32_t address = stack_top - PAGE_SIZE;
-    uint32_t physical = paging_get_page_physical(address);
+    uint64_t physical = paging_get_page_physical(address);
     if (physical != 0U) {
         paging_unmap_page(address);
-        pmm_free_page((void *)(physical & ~(PAGE_SIZE - 1U)));
+        pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
     }
 }
 
@@ -70,10 +70,10 @@ static void release_process_resources(struct ring3_process *process) {
     release_user_stack(process->user_stack_top);
     for (uint32_t address = process->image_start;
          address < process->image_end; address += PAGE_SIZE) {
-        uint32_t physical = paging_get_page_physical(address);
+        uint64_t physical = paging_get_page_physical(address);
         if (physical != 0U) {
             paging_unmap_page(address);
-            pmm_free_page((void *)(physical & ~(PAGE_SIZE - 1U)));
+            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
         }
     }
     process->image_start = 0U;
@@ -123,12 +123,12 @@ static int ring3_schedule_internal(void (*func)(void),
     }
 
     uint32_t stack_top = (i == 0U) ? USER_STACK_TOP_0 : USER_STACK_TOP_1;
-    void *physical = pmm_alloc_page();
-    if (physical == 0) {
+    uint64_t physical = pmm_alloc_page();
+    if (physical == 0U) {
         irq_restore(flags);
         return -1;
     }
-    paging_map_page(stack_top - PAGE_SIZE, (uint32_t)physical,
+    paging_map_page(stack_top - PAGE_SIZE, physical,
                     PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
     if (paging_get_page_physical(stack_top - PAGE_SIZE) == 0U) {
         pmm_free_page(physical);

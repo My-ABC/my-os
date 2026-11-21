@@ -12,10 +12,10 @@ static int elf32_range_valid(uint32_t start, uint32_t length, uint32_t limit) {
 static void elf32_release_pages(uint32_t start, uint32_t end) {
     uint32_t address;
     for (address = start; address < end; address += PAGE_SIZE) {
-        uint32_t physical = paging_get_page_physical(address);
+        uint64_t physical = paging_get_page_physical(address);
         if (physical != 0U) {
             paging_unmap_page(address);
-            pmm_free_page((void *)(physical & ~(PAGE_SIZE - 1U)));
+            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
         }
     }
 }
@@ -59,7 +59,7 @@ int elf32_load(const void *image, uint32_t image_size,
     image_end = PAGE_ALIGN(image_end);
 
     for (uint32_t address = image_start; address < image_end; address += PAGE_SIZE) {
-        void *physical;
+        uint64_t physical;
         uint32_t flags = PAGE_PRESENT | PAGE_USER;
         if (paging_get_page_physical(address) != 0U) return -6;
         for (index = 0U; index < header->phnum; ++index) {
@@ -75,11 +75,11 @@ int elf32_load(const void *image, uint32_t image_size,
             }
         }
         physical = pmm_alloc_page();
-        if (physical == 0) {
+        if (physical == 0U) {
             elf32_release_pages(image_start, address);
             return -7;
         }
-        paging_map_page(address, (uint32_t)physical, flags);
+        paging_map_page(address, physical, flags);
         memset((void *)address, 0, PAGE_SIZE);
     }
 

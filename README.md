@@ -27,11 +27,15 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
 - **Memory paging** — implemented full memory paging.
+- **PAE paging** — 64-bit PAE entries, 32-byte PDPT/32-bit CR3, 4 KiB pages, and a mapping window for accessing high frames and page tables. The PMM supports physical addresses below 64 GiB (36-bit PAE limit); available RAM is determined by the Multiboot map. The boot-time Multiboot info and map buffers must currently be in the first 16 MiB. High-frame PMM allocation is host-tested; QEMU integration currently uses 128 MiB.
 - **PMM** — impl PMM
 - **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
 - **heap allocator(user)** — impl heap allocator in the syscall
 - **ATA PIO** — primary-master LBA28 sector read/write support
-- **FAT32** — file read/write/delete and directory create/remove support
+- **FAT32** — file and directory operations with ASCII long filenames (LFN,
+  up to FAT32's 255 UTF-16 code-unit limit) and 8.3 aliases; current Shell
+  buffers impose a lower path limit, and UTF-16LE names outside ASCII display
+  as `?`
 
 ## Download
 
@@ -74,8 +78,9 @@ tests and small source-contract suites, `c/` contains host C test programs,
 checks live under `integration/`; the runner, QEMU session, FAT32 test image,
 and behavior scenarios are separate modules. `make test` discovers Python
 tests, which in turn run each shell suite. C suites use host `cc` directly,
-independent of the kernel's `CC` cross-compiler. These checks do not execute
-privileged instructions, access physical addresses, or boot QEMU; hardware
+independent of the kernel's `CC` cross-compiler. PMM host tests also exercise
+allocation and release of a physical frame above 4 GiB. These checks do not
+execute privileged instructions, access physical addresses, or boot QEMU; hardware
 behavior still requires emulator or device validation. C checks and named
 Python cases print clear case names and PASS/FAIL results.
 
@@ -147,6 +152,11 @@ mkdir    create a FAT32 directory
 rmdir    remove an empty FAT32 directory; `rmdir -f <dir>` removes recursively
 run      load and run a disk ELF32 file
 ```
+
+FAT32 long filenames support ASCII names such as `help_aaaaa.1234`. LFN entries
+are stored as UTF-16LE and linked to a generated 8.3 alias. The shell currently
+accepts ASCII filenames; non-ASCII UTF-16 code units display as `?`. Shell path
+buffers limit typed paths to less than the on-disk FAT32 LFN maximum.
 
 When a FAT32 disk is mounted, the shell prompt shows its current path (for
 example, `myos / >` or `myos /folder >`). Use `cd ..` to move to the parent

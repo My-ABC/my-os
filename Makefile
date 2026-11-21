@@ -11,6 +11,7 @@ INCLUDE_DIRS = include include/arch/x86 include/drivers include/fs include/lib \
 	include/mm include/os
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g \
 	$(addprefix -I,$(INCLUDE_DIRS))
+CFLAGS += -MMD -MP
 
 # PANIC_DEMO=1 时内核启动后主动触发 INT3, 用于演示/测试蓝屏
 ifdef PANIC_DEMO
@@ -38,10 +39,13 @@ ASM_SRCS = $(filter-out boot/gdt.asm boot/paging.asm,$(wildcard boot/*.asm))
 
 # 自动生成目标文件列表
 C_OBJS = $(patsubst src/%.c, build/%.o, $(C_SRCS))
+DEPFILES = $(C_OBJS:.o=.d)
 ASM_OBJS = $(patsubst boot/%.asm, build/%.o, $(ASM_SRCS))
 ASM_OBJS += build/gdt_asm.o
 ASM_OBJS += build/paging_asm.o
 OBJS = $(ASM_OBJS) $(C_OBJS)
+
+-include $(DEPFILES)
 
 ISO = myos.iso
 KERNEL = myos.bin

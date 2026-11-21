@@ -190,7 +190,7 @@ int cmd_ring3(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
     paging_map_page((uint32_t)user_entry, (uint32_t)user_entry,
-                    PAGE_PRESENT | PAGE_USER);
+                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
     if (paging_get_page_physical((uint32_t)user_entry) == 0U) {
         printf("Unable to map Ring 3 code\n");
         return -1;

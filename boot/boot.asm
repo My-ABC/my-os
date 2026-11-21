@@ -15,59 +15,113 @@ section .boot.text progbits alloc exec nowrite
 global start
 extern kmain
 global stack_top
-global early_page_directory
 
 start:
     mov esp, stack_top
     push ebx
 
-    mov edi, early_page_directory
+    ; Require CPUID PAE support (CPUID leaf 1, EDX bit 6).
+    pushfd
+    pop eax
+    mov ecx, eax
+    xor eax, 0x00200000
+    push eax
+    popfd
+    pushfd
+    pop eax
+    xor eax, ecx
+    jz .pae_hang
+    mov eax, 1
+    cpuid
+    test edx, 1 << 6
+    jz .pae_hang
+    mov edi, early_pae_pdpt
     xor eax, eax
-    mov ecx, 1024
+    mov ecx, 8
+    rep stosd
+    mov dword [early_pae_pdpt + 0], early_pae_pd0 + 0x001
+    mov dword [early_pae_pdpt + 4], 0
+    mov dword [early_pae_pdpt + 8], early_pae_pd1 + 0x001
+    mov dword [early_pae_pdpt + 12], 0
+    mov dword [early_pae_pdpt + 16], early_pae_pd2 + 0x001
+    mov dword [early_pae_pdpt + 20], 0
+    mov dword [early_pae_pdpt + 24], early_pae_pd3 + 0x001
+    mov dword [early_pae_pdpt + 28], 0
+
+    ; Zero all four 512-entry PAE page directories.
+    mov edi, early_pae_pd0
+    xor eax, eax
+    mov ecx, 4096
     rep stosd
 
-    mov edi, early_page_table_low
+    mov edi, early_pae_pd0
+    mov ebx, early_pae_pt_low
+    mov ecx, 8
+.fill_low_pdes:
+    mov eax, ebx
+    or eax, 0x003
+    mov dword [edi], eax
+    mov dword [edi + 4], 0
+    add ebx, 0x1000
+    add edi, 8
+    loop .fill_low_pdes
+
+    ; Map the high kernel alias across 16 MiB so kernel BSS/PMM metadata
+    ; remain accessible before and after the kernel paging structures change.
+    mov edi, early_pae_pd3
+    mov ebx, early_pae_pt_high
+    mov ecx, 8
+.fill_high_pdes:
+    mov eax, ebx
+    or eax, 0x003
+    mov dword [edi], eax
+    mov dword [edi + 4], 0
+    add ebx, 0x1000
+    add edi, 8
+    loop .fill_high_pdes
+
+    ; Sixteen MiB identity mapping for early boot and Multiboot structures.
+    mov edi, early_pae_pt_low
     xor ebx, ebx
-    mov edx, 4
-.next_low_table:
-    mov ecx, 1024
-.fill_low:
+    mov ecx, 4096
+.fill_pae_low:
     mov eax, ebx
     or eax, 0x003
-    stosd
+    mov dword [edi], eax
+    mov dword [edi + 4], 0
     add ebx, 0x1000
-    loop .fill_low
-    dec edx
-    jnz .next_low_table
+    add edi, 8
+    loop .fill_pae_low
 
-    mov edi, early_page_table_high
-     mov ebx, 0x00100000
-    mov edx, 4
-.next_high_table:
-    mov ecx, 1024
-.fill_high:
+    ; C0000000 -> physical 1 MiB, spanning 16 MiB.
+    mov edi, early_pae_pt_high
+    mov ebx, 0x00100000
+    mov ecx, 4096
+.fill_pae_high:
     mov eax, ebx
     or eax, 0x003
-    stosd
+    mov dword [edi], eax
+    mov dword [edi + 4], 0
     add ebx, 0x1000
-    loop .fill_high
-    dec edx
-    jnz .next_high_table
+    add edi, 8
+    loop .fill_pae_high
 
-    mov dword [early_page_directory + 0], early_page_table_low + 0x003
-    mov dword [early_page_directory + 4], early_page_table_low + 0x1003
-    mov dword [early_page_directory + 8], early_page_table_low + 0x2003
-    mov dword [early_page_directory + 12], early_page_table_low + 0x3003
-    mov dword [early_page_directory + 3072], early_page_table_high + 0x003
-    mov dword [early_page_directory + 3076], early_page_table_high + 0x1003
-    mov dword [early_page_directory + 3080], early_page_table_high + 0x2003
-    mov dword [early_page_directory + 3084], early_page_table_high + 0x3003
-    mov eax, early_page_directory
+    mov eax, cr4
+    or eax, 0x20
+    mov cr4, eax
+    mov eax, early_pae_pdpt
     mov cr3, eax
     mov eax, cr0
     or eax, 0x80000000
     mov cr0, eax
 
+    mov ebx, [esp]
+    jmp .pae_entry
+.pae_hang:
+    cli
+    hlt
+    jmp .pae_hang
+.pae_entry:
     call kmain
     cli
 .hang:
@@ -75,15 +129,25 @@ start:
     jmp .hang
 
 section .boot.bss nobits alloc noexec write
-align 4096
-early_page_directory:
+alignb 4096
+early_pae_pdpt:
+    resb 32
+alignb 4096
+early_pae_pd0:
     resb 4096
-early_page_table_low:
-    resb 16384
-early_page_table_high:
-    resb 16384
+early_pae_pd1:
+    resb 4096
+early_pae_pd2:
+    resb 4096
+early_pae_pd3:
+    resb 4096
+alignb 4096
+early_pae_pt_low:
+    resb 32768
+early_pae_pt_high:
+    resb 32768
 
-align 16
+alignb 16
 stack_bottom:
     resb 16384
 stack_top:

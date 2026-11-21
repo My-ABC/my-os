@@ -72,7 +72,7 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn("while (*component == '/')", body)
         self.assertNotIn("path[0] == '/') return g_fs.root_cluster", body)
         listing = function_body(text, "fat32_list_directory")
-        self.assertIn("(entry[11] & 0x08U) != 0U", listing)
+        self.assertIn("(entry[11] & FAT32_ATTR_VOLUME_ID) != 0U", listing)
 
     def test_fat32_recursive_directory_removal_is_bounded_and_skips_dot_entries(self):
         text = source("src/fs/fat32.c")

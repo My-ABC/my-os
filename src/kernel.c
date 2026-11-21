@@ -35,6 +35,17 @@ void kmain(uint32_t multiboot_info) {
     paging_init();
     tss_update_cr3(paging_get_page_directory());
 
+    // Keep the Multiboot information block available to the later VBE probe.
+    // The runtime low identity map intentionally stops at 4 MiB so user ELF
+    // virtual ranges above it remain available for demand mappings.
+    if (multiboot_info != 0U) {
+        uint32_t info_page = multiboot_info & ~(PAGE_SIZE - 1U);
+        uint64_t info_end = (uint64_t)multiboot_info + 128U;
+        for (uint64_t page = info_page; page < info_end; page += PAGE_SIZE) {
+            paging_map_page((uint32_t)page, page, PAGE_PRESENT | PAGE_WRITABLE);
+        }
+    }
+
     // 使用启动阶段 BIOS VBE 调用返回的帧缓冲信息。
     vbe_initialize(multiboot_info);
     
