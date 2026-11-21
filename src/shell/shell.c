@@ -75,6 +75,8 @@ static char **split_args(const char *str, char *argv[], int max_args) {
 }
 
 // 实际拆分函数，返回 argc
+// 以双引号开头的参数会保留内部空格直到配对的闭引号（引号不计入参数）；
+// 未闭合的引号则取到行尾。
 static int split_line(char *line, char *argv[], int max_args) {
     int argc = 0;
     char *p = line;
@@ -82,6 +84,15 @@ static int split_line(char *line, char *argv[], int max_args) {
     while (*p && argc < max_args - 1) {
         while (*p == ' ') p++;
         if (*p == '\0') break;
+        if (*p == '"') {
+            argv[argc++] = ++p;
+            while (*p && *p != '"') p++;
+            if (*p == '"') {
+                *p = '\0';
+                p++;
+            }
+            continue;
+        }
         argv[argc++] = p;
         while (*p && *p != ' ') p++;
         if (*p) {

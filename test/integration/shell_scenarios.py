@@ -50,6 +50,18 @@ def check_shell_line_editing(session):
     session.pass_check("shell cursor keys and mid-line editing work")
 
 
+def check_shell_quoted_args(session):
+    # Double quotes group an argument: "x  yz" stays one 5-byte argument
+    # instead of splitting into "x" and "yz".
+    session.send_line('write qtest "x  yz"')
+    session.wait_for("Wrote 5 bytes to /qtest", timeout=10)
+    quoted_read = len(session.serial_data)
+    session.send_line("cat qtest")
+    session.wait_for_regex(rb"x  yz", start=quoted_read)
+    session.send_line("rm qtest")
+    session.pass_check("shell double quotes preserve spaces inside an argument")
+
+
 def check_storage_and_shell(session):
     session.send_line("disk")
     session.wait_for("ATA primary master and FAT32 filesystem initialized")

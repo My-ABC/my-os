@@ -24,7 +24,10 @@ via `start_shell()`.
   `vga_set_cursor`/`vga_columns`, so wrapped lines are handled; editing
   keys are ignored while no prompt origin exists (foreground Ring 3
   task running).
-- `split_line()` tokenizes on whitespace into at most 16 arguments.
+- `split_line()` tokenizes on whitespace into at most 16 arguments; an
+  argument starting with `"` keeps its inner spaces up to the matching
+  closing quote (the quotes themselves are stripped, an unterminated
+  quote runs to end of line).
 - Dispatch is an exact `strcmp` against `cmd_table` (name, handler,
   one-line description); unknown input prints `Unknown command`.
 - Prompt: `myos <cwd> > ` when FAT32 is mounted, `myos > ` otherwise.
