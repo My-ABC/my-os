@@ -123,12 +123,20 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Networking
 
-- [ ] **Implement a network stack**
-  - [ ] Provide a network-device interface and support at least one network-card driver.
+- [ ] **Establish a network-device layer**
+  - [ ] Provide a network-device interface and support at least one network-card driver (e.g. virtio-net, e1000, or RTL8139).
+  - [ ] Implement packet RX/TX paths with interrupts or polling plus driver statistics.
+- [ ] **Implement link and network protocols**
   - [ ] Implement Ethernet and ARP.
   - [ ] Implement IPv4, routing, and basic ICMP.
-  - [ ] Implement UDP and design a user-space socket interface.
+  - [ ] Implement UDP.
   - [ ] Implement TCP state, retransmission, flow control, and connection management.
+- [ ] **Add experimental IPv6 support**
+  - [ ] Implement ICMPv6, Neighbor Discovery, and stateless autoconfiguration for a single link.
+  - [ ] Add IPv6 support on top of the user-space socket interface.
+- [ ] **Design the user-space socket interface**
+  - [ ] Define the syscall/socket ABI for user programs.
+  - [ ] Implement user-space network tools and validate them with QEMU user-mode networking.
 
 ## Graphics and GUI
 
