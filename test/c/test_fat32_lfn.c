@@ -1,6 +1,20 @@
 #include "test_support.h"
 
-#include "../../src/fs/fat32.c"
+#include "../../src/fs/fat32_name.c"
+#include "../../src/fs/fat32_dir.c"
+#include "../../src/fs/fat32_core.c"
+
+int ata_read_sectors(uint32_t lba, uint32_t count, void *buffer) {
+    (void)lba; (void)count; (void)buffer; return 0;
+}
+int ata_write_sectors(uint32_t lba, uint32_t count, const void *buffer) {
+    (void)lba; (void)count; (void)buffer; return 0;
+}
+uint32_t ata_sector_count(void) { return 0; }
+void serial_putchar(char c) { (void)c; }
+void serial_print(const char *str) { (void)str; }
+void serial_print_hex(uint32_t num) { (void)num; }
+void serial_print_dec(uint32_t num) { (void)num; }
 #include "../../src/lib/string.c"
 
 int main(void) {

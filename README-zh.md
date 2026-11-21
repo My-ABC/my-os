@@ -147,9 +147,13 @@ rmdir    删除空 FAT32 目录；`rmdir -f <目录>` 递归删除目录及其�
 run      装载并运行磁盘中的 ELF32 文件
 ```
 
-FAT32 长文件名支持 `help_aaaaa.1234` 这样的 ASCII 名称。磁盘上使用
-UTF-16LE LFN 目录项并关联自动生成的 8.3 短别名。Shell 当前接受 ASCII
-文件名；Shell 路径缓冲区限制可输入长度，非 ASCII 的 UTF-16 字符显示为 `?`。
+FAT32 长文件名支持 `help_aaaaa.1234` 这样的 ASCII 名称。通过 Shell 创建的
+每个文件和目录都会写入 LFN 项，因此名称保留原始大小写（`write testtest`
+在 `ls` 中显示为 `testtest` 而非 `TESTTEST`）。磁盘上使用 UTF-16LE LFN
+目录项并关联自动生成的 8.3 短别名；名称查找按 LFN 精确匹配（区分大小写），
+没有 LFN 的目录项仍通过大写 8.3 短名匹配。Shell 当前接受 ASCII 文件名；
+非 ASCII 的 UTF-16 字符显示为 `?`。Shell 路径缓冲区限制可输入长度，
+不超过磁盘上 FAT32 LFN 的最大值。
 
 挂载 FAT32 磁盘时，Shell 提示符会显示当前路径，例如 `myos / >` 或
 `myos /1 >`，运行 `cd ..` 可返回上一级目录。没有挂载 FAT32 磁盘时，

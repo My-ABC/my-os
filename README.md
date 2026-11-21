@@ -166,10 +166,14 @@ rmdir    remove an empty FAT32 directory; `rmdir -f <dir>` removes recursively
 run      load and run a disk ELF32 file
 ```
 
-FAT32 long filenames support ASCII names such as `help_aaaaa.1234`. LFN entries
-are stored as UTF-16LE and linked to a generated 8.3 alias. The shell currently
-accepts ASCII filenames; non-ASCII UTF-16 code units display as `?`. Shell path
-buffers limit typed paths to less than the on-disk FAT32 LFN maximum.
+FAT32 long filenames support ASCII names such as `help_aaaaa.1234`. Every file
+and directory created through the Shell gets LFN entries, so names keep their
+original case (`write testtest` lists as `testtest`, not `TESTTEST`). LFN
+entries are stored as UTF-16LE and linked to a generated 8.3 alias; name
+lookups match the LFN case-sensitively, while entries without LFN still match
+through the uppercase 8.3 short name. The shell currently accepts ASCII
+filenames; non-ASCII UTF-16 code units display as `?`. Shell path buffers
+limit typed paths to less than the on-disk FAT32 LFN maximum.
 
 When a FAT32 disk is mounted, the shell prompt shows its current path (for
 example, `myos / >` or `myos /folder >`). Use `cd ..` to move to the parent

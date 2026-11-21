@@ -58,7 +58,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Systematically review FAT32 path resolution, directory bounds, error propagation, and corrupt-disk handling.
   - [ ] Complete file-handle and open/close/sequential-read/write interfaces for user programs.
   - [x] Add common operations such as copy, move, and rename, with persistence and regression tests. (`cp` copies files and `cp -r` copies directory trees; `mv` renames/moves files and directories with Linux semantics — existing directory destinations receive the source, existing file destinations are replaced, and directory-into-itself moves are rejected.)
-  - [ ] Document the supported scope and limits for LFN, short-name aliases, and non-ASCII names.
+  - [x] Document the supported scope and limits for LFN, short-name aliases, and non-ASCII names. (Shell-created entries always carry LFN preserving case; lookups match LFN case-sensitively and fall back to the 8.3 short name only when no LFN exists. See README.)
 - [ ] **Implement a block cache**
   - [ ] Add a cache indexed by device and LBA with a replacement policy.
   - [ ] Define consistency, write-back/sync, invalidation, and error-propagation rules.

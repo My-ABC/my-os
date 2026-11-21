@@ -28,6 +28,12 @@ def check_storage_and_shell(session):
     session.wait_for("hello")
     session.pass_check("FAT32 file write and read commands")
 
+    case_ls_start = len(session.serial_data)
+    session.send_line("ls")
+    session.wait_for_regex(rb"\[LS\] ENTRY testtest 5 bytes",
+                           start=case_ls_start)
+    session.pass_check("FAT32 preserves filename case in directory listings")
+
     session.send_line("cp testtest testcopy")
     session.wait_for("[CP] Copied /testtest to /testcopy")
     copy_read_start = len(session.serial_data)
@@ -55,9 +61,9 @@ def check_storage_and_shell(session):
     session.wait_for("[MV] Moved /moved_file.txt to /mvdir2/inside.txt")
     dir_ls_start = len(session.serial_data)
     session.send_line("ls mvdir2")
-    session.wait_for_regex(rb"\[LS\] ENTRY INNER 4 bytes", start=dir_ls_start)
+    session.wait_for_regex(rb"\[LS\] ENTRY inner 4 bytes", start=dir_ls_start)
     session.wait_for_regex(
-        rb"\[LS\] ENTRY INSIDE\.TXT 5 bytes", start=dir_ls_start
+        rb"\[LS\] ENTRY inside\.txt 5 bytes", start=dir_ls_start
     )
     session.pass_check("mv moves a directory and a file into another directory")
 
@@ -85,9 +91,9 @@ def check_storage_and_shell(session):
     session.wait_for_regex(rb"bbb", start=nested_read_start)
     recursive_ls_start = len(session.serial_data)
     session.send_line("ls cpdest")
-    session.wait_for_regex(rb"\[LS\] ENTRY ALPHA\.TXT 3 bytes",
+    session.wait_for_regex(rb"\[LS\] ENTRY alpha\.txt 3 bytes",
                            start=recursive_ls_start)
-    session.wait_for_regex(rb"\[LS\] ENTRY SUB/ <DIR>",
+    session.wait_for_regex(rb"\[LS\] ENTRY sub/ <DIR>",
                            start=recursive_ls_start)
     session.pass_check("cp -r recursively copies files and subdirectories")
     session.send_line("rmdir -f cptest")
@@ -115,7 +121,7 @@ def check_storage_and_shell(session):
     session.wait_for("[MV] Moved /cpsrc to /cpdst2/cpsrc")
     mv_into_ls = len(session.serial_data)
     session.send_line("ls cpdst2")
-    session.wait_for_regex(rb"\[LS\] ENTRY CPSRC/ <DIR>", start=mv_into_ls)
+    session.wait_for_regex(rb"\[LS\] ENTRY cpsrc/ <DIR>", start=mv_into_ls)
     session.pass_check("mv places a directory inside an existing directory")
 
     session.send_line("write cpmv/old.txt old")
@@ -182,13 +188,13 @@ def check_storage_and_shell(session):
     session.wait_for("[FAT32] Wrote 7 bytes to /folder/sub/nested")
     session.send_line("ls")
     session.wait_for("[LS] Listing /folder")
-    session.wait_for("[LS] ENTRY CHILD 5 bytes")
-    session.wait_for("[LS] ENTRY SUB/ <DIR>")
+    session.wait_for("[LS] ENTRY child 5 bytes")
+    session.wait_for("[LS] ENTRY sub/ <DIR>")
     session.send_line("ls /")
-    session.wait_for("[LS] ENTRY FOLDER/ <DIR>")
+    session.wait_for("[LS] ENTRY folder/ <DIR>")
     explicit_ls_start = len(session.serial_data)
     session.send_line("ls /folder")
-    session.wait_for_regex(rb"\[LS\] ENTRY CHILD 5 bytes", start=explicit_ls_start)
+    session.wait_for_regex(rb"\[LS\] ENTRY child 5 bytes", start=explicit_ls_start)
     session.pass_check("ls lists the current directory or its explicit argument")
     session.send_line("cd ..")
     session.wait_for("[SHELL] CWD /")
