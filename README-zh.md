@@ -167,6 +167,7 @@ src/lib/          freestanding C 标准库函数
 include/          按 src/ 子系统对应分类的头文件
 scripts/          CI/CD 文件
 linker.ld         1MB 加载地址与段布局
+[TODO.md](./TODO.md) 项目路线图和后续实现任务
 ```
 
 ## 说明

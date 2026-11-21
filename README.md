@@ -186,6 +186,7 @@ src/lib/          freestanding C library routines
 include/          headers grouped to mirror src/ subsystems
 scripts/          CI/CD files
 linker.ld         1 MB load address and section layout
+[TODO.md](./TODO.md) project roadmap and tracked future implementation work
 ```
 
 ## Notes

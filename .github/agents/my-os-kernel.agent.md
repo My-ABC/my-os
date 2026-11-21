@@ -14,6 +14,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `linker.ld`: 1 MiB physical load, user-code placement, high-half kernel sections, and reserved paging storage.
 - PAE uses 64-bit page-table entries and a 32-byte PDPT/32-bit CR3 while the CPU remains 32-bit. The PMM supports addresses below 64 GiB (36-bit PAE ceiling); use the single-slot kernel mapping window to access high frames/page tables, and honor the Multiboot memory map rather than assuming RAM exists up to the ceiling. The current bootstrap identity-maps only the first 16 MiB, so Multiboot info/map buffers must reside there.
 - `LICENSE`: project GPLv2 license.
+- `TODO.md`: project-wide roadmap and tracked future implementation work; keep items actionable and update or remove them when completed.
 - `boot/boot.asm`: Multiboot header, early page tables, initial stack, paging enable, and `kmain` entry.
 - `boot/gdt.asm`, `boot/paging.asm`: assembly helpers for loading the GDT and enabling paging.
 - `boot/interrupt.asm`: exception/IRQ/syscall stubs and the IRQ0 register-frame contract.
