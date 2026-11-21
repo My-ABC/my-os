@@ -17,6 +17,13 @@ via `start_shell()`.
   stepping back past the newest entry). Recall repaints the input through
   `vga_set_cursor`, which also works in VBE mode; history is only
   available while the prompt is visible.
+- Line editing: `Left`/`Right` move an insertion cursor within the
+  line; printable keys insert at the cursor and `Backspace` deletes the
+  character before it (previously both only worked at end of line).
+  Every edit repaints the line from the recorded prompt origin via
+  `vga_set_cursor`/`vga_columns`, so wrapped lines are handled; editing
+  keys are ignored while no prompt origin exists (foreground Ring 3
+  task running).
 - `split_line()` tokenizes on whitespace into at most 16 arguments.
 - Dispatch is an exact `strcmp` against `cmd_table` (name, handler,
   one-line description); unknown input prints `Unknown command`.

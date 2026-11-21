@@ -21,6 +21,7 @@ from shell_scenarios import (
     check_fs_syscalls,
     check_run_from_disk,
     check_shell_history,
+    check_shell_line_editing,
     check_startup,
     check_storage_and_shell,
 )
@@ -48,6 +49,7 @@ def run_main_session(qemu, kernel, disk, timeout):
         [
             check_startup,
             check_shell_history,
+            check_shell_line_editing,
             check_storage_and_shell,
             check_ring3_and_builtin_elf,
             check_run_from_disk,

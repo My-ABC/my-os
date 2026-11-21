@@ -220,6 +220,17 @@ void vga_print_dec(uint32_t num) {
     }
 }
 
+// 当前控制台的列数 (VBE 按字符单元格, 文本模式为 80)
+uint16_t vga_columns(void) {
+    if (vbe_available()) {
+        uint32_t columns = vbe_columns();
+        if (columns != 0 && columns <= 0xFFFFU) {
+            return (uint16_t)columns;
+        }
+    }
+    return VGA_WIDTH;
+}
+
 // 获取当前光标位置 (VBE 模式下返回字符单元格坐标)
 void vga_get_cursor(uint16_t* row, uint16_t* col) {
     if (vbe_available()) {

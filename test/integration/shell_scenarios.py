@@ -31,6 +31,25 @@ def check_shell_history(session):
     session.pass_check("shell history recalls and re-runs a previous command")
 
 
+def check_shell_line_editing(session):
+    # "wrogn" -> delete 'g' before the cursor, step Right to end of line,
+    # retype 'g': "wrong". Exercises Left, Backspace-at-cursor, Right.
+    session.send_text("secho hist-wrogn")
+    session.send_named_key("left")
+    session.send_named_key("backspace")
+    session.send_named_key("right")
+    session.send_text("g")
+    session.send_named_key("ret")
+    session.wait_for("hist-wrong", timeout=10)
+    # "hist-et" -> Left before 't', insert 'x' mid-line: "hist-ext".
+    session.send_text("secho hist-et")
+    session.send_named_key("left")
+    session.send_text("x")
+    session.send_named_key("ret")
+    session.wait_for("hist-ext", timeout=10)
+    session.pass_check("shell cursor keys and mid-line editing work")
+
+
 def check_storage_and_shell(session):
     session.send_line("disk")
     session.wait_for("ATA primary master and FAT32 filesystem initialized")

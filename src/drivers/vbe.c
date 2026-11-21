@@ -214,6 +214,13 @@ int vbe_available(void) {
     return vbe_state.valid != 0;
 }
 
+uint32_t vbe_columns(void) {
+    if (!vbe_available()) {
+        return 0;
+    }
+    return vbe_state.width / ASCII_FONT_WIDTH;
+}
+
 void vbe_get_cursor(uint16_t *row, uint16_t *col) {
     if (!vbe_available()) {
         *row = 0;

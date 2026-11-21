@@ -122,7 +122,8 @@ class QemuSession:
         self.monitor.sendall(f"sendkey {key} 35\n".encode("ascii"))
         self.monitor_read_until(b"(qemu)", 2)
 
-    def send_line(self, line):
+    @staticmethod
+    def key_name(char):
         key_names = {
             " ": "spc",
             ".": "dot",
@@ -131,14 +132,23 @@ class QemuSession:
             "/": "slash",
             "\n": "ret",
         }
-        for char in line + "\n":
-            key = key_names.get(char, char)
-            if not (key in ("spc", "dot", "minus", "shift-minus",
-                            "slash", "ret") or
-                    re.fullmatch(r"[a-z0-9]", key)):
-                raise IntegrationFailure(f"unsupported test key: {char!r}")
-            self.send_key(key)
-            time.sleep(0.015)
+        return key_names.get(char, char)
+
+    def send_named_key(self, key):
+        if not (key in ("spc", "dot", "minus", "shift-minus",
+                        "slash", "ret", "left", "right", "up", "down",
+                        "backspace") or
+                re.fullmatch(r"[a-z0-9]", key)):
+            raise IntegrationFailure(f"unsupported test key: {key!r}")
+        self.send_key(key)
+        time.sleep(0.015)
+
+    def send_text(self, text):
+        for char in text:
+            self.send_named_key(self.key_name(char))
+
+    def send_line(self, line):
+        self.send_text(line + "\n")
 
     def read_serial(self, duration):
         end = min(self.deadline, time.monotonic() + duration)

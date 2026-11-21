@@ -816,28 +816,38 @@ static void shell_history_push(const char *line) {
     ++shell_history_count;
 }
 
-/* Repaint the input line with `text`, first erasing the `*length`
- * characters already echoed after the prompt. `origin` is the cursor
- * position captured right after the prompt was printed. */
-static void shell_redraw_line(char *line, int *length, int size,
-                              const char *text, int text_length,
-                              uint16_t origin_row, uint16_t origin_col) {
+/* Absolute cursor cell for `offset` characters after the prompt origin,
+ * wrapping at the console width. */
+static void shell_cursor_to(int offset, uint16_t origin_row,
+                            uint16_t origin_col, uint16_t *row, uint16_t *col) {
+    uint32_t columns = vga_columns();
+    uint32_t linear = (uint32_t)origin_col + (uint32_t)offset;
+    *row = (uint16_t)(origin_row + linear / columns);
+    *col = (uint16_t)(linear % columns);
+}
+
+/* Repaint the input line: erase `old_length` cells after the prompt,
+ * print `line`/`length`, then leave the cursor at insertion offset
+ * `cursor`. `origin` is captured right after the prompt prints. */
+static void shell_paint_line(const char *line, int length, int cursor,
+                             int old_length, uint16_t origin_row,
+                             uint16_t origin_col) {
+    uint16_t row, col;
     vga_set_cursor(origin_row, origin_col);
-    for (int i = 0; i < *length; ++i) {
+    for (int i = 0; i < old_length; ++i) {
         putchar(' ');
     }
     vga_set_cursor(origin_row, origin_col);
-    int copy = text_length < size - 1 ? text_length : size - 1;
-    for (int i = 0; i < copy; ++i) {
-        line[i] = text[i];
-        putchar(text[i]);
+    for (int i = 0; i < length; ++i) {
+        putchar(line[i]);
     }
-    line[copy] = '\0';
-    *length = copy;
+    shell_cursor_to(cursor, origin_row, origin_col, &row, &col);
+    vga_set_cursor(row, col);
 }
 
 static void shell_read_line(char *line, int size) {
     int length = 0;
+    int cursor = 0;  /* insertion point within line[] */
     int prompt_visible = 0;
     int history_index = -1;  /* -1: editing a fresh line, draft holds it */
     uint16_t origin_row = 0;
@@ -862,12 +872,50 @@ static void shell_read_line(char *line, int size) {
         }
 
         char c = keyboard_getchar();
+        if (!origin_valid) {
+            /* No prompt origin (foreground Ring 3 task): keep the old
+             * append-only echo behavior and ignore editing keys. */
+            if (c == '\n' || c == '\r') {
+                line[length] = '\0';
+                putchar('\n');
+                return;
+            }
+            if (c == '\b') {
+                if (length > 0) {
+                    --length;
+                    cursor = length;
+                    putchar('\b');
+                    putchar(' ');
+                    putchar('\b');
+                }
+                continue;
+            }
+            if ((c < KEYBOARD_KEY_UP || c > KEYBOARD_KEY_RIGHT) &&
+                length < size - 1) {
+                line[length++] = c;
+                cursor = length;
+                putchar(c);
+            }
+            continue;
+        }
+        if (c == KEYBOARD_KEY_LEFT || c == KEYBOARD_KEY_RIGHT) {
+            if (c == KEYBOARD_KEY_LEFT && cursor > 0) {
+                --cursor;
+            } else if (c == KEYBOARD_KEY_RIGHT && cursor < length) {
+                ++cursor;
+            } else {
+                continue;
+            }
+            uint16_t row, col;
+            shell_cursor_to(cursor, origin_row, origin_col, &row, &col);
+            vga_set_cursor(row, col);
+            continue;
+        }
         if (c == KEYBOARD_KEY_UP || c == KEYBOARD_KEY_DOWN) {
             const char *text;
             int text_length;
             int new_index = history_index;
 
-            if (!origin_valid) continue;
             if (c == KEYBOARD_KEY_UP) {
                 if (shell_history_count == 0) continue;
                 if (history_index == -1) {
@@ -894,12 +942,15 @@ static void shell_read_line(char *line, int size) {
             }
             history_index = new_index;
             text_length = (int)strlen(text);
-            shell_redraw_line(line, &length, size, text, text_length,
-                              origin_row, origin_col);
+            int old_displayed = length;
+            int copy = text_length < size - 1 ? text_length : size - 1;
+            memcpy(line, text, copy);
+            line[copy] = '\0';
+            length = copy;
+            cursor = length;
+            shell_paint_line(line, length, cursor, old_displayed,
+                             origin_row, origin_col);
             continue;
-        }
-        if (c >= KEYBOARD_KEY_UP && c <= KEYBOARD_KEY_RIGHT) {
-            continue;  /* left/right are reserved for future line editing */
         }
         if (c == '\n' || c == '\r') {
             line[length] = '\0';
@@ -907,17 +958,26 @@ static void shell_read_line(char *line, int size) {
             return;
         }
         if (c == '\b') {
-            if (length > 0) {
+            if (cursor > 0) {
+                memmove(line + cursor - 1, line + cursor,
+                        (uint32_t)(length - cursor));
                 --length;
-                putchar('\b');
-                putchar(' ');
-                putchar('\b');
+                --cursor;
+                line[length] = '\0';
+                shell_paint_line(line, length, cursor, length + 1,
+                                 origin_row, origin_col);
             }
             continue;
         }
         if (length < size - 1) {
-            line[length++] = c;
-            putchar(c);
+            memmove(line + cursor + 1, line + cursor,
+                    (uint32_t)(length - cursor));
+            line[cursor] = c;
+            ++length;
+            ++cursor;
+            line[length] = '\0';
+            shell_paint_line(line, length, cursor, length - 1,
+                             origin_row, origin_col);
         }
     }
 }
