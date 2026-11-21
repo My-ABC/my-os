@@ -122,6 +122,15 @@ def create_test_disk(directory):
     )
     add_root_file(disk_path, "fsdemo.elf", fs_demo_path.read_bytes())
 
+    sig_demo_path = Path(directory) / "sigdemo.elf"
+    subprocess.run(
+        [nasm, "-f", "bin", str(ROOT / "test" / "integration" / "sig_demo.asm"),
+         "-o", str(sig_demo_path)],
+        cwd=ROOT,
+        check=True,
+    )
+    add_root_file(disk_path, "sigdemo.elf", sig_demo_path.read_bytes())
+
     for mode, filename in ((0, "stack.elf"), (1, "faultu.elf"),
                            (2, "faultp.elf"), (3, "oom.elf"),
                            (4, "kfault.elf")):

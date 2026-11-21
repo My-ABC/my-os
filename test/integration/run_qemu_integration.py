@@ -18,6 +18,7 @@ from page_fault_scenarios import (
     check_user_oom,
 )
 from ring3_scenarios import check_ring3_and_builtin_elf
+from signal_scenarios import check_signal_handler_delivery
 from shell_scenarios import (
     ShellInputEditingTest,
     check_fs_syscalls,
@@ -69,6 +70,7 @@ def run_main_session(qemu, kernel, disk, timeout):
             check_run_from_disk,
             check_page_faults,
             check_fs_syscalls,
+            check_signal_handler_delivery,
             check_user_oom,
         ],
         qemu, kernel, disk, timeout,

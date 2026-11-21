@@ -13,7 +13,7 @@ def check_startup(session):
     session.pass_check("kernel startup, memory setup, and timer/RTC path reached")
     session.read_serial(0.3)
 
-    session.send_line("secho qemushellcommandok")
+    session.send_line("echo qemushellcommandok")
     session.wait_for("qemushellcommandok")
     session.pass_check("keyboard-driven shell command executes")
 
@@ -38,32 +38,32 @@ class ShellInputEditingTest(QemuTestCase):
         s.wait_for_regex(b"x\\\\y", start=esc2_read)
         s.send_line("rm esc2")
         # Unterminated quote stays literal; mid-word quote is literal too.
-        s.send_line('secho "111')
+        s.send_line('echo "111')
         s.wait_for('"111', timeout=10)
-        s.send_line('secho 111"')
+        s.send_line('echo 111"')
         s.wait_for('111"', timeout=10)
         # Invalid escape warns, then the argument is kept literal.
-        s.send_line('secho "111\\y222"')
+        s.send_line('echo "111\\y222"')
         s.wait_for("unknown escape '\\y'", timeout=10)
         s.wait_for("111\\y222", timeout=10)
         # Empty quotes are literal, so """ stays verbatim; \" escapes a quote.
-        s.send_line('secho """')
+        s.send_line('echo """')
         s.wait_for('"""', timeout=10)
-        s.send_line('secho \\"\\"\\"')
+        s.send_line('echo \\"\\"\\"')
         s.wait_for('"""', timeout=10)
         # \" inside quotes does not terminate the quoted argument.
         q1 = len(s.serial_data)
-        s.send_line('secho "\\"\\""')
+        s.send_line('echo "\\"\\""')
         s.wait_for_regex(b'""\r?\n', start=q1, timeout=10)
         q2 = len(s.serial_data)
-        s.send_line('secho "\\""')
+        s.send_line('echo "\\""')
         s.wait_for_regex(b'"\r?\n', start=q2, timeout=10)
 
     def test_history_recalls_and_reruns(self):
         s = self.session
-        s.send_line("secho hist-first")
+        s.send_line("echo hist-first")
         s.wait_for("hist-first")
-        s.send_line("secho hist-second")
+        s.send_line("echo hist-second")
         s.wait_for("hist-second")
         # Two Up presses recall the first marker command; Enter re-runs it.
         hist_start = len(s.serial_data)
@@ -77,7 +77,7 @@ class ShellInputEditingTest(QemuTestCase):
         s = self.session
         # "wrogn" -> delete 'g' before the cursor, step Right to end of line,
         # retype 'g': "wrong". Exercises Left, Backspace-at-cursor, Right.
-        s.send_text("secho hist-wrogn")
+        s.send_text("echo hist-wrogn")
         s.send_named_key("left")
         s.send_named_key("backspace")
         s.send_named_key("right")
@@ -85,7 +85,7 @@ class ShellInputEditingTest(QemuTestCase):
         s.send_named_key("ret")
         s.wait_for("hist-wrong", timeout=10)
         # "hist-et" -> Left before 't', insert 'x' mid-line: "hist-ext".
-        s.send_text("secho hist-et")
+        s.send_text("echo hist-et")
         s.send_named_key("left")
         s.send_text("x")
         s.send_named_key("ret")
@@ -235,7 +235,7 @@ def check_storage_and_shell(session):
     lfn_delete_start = len(session.serial_data)
     session.send_line("rm help_aaaaa.1234")
     session.send_line("ls")
-    session.send_line("secho lfn-removal-check")
+    session.send_line("echo lfn-removal-check")
     session.wait_for("lfn-removal-check")
     if b"[LS] ENTRY help_aaaaa.1234" in session.serial_data[lfn_delete_start:]:
         raise IntegrationFailure("FAT32 rm left the long filename in the directory")
@@ -251,7 +251,7 @@ def check_storage_and_shell(session):
     lfn_directory_delete_start = len(session.serial_data)
     session.send_line("rmdir -f long_directory_name")
     session.send_line("ls")
-    session.send_line("secho lfn-directory-removal-check")
+    session.send_line("echo lfn-directory-removal-check")
     session.wait_for("lfn-directory-removal-check")
     if b"[LS] ENTRY long_directory_name/" in \
             session.serial_data[lfn_directory_delete_start:]:
@@ -300,6 +300,11 @@ def check_run_from_disk(session):
     session.send_line("run demo.elf")
     session.wait_for_regex(rb"\[ELF\] Loaded ELF32 entry=", start=run_start)
     session.wait_for_regex(rb"Hello from ELF32", start=run_start)
+    # demo.elf is the same image as the built-in demo: it waits for
+    # SIGINT, whose handler prints "Bye" and exits.
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    session.monitor_read_until(b"(qemu)", 3)
+    session.wait_for("Bye", timeout=8)
     session.pass_check("run loads and executes ELF32 from the FAT32 disk")
     ps_start = len(session.serial_data)
     session.send_line("ps")

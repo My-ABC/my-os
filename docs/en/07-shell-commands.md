@@ -28,10 +28,9 @@ below.
 | `time` | — | Print the current time (RTC, Beijing time) as `YYYY-MM-DD HH:MM:SS`. |
 | `panic` | — | Trigger a debug break (`int3`) to demonstrate the blue-screen panic path. |
 | `svga_blue` | — | Fill the screen blue via VBE; falls back to a blue VGA text screen. |
-| `echo` | `<text>...` | Print the arguments separated by single spaces. |
+| `echo` | `<text>...` | Print the arguments separated by single spaces to the screen and the COM1 serial port. |
 | `reboot` | — | Reboot the machine through ACPI. |
 | `shutdown` | — | Power off the machine through ACPI. |
-| `secho` | `<text>...` | Like `echo`, but writes to the COM1 serial port instead of the screen. Useful for scripted/headless sessions. |
 | `tick` | — | Print the PIT tick counter. |
 | `help` | — | List all commands with a one-line description. |
 | `clear` | — | Clear the VGA text screen. |

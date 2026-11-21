@@ -23,10 +23,9 @@
 | `time` | — | 打印当前时间（RTC，北京时间），格式 `YYYY-MM-DD HH:MM:SS`。 |
 | `panic` | — | 触发调试断点（`int3`），演示蓝屏 panic 路径。 |
 | `svga_blue` | — | 通过 VBE 把屏幕填成蓝色；失败时回退到蓝色 VGA 文本屏。 |
-| `echo` | `<text>...` | 把参数以单个空格连接后打印。 |
+| `echo` | `<text>...` | 把参数以单个空格连接后同时打印到屏幕和 COM1 串口。 |
 | `reboot` | — | 通过 ACPI 重启机器。 |
 | `shutdown` | — | 通过 ACPI 关机。 |
-| `secho` | `<text>...` | 类似 `echo`，但输出到 COM1 串口而不是屏幕，便于无头/脚本化会话。 |
 | `tick` | — | 打印 PIT tick 计数。 |
 | `help` | — | 列出全部命令及一行说明。 |
 | `clear` | — | 清空 VGA 文本屏幕。 |

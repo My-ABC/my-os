@@ -118,10 +118,9 @@ make run
 命令列表：
 time     获取时间
 panic    触发INT 3
-echo     打印后面的文字
+echo     打印文字到屏幕和串口
 reboot   ACPI重启
 shutdown ACPI关机
-secho    串口打印文字
 tick     获取PIT中的tick
 help     显示帮助
 clear    清屏

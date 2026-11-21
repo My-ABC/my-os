@@ -45,6 +45,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 21 | `SYS_YIELD` | none | 0 | Voluntarily yields the CPU, saving the current Ring 3 context and returning to the shell; the process is resumed by PIT scheduling. |
 | 22 | `SYS_KILL` | `ebx`=pid, `ecx`=signal number | 0 or -1 | Sends a signal to a process (marks it pending). |
 | 23 | `SYS_SIGNAL` | `ebx`=signal number, `ecx`=handler (0=default, 1=ignore, else user address) | 0 or -1 | Sets the current process's disposition for a signal; `SIGKILL` cannot be caught. |
+| 24 | `SYS_SIGRETURN` | none | restored `eax` | Restores the context saved when the running signal handler was delivered. Called only by the kernel-placed restorer stub after a handler returns; returns -1 when no handler is active. |
 
 ## `SYS_MEMORY` (7) sub-operation codes — `ebx`
 
@@ -82,8 +83,8 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 
 See [12-signals.md](12-signals.md) for the signal mechanism: numbers,
 per-process pending/blocked/handler state, Ctrl+C `SIGINT` delivery,
-`SYS_KILL`/`SYS_SIGNAL`, and current limitations (custom handlers are
-stored but not yet invoked).
+user-mode handler invocation via `SYS_SIGRETURN`, `SYS_KILL`/`SYS_SIGNAL`,
+and current limitations.
 
 ## Known limitations (to resolve before stabilizing the ABI)
 

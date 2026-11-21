@@ -27,7 +27,16 @@ class ElfRing3RegressionTests(unittest.TestCase):
             [elf_addresses[0], elf_addresses[2], elf_addresses[3]],
             [0x00500000, 0x00500000, 0x00500000],
         )
-        self.assertRegex(elf_demo, r"mov ebx,\s*0x00500020")
+        # Message and handler pointers are label offsets rebased onto the
+        # 0x00500000 load address.
+        self.assertRegex(
+            elf_demo,
+            r"mov ebx,\s*hello_msg - elf_demo_code \+ 0x00500000",
+        )
+        self.assertRegex(
+            elf_demo,
+            r"mov ecx,\s*bye_handler - elf_demo_code \+ 0x00500000",
+        )
 
     def test_elf_run_uses_foreground_scheduler_and_tracks_image_for_cleanup(self):
         elf_source = (ROOT / "src" / "os" / "elf.c").read_text()

@@ -137,10 +137,9 @@ Building with `make PANIC_DEMO=1` makes the kernel trigger `int $0x03` right aft
 command list:
 time     get time
 panic    call the INT3
-echo     print the fist arg
+echo     print text on screen and COM1 serial
 reboot   use ACPI to reboot
 shutdown use ACPI to shutdown
-secho    print text on COM1
 tick     get tick of PIT
 help     show help
 clear    clear screen

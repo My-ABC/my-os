@@ -45,7 +45,7 @@ def check_page_faults(session):
     # shell must still accept commands.
     session.send_line("kill 5")
     session.wait_for("[RING3] Killed PID 5")
-    session.send_line("secho page-fault-suite-ok")
+    session.send_line("echo page-fault-suite-ok")
     session.wait_for("page-fault-suite-ok")
     session.pass_check("shell survives page-fault process termination")
 
@@ -67,10 +67,10 @@ def check_user_oom(session):
 
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 9 DEAD", start=ps_start, timeout=5)
+    session.wait_for_regex(rb"\[PS\] 10 DEAD", start=ps_start, timeout=5)
     session.pass_check("oom.elf is reaped after the out-of-memory kill")
 
-    session.send_line("secho oom-suite-ok")
+    session.send_line("echo oom-suite-ok")
     session.wait_for("oom-suite-ok")
     session.pass_check("shell survives the out-of-memory termination")
 
@@ -86,7 +86,7 @@ def check_kernel_fault_panic(session):
         timeout=10,
     )
     session.read_serial(0.5)
-    session.send_line("secho panic-suite-ready")
+    session.send_line("echo panic-suite-ready")
     session.wait_for("panic-suite-ready")
 
     panic_start = len(session.serial_data)
