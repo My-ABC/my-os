@@ -132,3 +132,12 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Port musl libc.
   - [ ] Establish a basic user-space compile, link, and packaging toolchain.
   - [ ] Port and validate a set of basic command-line tools.
+
+## 64-bit Mode
+
+- [ ] **Port the kernel to 64-bit long mode**
+  - [ ] Replace the 32-bit PAE bootstrap with a long-mode transition (IA-32e, PML4/PDPT/PD/PT), keeping the Multiboot entry path.
+  - [ ] Port kernel code to the x86-64 ABI: widen pointers, rewrite inline assembly and stack-frame contracts, and update every `include/` header.
+  - [ ] Rework memory management for 64-bit address spaces (4-level paging, canonical addresses, kernel/user split), including the higher-half mapping and physical-memory bitmap.
+  - [ ] Port interrupts, syscalls, Ring 3 processes, ELF loading, FAT32, drivers, and the shell to 64-bit; update all QEMU test fixtures.
+  - [ ] Document the architecture delta in `docs/en`/`docs/zh` and keep both synchronized.
