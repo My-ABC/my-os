@@ -856,6 +856,26 @@ static int find_free_directory_slots(
     return 1;
 }
 
+static int insert_directory_entry(uint32_t dir_cluster,
+                                  const struct prepared_name *prepared,
+                                  const uint8_t entry[32]) {
+    struct dir_entry_location locations[FAT32_MAX_DIRECTORY_SLOTS];
+    uint32_t slot_count = prepared->lfn_entries + 1U;
+    if (find_free_directory_slots(dir_cluster, slot_count, locations) != 1) {
+        return -1;
+    }
+    struct dir_entry_location *short_location =
+        &locations[prepared->lfn_entries];
+    if (write_lfn_entries(prepared, locations) != 0 ||
+        update_directory_entry(short_location, entry) != 0) {
+        for (uint32_t i = 0U; i < prepared->lfn_entries; ++i) {
+            (void)mark_directory_entry_deleted(&locations[i]);
+        }
+        return -1;
+    }
+    return 0;
+}
+
 static int update_directory_entry(const struct dir_entry_location *location,
                                   const uint8_t entry[32]) {
     if (read_cluster(location->cluster) != 0) return -1;
@@ -942,27 +962,193 @@ int fat32_write_file(const char *path, const void *buffer, uint32_t size) {
     entry[31] = (uint8_t)(size >> 24);
 
     if (found != 1) {
-        struct dir_entry_location locations[FAT32_MAX_DIRECTORY_SLOTS];
-        uint32_t slot_count = prepared.lfn_entries + 1U;
-        if (find_free_directory_slots(dir_cluster, slot_count, locations) != 1) {
-            if (first >= 2U) (void)free_cluster_chain(first);
-            return -1;
+        int result = insert_directory_entry(dir_cluster, &prepared, entry);
+        if (result != 0 && first >= 2U) {
+            (void)free_cluster_chain(first);
         }
-        location = locations[prepared.lfn_entries];
-        if (write_lfn_entries(&prepared, locations) != 0) {
-            if (first >= 2U) (void)free_cluster_chain(first);
-            return -1;
-        }
-        if (update_directory_entry(&location, entry) != 0) {
-            for (uint32_t i = 0U; i < prepared.lfn_entries; ++i) {
-                (void)mark_directory_entry_deleted(&locations[i]);
-            }
-            if (first >= 2U) (void)free_cluster_chain(first);
-            return -1;
-        }
-        return 0;
+        return result;
     }
     return update_directory_entry(&location, entry);
+}
+
+int fat32_copy_file(const char *src_path, const char *dst_path) {
+    if (!g_fs.mounted || src_path == 0 || dst_path == 0) return -1;
+    uint8_t *buffer = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+    if (buffer == 0) return -1;
+    uint32_t size = 0U;
+    int result = fat32_read_file(src_path, buffer, FAT32_MAX_FILE_SIZE, &size);
+    if (result == 0) result = fat32_write_file(dst_path, buffer, size);
+    kfree(buffer);
+    return result;
+}
+
+int fat32_is_directory(const char *path) {
+    if (!g_fs.mounted || path == 0) return -1;
+    char parent[128], name[128];
+    if (split_path(path, parent, sizeof(parent), name, sizeof(name)) != 0) {
+        return -1;
+    }
+    uint32_t dir_cluster = resolve_directory(parent);
+    if (dir_cluster < 2U) return -1;
+    uint8_t entry[32];
+    if (find_entry_by_name(dir_cluster, name, 0, entry, 0, 0) != 1) {
+        return -1;
+    }
+    return (entry[11] & FAT32_ATTR_DIRECTORY) != 0U ? 1 : 0;
+}
+
+static uint32_t entry_first_cluster(const uint8_t entry[32]) {
+    return ((uint32_t)le16(entry + 20) << 16) | le16(entry + 26);
+}
+
+static void delete_entry_by_name(uint32_t dir_cluster, const char *name) {
+    uint8_t entry[32];
+    struct dir_entry_location location;
+    struct dir_entry_location lfn_locations[FAT32_MAX_LFN_ENTRIES];
+    uint32_t lfn_count = 0U;
+    if (find_entry_by_name(dir_cluster, name, &location, entry,
+                           lfn_locations, &lfn_count) == 1) {
+        (void)mark_entry_and_lfn_deleted(&location, lfn_locations, lfn_count);
+    }
+}
+
+static int directory_chain_contains(uint32_t start_cluster, uint32_t target) {
+    uint32_t cluster = start_cluster;
+    uint32_t limit = fat32_cluster_limit();
+    for (uint32_t count = 0U; count < limit; ++count) {
+        if (cluster == target) return 1;
+        if (cluster < 2U || cluster >= limit || cluster == g_fs.root_cluster) {
+            return 0;
+        }
+        if (read_cluster(cluster) != 0) return 0;
+        uint8_t *dotdot = g_cluster + 32U;
+        if (dotdot[0] != '.' || dotdot[1] != '.' ||
+            (dotdot[11] & FAT32_ATTR_DIRECTORY) == 0U) {
+            return 0;
+        }
+        uint32_t parent = entry_first_cluster(dotdot);
+        if (parent == cluster || parent < 2U || parent >= limit) return 0;
+        cluster = parent;
+    }
+    return 0;
+}
+
+static int update_parent_pointer(uint32_t dir_cluster, uint32_t parent_cluster) {
+    if (read_cluster(dir_cluster) != 0) return -1;
+    uint8_t *dotdot = g_cluster + 32U;
+    if (dotdot[0] != '.' || dotdot[1] != '.' ||
+        (dotdot[11] & FAT32_ATTR_DIRECTORY) == 0U) {
+        return -1;
+    }
+    dotdot[20] = (uint8_t)(parent_cluster >> 16);
+    dotdot[21] = (uint8_t)(parent_cluster >> 24);
+    dotdot[26] = (uint8_t)parent_cluster;
+    dotdot[27] = (uint8_t)(parent_cluster >> 8);
+    return write_cluster(dir_cluster);
+}
+
+int fat32_path_within(const char *ancestor, const char *path) {
+    if (!g_fs.mounted || ancestor == 0 || path == 0) return -1;
+    char ancestor_parent[128], ancestor_name[128];
+    char path_parent[128], path_name[128];
+    if (split_path(ancestor, ancestor_parent, sizeof(ancestor_parent),
+                   ancestor_name, sizeof(ancestor_name)) != 0 ||
+        split_path(path, path_parent, sizeof(path_parent),
+                   path_name, sizeof(path_name)) != 0) {
+        return -1;
+    }
+    uint32_t ancestor_dir = resolve_directory(ancestor_parent);
+    if (ancestor_dir < 2U) return -1;
+    uint8_t ancestor_entry[32];
+    if (find_entry_by_name(ancestor_dir, ancestor_name, 0, ancestor_entry,
+                           0, 0) != 1 ||
+        (ancestor_entry[11] & FAT32_ATTR_DIRECTORY) == 0U) {
+        return -1;
+    }
+    uint32_t ancestor_cluster = entry_first_cluster(ancestor_entry);
+
+    uint32_t path_dir = resolve_directory(path_parent);
+    if (path_dir < 2U) return -1;
+    uint8_t path_entry[32];
+    int found = find_entry_by_name(path_dir, path_name, 0, path_entry, 0, 0);
+    uint32_t start;
+    if (found == 1 && (path_entry[11] & FAT32_ATTR_DIRECTORY) != 0U) {
+        start = entry_first_cluster(path_entry);
+    } else {
+        start = path_dir;
+    }
+    return directory_chain_contains(start, ancestor_cluster);
+}
+
+int fat32_move(const char *src_path, const char *dst_path) {
+    if (!g_fs.mounted || src_path == 0 || dst_path == 0) return -1;
+    char src_parent[128], src_name[128];
+    char dst_parent[128], dst_name[128];
+    if (split_path(src_path, src_parent, sizeof(src_parent), src_name,
+                   sizeof(src_name)) != 0 ||
+        split_path(dst_path, dst_parent, sizeof(dst_parent), dst_name,
+                   sizeof(dst_name)) != 0) {
+        return -1;
+    }
+    uint32_t src_dir = resolve_directory(src_parent);
+    uint32_t dst_dir = resolve_directory(dst_parent);
+    if (src_dir < 2U || dst_dir < 2U) return -1;
+
+    uint8_t entry[32];
+    struct dir_entry_location location;
+    struct dir_entry_location lfn_locations[FAT32_MAX_LFN_ENTRIES];
+    uint32_t lfn_count = 0U;
+    if (find_entry_by_name(src_dir, src_name, &location, entry,
+                           lfn_locations, &lfn_count) != 1) {
+        return -1;
+    }
+    struct dir_entry_location existing_location;
+    uint8_t existing[32];
+    int dst_found = find_entry_by_name(dst_dir, dst_name, &existing_location,
+                                       existing, 0, 0);
+    if (dst_found < 0) return -1;
+    if (dst_found == 1) {
+        if (existing_location.cluster == location.cluster &&
+            existing_location.index == location.index) {
+            return -1;
+        }
+        if ((existing[11] & FAT32_ATTR_DIRECTORY) != 0U ||
+            fat32_delete_file(dst_path) != 0) {
+            return -1;
+        }
+    }
+
+    struct prepared_name prepared;
+    if (prepare_name(dst_name, &prepared) != 0) return -1;
+    if (prepared.lfn_entries != 0U &&
+        make_short_alias(dst_dir, dst_name, prepared.short_name) != 0) {
+        return -1;
+    }
+
+    uint8_t new_entry[32];
+    memcpy(new_entry, entry, sizeof(new_entry));
+    memcpy(new_entry, prepared.short_name, sizeof(prepared.short_name));
+
+    int is_dir = (entry[11] & FAT32_ATTR_DIRECTORY) != 0U;
+    uint32_t own_cluster = entry_first_cluster(entry);
+    if (is_dir &&
+        (own_cluster < 2U || own_cluster >= fat32_cluster_limit() ||
+         directory_chain_contains(dst_dir, own_cluster))) {
+        return -1;
+    }
+
+    if (insert_directory_entry(dst_dir, &prepared, new_entry) != 0) {
+        return -1;
+    }
+    if (is_dir && update_parent_pointer(own_cluster, dst_dir) != 0) {
+        delete_entry_by_name(dst_dir, dst_name);
+        return -1;
+    }
+    if (mark_entry_and_lfn_deleted(&location, lfn_locations, lfn_count) != 0) {
+        delete_entry_by_name(dst_dir, dst_name);
+        return -1;
+    }
+    return 0;
 }
 
 int fat32_delete_file(const char *path) {

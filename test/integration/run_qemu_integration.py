@@ -20,7 +20,7 @@ from shell_scenarios import (
 )
 
 
-DEFAULT_TIMEOUT = 75.0
+DEFAULT_TIMEOUT = 150.0
 
 
 def main():

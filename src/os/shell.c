@@ -42,6 +42,8 @@ static cmd_t cmd_table[] = {
     {"ls",       cmd_ls,       "List a FAT32 directory"},
     {"cat",      cmd_cat,      "Print a FAT32 file"},
     {"write",    cmd_write,    "Write text to a FAT32 file"},
+    {"cp",       cmd_cp,       "Copy a FAT32 file"},
+    {"mv",       cmd_mv,       "Move or rename a FAT32 file or directory"},
     {"rm",       cmd_rm,       "Delete a FAT32 file"},
     {"cd",       cmd_cd,       "Change FAT32 directory"},
     {"mkdir",    cmd_mkdir,    "Create a FAT32 directory"},
@@ -490,6 +492,193 @@ int cmd_write(int argc, char *argv[]) {
     serial_print_dec(offset);
     serial_print(" bytes to ");
     serial_print(path);
+    serial_putchar('\n');
+    return 0;
+}
+
+static int cp_join_path(const char *base, const char *name,
+                        char *out, uint32_t size) {
+    uint32_t base_length = strlen(base);
+    uint32_t name_length = strlen(name);
+    uint32_t separator = base_length > 1U ? 1U : 0U;
+    if (base_length + separator + name_length + 1U > size) return -1;
+    memcpy(out, base, base_length);
+    if (separator != 0U) out[base_length++] = '/';
+    memcpy(out + base_length, name, name_length + 1U);
+    return 0;
+}
+
+struct cp_dirent {
+    char name[256];
+};
+
+/* fat32_list_directory iterates a shared static cluster buffer, so the
+ * callback must not perform file I/O. Collect entries first, then copy. */
+static uint32_t cp_count_entries;
+static struct cp_dirent *cp_fill_entries;
+static uint32_t cp_fill_remaining;
+
+static void cp_count_callback(const char *name, uint32_t attr, uint32_t size) {
+    (void)name;
+    (void)attr;
+    (void)size;
+    ++cp_count_entries;
+}
+
+static void cp_fill_callback(const char *name, uint32_t attr, uint32_t size) {
+    (void)attr;
+    (void)size;
+    if (cp_fill_remaining == 0U) return;
+    --cp_fill_remaining;
+    strncpy(cp_fill_entries->name, name,
+            sizeof(cp_fill_entries->name) - 1U);
+    cp_fill_entries->name[sizeof(cp_fill_entries->name) - 1U] = '\0';
+    ++cp_fill_entries;
+}
+
+static int cp_recursive_copy(const char *src, const char *dst, uint32_t depth) {
+    if (depth > 32U || src == 0 || dst == 0) return -1;
+    int is_dir = fat32_is_directory(src);
+    if (is_dir < 0) return -1;
+    if (is_dir == 0) return fat32_copy_file(src, dst);
+    if (fat32_make_directory(dst) != 0) return -1;
+
+    cp_count_entries = 0U;
+    if (fat32_list_directory(src, cp_count_callback) != 0) return -1;
+    uint32_t total = cp_count_entries;
+    if (total == 0U) return 0;
+    struct cp_dirent *entries =
+        (struct cp_dirent *)kmalloc(total * sizeof(*entries));
+    if (entries == 0) return -1;
+
+    cp_fill_entries = entries;
+    cp_fill_remaining = total;
+    int result = fat32_list_directory(src, cp_fill_callback);
+    uint32_t filled = total - cp_fill_remaining;
+    cp_fill_entries = 0;
+    if (result != 0 || filled != total) {
+        kfree(entries);
+        return -1;
+    }
+
+    for (uint32_t i = 0U; i < total; ++i) {
+        char child_src[256], child_dst[256];
+        if (cp_join_path(src, entries[i].name, child_src,
+                         sizeof(child_src)) != 0 ||
+            cp_join_path(dst, entries[i].name, child_dst,
+                         sizeof(child_dst)) != 0 ||
+            cp_recursive_copy(child_src, child_dst, depth + 1U) != 0) {
+            result = -1;
+            break;
+        }
+    }
+    kfree(entries);
+    return result;
+}
+
+static const char *disk_path_basename(const char *path) {
+    const char *base = path;
+    for (const char *p = path; *p != '\0'; ++p) {
+        if (*p == '/') base = p + 1;
+    }
+    return base;
+}
+
+/* When dst names an existing directory, the source goes inside it:
+ * `cp file dir` -> dir/file, `cp -r dir1 dir2` -> dir2/dir1, same for mv. */
+static int disk_resolve_destination(const char *src, const char *dst,
+                                    char *out, uint32_t size) {
+    if (fat32_is_directory(dst) != 1) {
+        uint32_t length = strlen(dst);
+        if (length + 1U > size) return -1;
+        memcpy(out, dst, length + 1U);
+        return 0;
+    }
+    const char *base = disk_path_basename(src);
+    uint32_t dst_length = strlen(dst);
+    uint32_t base_length = strlen(base);
+    uint32_t separator = dst_length > 1U ? 1U : 0U;
+    if (dst_length + separator + base_length + 1U > size) return -1;
+    memcpy(out, dst, dst_length);
+    uint32_t position = dst_length;
+    if (separator != 0U) out[position++] = '/';
+    memcpy(out + position, base, base_length + 1U);
+    return 0;
+}
+
+int cmd_cp(int argc, char *argv[]) {
+    int recursive = 0;
+    int first = 1;
+    if (argc > 1 && strcmp(argv[1], "-r") == 0) {
+        recursive = 1;
+        first = 2;
+    }
+    if (argc - first != 2) {
+        printf("Usage: cp [-r] <src> <dst>\n");
+        return -1;
+    }
+    char src[128], dst[128], dst_final[256];
+    if (disk_resolve_path(argv[first], src, sizeof(src)) != 0 ||
+        disk_resolve_path(argv[first + 1], dst, sizeof(dst)) != 0 ||
+        disk_resolve_destination(src, dst, dst_final,
+                                 sizeof(dst_final)) != 0) {
+        printf("Path is too long\n");
+        return -1;
+    }
+    if (recursive && fat32_path_within(src, dst_final) == 1) {
+        printf("Cannot copy %s into itself\n", src);
+        serial_print("[CP] Refused to copy ");
+        serial_print(src);
+        serial_print(" into itself\n");
+        return -1;
+    }
+    int result = recursive ? cp_recursive_copy(src, dst_final, 0U)
+                           : fat32_copy_file(src, dst_final);
+    if (result != 0) {
+        printf("Unable to copy %s to %s\n", src, dst_final);
+        serial_print("[CP] Failed to copy ");
+        serial_print(src);
+        serial_print(" to ");
+        serial_print(dst_final);
+        serial_putchar('\n');
+        return -1;
+    }
+    printf("Copied %s to %s\n", src, dst_final);
+    serial_print("[CP] Copied ");
+    serial_print(src);
+    serial_print(" to ");
+    serial_print(dst_final);
+    serial_putchar('\n');
+    return 0;
+}
+
+int cmd_mv(int argc, char *argv[]) {
+    if (argc != 3) {
+        printf("Usage: mv <src> <dst>\n");
+        return -1;
+    }
+    char src[128], dst[128], dst_final[256];
+    if (disk_resolve_path(argv[1], src, sizeof(src)) != 0 ||
+        disk_resolve_path(argv[2], dst, sizeof(dst)) != 0 ||
+        disk_resolve_destination(src, dst, dst_final,
+                                 sizeof(dst_final)) != 0) {
+        printf("Path is too long\n");
+        return -1;
+    }
+    if (fat32_move(src, dst_final) != 0) {
+        printf("Unable to move %s to %s\n", src, dst_final);
+        serial_print("[MV] Failed to move ");
+        serial_print(src);
+        serial_print(" to ");
+        serial_print(dst_final);
+        serial_putchar('\n');
+        return -1;
+    }
+    printf("Moved %s to %s\n", src, dst_final);
+    serial_print("[MV] Moved ");
+    serial_print(src);
+    serial_print(" to ");
+    serial_print(dst_final);
     serial_putchar('\n');
     return 0;
 }

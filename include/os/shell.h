@@ -35,6 +35,8 @@ int cmd_disk(int argc, char *argv[]);
 int cmd_ls(int argc, char *argv[]);
 int cmd_cat(int argc, char *argv[]);
 int cmd_write(int argc, char *argv[]);
+int cmd_cp(int argc, char *argv[]);
+int cmd_mv(int argc, char *argv[]);
 int cmd_rm(int argc, char *argv[]);
 int cmd_cd(int argc, char *argv[]);
 int cmd_mkdir(int argc, char *argv[]);

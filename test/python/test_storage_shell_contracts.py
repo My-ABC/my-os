@@ -7,8 +7,9 @@ class StorageAndShellContractTests(unittest.TestCase):
     def test_shell_commands_and_argument_count_sentinel(self):
         text = source("src/os/shell.c")
         for command in ('{"time"', '{"panic"', '{"ring3"', '{"kill"', '{"elf"',
-                        '{"disk"', '{"ls"', '{"cat"', '{"write"', '{"rm"',
-                        '{"cd"', '{"mkdir"', '{"rmdir"', '{"run"'):
+                        '{"disk"', '{"ls"', '{"cat"', '{"write"', '{"cp"',
+                        '{"mv"', '{"rm"', '{"cd"', '{"mkdir"', '{"rmdir"',
+                        '{"run"'):
             with self.subTest(command=command):
                 self.assertIn(command, text)
         body = function_body(text, "split_line")
@@ -31,6 +32,18 @@ class StorageAndShellContractTests(unittest.TestCase):
         body = function_body(source("src/os/shell.c"), "cmd_ls")
         self.assertIn("argc > 1 ? argv[1] : disk_cwd", body)
         self.assertIn("fat32_list_directory(path, fat32_print_entry)", body)
+
+    def test_cp_recursive_uses_two_pass_directory_walk(self):
+        text = source("src/os/shell.c")
+        body = function_body(text, "cmd_cp")
+        self.assertIn('strcmp(argv[1], "-r") == 0', body)
+        self.assertIn("cp_recursive_copy(src, dst_final, 0U)", body)
+        self.assertIn("disk_resolve_destination(src, dst, dst_final", body)
+        self.assertIn("fat32_path_within(src, dst_final)", body)
+        self.assertIn("fat32_is_directory", text)
+        self.assertIn("fat32_make_directory(dst)", text)
+        fat32 = source("src/fs/fat32.c")
+        self.assertIn("int fat32_is_directory(const char *path)", fat32)
 
     def test_rmdir_force_option_uses_recursive_directory_removal(self):
         body = function_body(source("src/os/shell.c"), "cmd_rmdir")

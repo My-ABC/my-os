@@ -17,6 +17,12 @@ int ascii_to_utf16LE(const char *ascii, uint8_t *utf16le,
 int fat32_list_directory(const char *path, fat32_list_callback_t callback);
 int fat32_read_file(const char *path, void *buffer, uint32_t buffer_size, uint32_t *size);
 int fat32_write_file(const char *path, const void *buffer, uint32_t size);
+int fat32_copy_file(const char *src_path, const char *dst_path);
+/* Returns 1 for a directory, 0 for a file, -1 when missing or on error. */
+int fat32_is_directory(const char *path);
+/* Returns 1 when `path` is `ancestor` or inside it, 0 otherwise, -1 on error. */
+int fat32_path_within(const char *ancestor, const char *path);
+int fat32_move(const char *src_path, const char *dst_path);
 int fat32_delete_file(const char *path);
 int fat32_make_directory(const char *path);
 int fat32_remove_directory(const char *path);

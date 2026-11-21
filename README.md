@@ -156,6 +156,9 @@ disk     initialize ATA and detect FAT32
 ls       list the current FAT32 directory, or `ls <path>` for another directory
 cat      print a FAT32 file
 write    write text to a FAT32 file
+cp       copy a FAT32 file; `cp -r <dir> <dst>` recursively copies a directory tree
+mv       move or rename a FAT32 file or directory; an existing directory destination
+        receives the source inside it, an existing file destination is replaced
 rm       delete a FAT32 file
 cd       change the FAT32 directory
 mkdir    create a FAT32 directory
