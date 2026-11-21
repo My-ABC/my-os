@@ -386,7 +386,7 @@ static uint32_t sig_deliverable_mask(struct ring3_process *p) {
 }
 
 int ring3_signal_send(uint32_t pid, uint32_t sig) {
-    if (sig == 0U || sig >= NSIG) return -1;
+    if (!SIG_VALID(sig)) return -1;
     uint32_t flags = irq_save();
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
@@ -402,7 +402,7 @@ int ring3_signal_send(uint32_t pid, uint32_t sig) {
 }
 
 int ring3_signal_set_handler(uint32_t sig, uint32_t handler) {
-    if (sig == 0U || sig >= NSIG || SIG_UNCATCHABLE(sig)) return -1;
+    if (!SIG_VALID(sig) || SIG_UNCATCHABLE(sig)) return -1;
     if (handler > SIG_IGN && handler >= USER_SPACE_END) return -1;
     if (current_process < 0) return -1;
     uint32_t flags = irq_save();

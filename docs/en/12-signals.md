@@ -60,15 +60,19 @@ Disposition handling in `sig_deliverable_mask()`:
 - **Ctrl+C**: the keyboard driver tracks the Ctrl modifier and emits a
   `KEYBOARD_KEY_SIGINT` (0x05) control byte instead of `'c'`. The
   shell input loop consumes it and calls `ring3_signal_send()` with
-  `SIGINT` for the foreground process. With no foreground process the
-  byte is ignored. The byte can also reach `SYS_READ`/`SYS_GETCHAR`
-  consumers as a raw 0x05.
+  `SIGINT` for the foreground process; with no foreground process the
+  byte is ignored. If a `SYS_READ`/`SYS_GETCHAR` wait loop reads the
+  byte first, it delivers `SIGINT` to itself instead, so a process
+  blocked on keyboard input is still interrupted (subject to its
+  disposition).
 - **`SYS_KILL` (22)**: `ebx` = pid, `ecx` = signal number; marks the
-  signal pending on the target process. Returns 0 or -1.
+  signal pending on the target process. Only `SIGINT`/`SIGKILL` are
+  accepted; reserved numbers return -1. Returns 0 or -1.
 - **`SYS_SIGNAL` (23)**: `ebx` = signal number, `ecx` = handler
   (0 = default, 1 = ignore, otherwise a user address below
   `USER_SPACE_END`). Sets the disposition for the *current* process.
-  `SIGKILL` cannot be caught. Returns 0 or -1.
+  `SIGKILL` cannot be caught; reserved numbers return -1.
+  Returns 0 or -1.
 
 ## Current limitations
 

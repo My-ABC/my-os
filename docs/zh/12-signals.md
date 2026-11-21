@@ -53,14 +53,16 @@ MyOS 为 Ring 3 进程实现了基础的信号机制。信号编号定义于
 - **Ctrl+C**：键盘驱动跟踪 Ctrl 修饰键，产生
   `KEYBOARD_KEY_SIGINT`（0x05）控制字节而非字符 `'c'`。Shell 输入
   循环消费该字节，对前台进程调用 `ring3_signal_send()` 发送
-  `SIGINT`；无前台进程时忽略。该字节也可能以原始 0x05 到达
-  `SYS_READ`/`SYS_GETCHAR` 的消费者。
+  `SIGINT`；无前台进程时忽略。若 `SYS_READ`/`SYS_GETCHAR` 等待循环
+  先读到该字节，则改为向自身投递 `SIGINT`，因此阻塞在键盘输入上的
+  进程同样会被中断（仍受其处置影响）。
 - **`SYS_KILL`（22）**：`ebx` = pid、`ecx` = 信号编号；把信号置为
-  目标进程的 pending。返回 0 或 -1。
+  目标进程的 pending。只接受 `SIGINT`/`SIGKILL`，保留编号返回 -1。
+  返回 0 或 -1。
 - **`SYS_SIGNAL`（23）**：`ebx` = 信号编号、`ecx` = 处理器
   （0 = 默认、1 = 忽略、否则为 `USER_SPACE_END` 以下的用户地址）。
-  设置*当前*进程对该信号的处置；`SIGKILL` 不可捕获。
-  返回 0 或 -1。
+  设置*当前*进程对该信号的处置；`SIGKILL` 不可捕获，保留编号返回
+  -1。返回 0 或 -1。
 
 ## 当前限制
 
