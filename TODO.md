@@ -71,8 +71,8 @@ This document tracks completed work and the project roadmap. When an item is com
 ## Hardware, Devices, and ACPI
 
 - [ ] **Inventory and enumerate driver-ecosystem gaps**
-  - [ ] Review the capabilities and limits of existing ATA, keyboard, PIC/PIT, RTC, VGA/VBE, and ACPI drivers.
-  - [ ] List missing drivers by bus/device category, with priorities and test devices.
+  - [x] Review the capabilities and limits of existing ATA, keyboard, PIC/PIT, RTC, VGA/VBE, and ACPI drivers. (See `docs/en/11-driver-gaps.md` / `docs/zh/11-driver-gaps.md`.)
+  - [x] List missing drivers by bus/device category, with priorities and test devices. (Same document; includes a suggested adoption order.)
   - [ ] Select and implement drivers incrementally based on actual needs; do not promise blanket compatibility in advance.
 - [ ] **Establish a device subsystem**
   - [ ] Design common device, bus, and driver registration/probing interfaces.

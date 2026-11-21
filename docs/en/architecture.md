@@ -24,6 +24,7 @@ Numbered documents cover each subsystem in detail:
 | [08-filesystem.md](08-filesystem.md) | ATA PIO, FAT32 module layout, name encoding, directory semantics |
 | [09-drivers.md](09-drivers.md) | Keyboard, RTC, serial, VGA/VBE, ACPI, PIC/PIT driver notes |
 | [10-build-and-test.md](10-build-and-test.md) | Makefile targets, linker layout, host tests, QEMU integration suite |
+| [11-driver-gaps.md](11-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
 
 Chinese translations live under [../zh/](../zh/).
 

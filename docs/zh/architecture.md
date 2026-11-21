@@ -23,6 +23,7 @@ Shell，以及运行在 ATA 磁盘上的 FAT32 文件系统。
 | [08-filesystem.md](08-filesystem.md) | ATA PIO、FAT32 模块划分、文件名编码、目录语义 |
 | [09-drivers.md](09-drivers.md) | 键盘、RTC、串口、VGA/VBE、ACPI、PIC/PIT 驱动说明 |
 | [10-build-and-test.md](10-build-and-test.md) | Makefile 目标、链接布局、host 测试、QEMU 集成套件 |
+| [11-driver-gaps.md](11-driver-gaps.md) | 驱动能力盘点、按总线列出的缺失驱动、优先级、QEMU 测试设备 |
 
 英文版见 [../en/](../en/)。
 

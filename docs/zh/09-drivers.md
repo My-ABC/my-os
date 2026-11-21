@@ -26,3 +26,5 @@
   段，PIT/键盘在 IDT 就绪后才开启。
 - ACPI 表解析目前只覆盖 PM 电源寄存器（MADT、HPET、AML 未实现）——
   见 `TODO.md` 跟踪。
+- 能力盘点、缺失驱动清单、优先级和 QEMU 测试设备见
+  [11-driver-gaps.md](11-driver-gaps.md)。

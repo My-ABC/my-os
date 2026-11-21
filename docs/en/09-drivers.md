@@ -27,3 +27,5 @@ device-registration bus layer yet.
   staged so PIT/keyboard come up only after the IDT exists.
 - ACPI table parsing beyond PM power registers (MADT, HPET, AML) is not
   implemented yet — tracked in `TODO.md`.
+- For the capability inventory, missing-driver list, priorities, and
+  QEMU test devices, see [11-driver-gaps.md](11-driver-gaps.md).
