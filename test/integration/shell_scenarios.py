@@ -215,8 +215,9 @@ def check_run_from_disk(session):
     session.wait_for_regex(rb"\[ELF\] Loaded ELF32 entry=", start=run_start)
     session.wait_for_regex(rb"Hello from ELF32", start=run_start)
     session.pass_check("run loads and executes ELF32 from the FAT32 disk")
-    session.send_line("kill 4")
-    session.wait_for("[RING3] Killed PID 4")
+    ps_start = len(session.serial_data)
+    session.send_line("ps")
+    session.wait_for_regex(rb"\[PS\] 4 DEAD", start=ps_start, timeout=5)
 
 
 def check_fs_syscalls(session):

@@ -186,8 +186,8 @@ is used. `bg <pid>` hides it again, `ps` lists process states, and
 
 The `elf` command starts the built-in ELF32 demo in the foreground, so its
 `Hello from ELF32` system-call output is visible while the shell remains
-responsive. Use `bg <pid>` to hide the output and `kill <pid>` to stop the
-demo; killing it releases its ELF user mappings so `elf` can be run again.
+responsive. The demo then exits on its own via `SYS_EXIT`, which releases
+its ELF user mappings so `elf` can be run again.
 
 ## Layout
 

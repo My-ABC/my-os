@@ -34,10 +34,12 @@ elf_demo_start:
     times 0x100 - ($ - elf_demo_start) db 0
 elf_demo_code:
     mov eax, 1
-    mov ebx, 0x00500010
+    mov ebx, 0x00500020
+    int 0x80
+    mov eax, 10        ; SYS_EXIT: terminate instead of looping forever
     int 0x80
 .halt:
     jmp .halt
-    times 0x110 - ($ - elf_demo_start) db 0
+    times 0x120 - ($ - elf_demo_start) db 0
     db "Hello from ELF32", 10, 0
 elf_demo_end:
