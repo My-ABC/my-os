@@ -10,5 +10,7 @@ void vbe_set_color(uint8_t foreground, uint8_t background);
 void vbe_clear(void);
 void vbe_putchar(char c);
 void vbe_cursor_tick(void);
+void vbe_get_cursor(uint16_t *row, uint16_t *col);
+void vbe_set_cursor(uint16_t row, uint16_t col);
 
 #endif

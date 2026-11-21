@@ -9,7 +9,7 @@ device-registration bus layer yet.
 | Driver | File(s) | Notes |
 |---|---|---|
 | ATA PIO | `ata.c` | Primary master, LBA28, 512-byte sectors; see [08-filesystem.md](08-filesystem.md) |
-| Keyboard | `keyboard.c` | PS/2 scancodes → ASCII, IRQ1, configurable scancode set via `SCANCODE_SET` |
+| Keyboard | `keyboard.c` | PS/2 scancodes → ASCII, IRQ1, configurable scancode set via `SCANCODE_SET`; arrow keys emit `KEYBOARD_KEY_*` control bytes (0x01–0x04) |
 | PIC | `pic.c` | 8259 master/slave remap and per-line mask helpers |
 | PIT | `pit.c` | 8253 channel 0, `PIT_FREQUENCY` = 100 Hz, tick counter |
 | RTC | `rtc.c` | MC146818 CMOS time, BCD decode, Beijing-time conversion, Unix timestamp |

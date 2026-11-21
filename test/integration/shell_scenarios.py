@@ -17,6 +17,20 @@ def check_startup(session):
     session.pass_check("keyboard-driven shell command executes")
 
 
+def check_shell_history(session):
+    session.send_line("secho hist-first")
+    session.wait_for("hist-first")
+    session.send_line("secho hist-second")
+    session.wait_for("hist-second")
+    # Two Up presses recall the first marker command; Enter re-runs it.
+    hist_start = len(session.serial_data)
+    session.send_key("up")
+    session.send_key("up")
+    session.send_key("ret")
+    session.wait_for_regex(rb"hist-first", start=hist_start, timeout=10)
+    session.pass_check("shell history recalls and re-runs a previous command")
+
+
 def check_storage_and_shell(session):
     session.send_line("disk")
     session.wait_for("ATA primary master and FAT32 filesystem initialized")

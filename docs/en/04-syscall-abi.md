@@ -82,7 +82,7 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 - **No ABI versioning**: call numbers are bare integers with no version field.
 - **Non-uniform error semantics**: undefined call numbers return `-1`, memory-operation failures return 0, and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
 - **Blocking calls do not yield the CPU**: IRQ0 still fires during `SYS_READ`/`SYS_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching, so other Ring 3 processes cannot be scheduled until the call returns. The keyboard wait itself is woken normally by IRQ1 (the trap gate preserves IF); cooperative code can call `SYS_YIELD` at safe syscall boundaries.
-- **`SYS_READ`/`SYS_GETCHAR` only talk to the keyboard**: no file/console abstraction.
+- **`SYS_READ`/`SYS_GETCHAR` only talk to the keyboard**: no file/console abstraction. Arrow keys are delivered as the control bytes `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT` (0x01–0x04); `SYS_GETCHAR` returns them as ordinary char values and `SYS_READ` stores them raw in the buffer.
 - **No device-access interfaces** (serial, raw ATA, etc.) and no process create/wait calls (`SYS_EXIT` exists; `kill` is still shell-only).
 - The fd table is global and fds are not reclaimed on process exit; `SYS_FREAD`/`SYS_FWRITE` do whole-file read-modify-write, so I/O is expensive.
 - `SYS_WRITE`'s foreground/background suppression is implicit; callers cannot choose an output channel.

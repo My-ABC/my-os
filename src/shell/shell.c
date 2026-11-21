@@ -785,15 +785,72 @@ static void shell_print_prompt(void) {
     }
 }
 
+#define SHELL_HISTORY_MAX 16
+
+static char shell_history[SHELL_HISTORY_MAX][128];
+static int shell_history_count = 0;
+static char shell_history_draft[128];
+
+static void shell_history_push(const char *line) {
+    uint32_t length = strlen(line);
+    int blank = 1;
+    for (uint32_t i = 0; i < length; ++i) {
+        if (line[i] != ' ') {
+            blank = 0;
+            break;
+        }
+    }
+    if (blank) return;
+    if (shell_history_count > 0 &&
+        strcmp(shell_history[shell_history_count - 1], line) == 0) {
+        return;
+    }
+    if (shell_history_count == SHELL_HISTORY_MAX) {
+        memmove(&shell_history[0], &shell_history[1],
+                (SHELL_HISTORY_MAX - 1) * sizeof(shell_history[0]));
+        --shell_history_count;
+    }
+    strncpy(shell_history[shell_history_count], line,
+            sizeof(shell_history[0]) - 1U);
+    shell_history[shell_history_count][sizeof(shell_history[0]) - 1U] = '\0';
+    ++shell_history_count;
+}
+
+/* Repaint the input line with `text`, first erasing the `*length`
+ * characters already echoed after the prompt. `origin` is the cursor
+ * position captured right after the prompt was printed. */
+static void shell_redraw_line(char *line, int *length, int size,
+                              const char *text, int text_length,
+                              uint16_t origin_row, uint16_t origin_col) {
+    vga_set_cursor(origin_row, origin_col);
+    for (int i = 0; i < *length; ++i) {
+        putchar(' ');
+    }
+    vga_set_cursor(origin_row, origin_col);
+    int copy = text_length < size - 1 ? text_length : size - 1;
+    for (int i = 0; i < copy; ++i) {
+        line[i] = text[i];
+        putchar(text[i]);
+    }
+    line[copy] = '\0';
+    *length = copy;
+}
+
 static void shell_read_line(char *line, int size) {
     int length = 0;
     int prompt_visible = 0;
+    int history_index = -1;  /* -1: editing a fresh line, draft holds it */
+    uint16_t origin_row = 0;
+    uint16_t origin_col = 0;
+    int origin_valid = 0;
 
-    while (length < size - 1) {
+    for (;;) {
         if (ring3_foreground_pid() == 0U) {
             if (!prompt_visible && length == 0) {
                 shell_print_prompt();
                 prompt_visible = 1;
+                vga_get_cursor(&origin_row, &origin_col);
+                origin_valid = 1;
             }
         } else {
             prompt_visible = 0;
@@ -805,6 +862,45 @@ static void shell_read_line(char *line, int size) {
         }
 
         char c = keyboard_getchar();
+        if (c == KEYBOARD_KEY_UP || c == KEYBOARD_KEY_DOWN) {
+            const char *text;
+            int text_length;
+            int new_index = history_index;
+
+            if (!origin_valid) continue;
+            if (c == KEYBOARD_KEY_UP) {
+                if (shell_history_count == 0) continue;
+                if (history_index == -1) {
+                    int copy = length < (int)sizeof(shell_history_draft) - 1
+                               ? length : (int)sizeof(shell_history_draft) - 1;
+                    memcpy(shell_history_draft, line, copy);
+                    shell_history_draft[copy] = '\0';
+                    new_index = shell_history_count - 1;
+                } else if (history_index > 0) {
+                    --new_index;
+                } else {
+                    continue;
+                }
+                text = shell_history[new_index];
+            } else {
+                if (history_index == -1) continue;
+                if (history_index < shell_history_count - 1) {
+                    ++new_index;
+                    text = shell_history[new_index];
+                } else {
+                    new_index = -1;
+                    text = shell_history_draft;
+                }
+            }
+            history_index = new_index;
+            text_length = (int)strlen(text);
+            shell_redraw_line(line, &length, size, text, text_length,
+                              origin_row, origin_col);
+            continue;
+        }
+        if (c >= KEYBOARD_KEY_UP && c <= KEYBOARD_KEY_RIGHT) {
+            continue;  /* left/right are reserved for future line editing */
+        }
         if (c == '\n' || c == '\r') {
             line[length] = '\0';
             putchar('\n');
@@ -819,11 +915,11 @@ static void shell_read_line(char *line, int size) {
             }
             continue;
         }
-        line[length++] = c;
-        putchar(c);
+        if (length < size - 1) {
+            line[length++] = c;
+            putchar(c);
+        }
     }
-
-    line[length] = '\0';
 }
 
 void start_shell(void) {
@@ -837,6 +933,7 @@ void start_shell(void) {
 
     while (1) {
         shell_read_line(line, sizeof(line));
+        shell_history_push(line);
         argc = split_line(line, argv, 16);
         if (argc == 0) continue;
         int found = 0;
