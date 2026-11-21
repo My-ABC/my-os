@@ -26,12 +26,12 @@ via `start_shell()`.
   task running).
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
-  closing quote (the quotes themselves are stripped). An unterminated
-  quote is treated as a literal `"`, and `"` anywhere else in a word is
-  always literal. Every argument then goes through
-  `shell_unescape_arg()`: `\n` becomes a real newline and `\\` a literal
-  backslash; any other `\x` sequence prints an `unknown escape`
-  warning and is kept literally.
+  closing quote (the quotes themselves are stripped), but only when the
+  quoted content is non-empty — `""`, unterminated `"`, and `"` anywhere
+  else in a word are all literal. Every argument then goes through
+  `shell_unescape_arg()`: `\n` becomes a real newline, `\\` a literal
+  backslash, and `\"` a literal `"`; any other `\x` sequence prints an
+  `unknown escape` warning and is kept literally.
 - Dispatch is an exact `strcmp` against `cmd_table` (name, handler,
   one-line description); unknown input prints `Unknown command`.
 - Prompt: `myos <cwd> > ` when FAT32 is mounted, `myos > ` otherwise.

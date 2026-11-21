@@ -87,14 +87,14 @@ static int split_line(char *line, char *argv[], int max_args) {
         if (*p == '"') {
             char *close = p + 1;
             while (*close != '\0' && *close != '"') ++close;
-            if (*close == '"') {
+            /* 引号分组要求非空内容; "" 和未闭合的 " 都按字面量处理 */
+            if (*close == '"' && close != p + 1) {
                 argv[argc++] = ++p;
                 while (*p != '"') ++p;
                 *p = '\0';
                 ++p;
                 continue;
             }
-            /* 未闭合引号: '"' 按字面量处理, 落入普通参数扫描 */
         }
         argv[argc++] = p;
         while (*p && *p != ' ') p++;
@@ -107,8 +107,8 @@ static int split_line(char *line, char *argv[], int max_args) {
     return argc;
 }
 
-// 展开参数中的转义序列（原地压缩）: \n -> 换行, \\ -> 反斜杠;
-// 其余 \x 保持原样并打印警告, 行尾单独的 \ 也按字面量处理。
+// 展开参数中的转义序列（原地压缩）: \n -> 换行, \\ -> 反斜杠,
+// \" -> 双引号; 其余 \x 保持原样并打印警告, 行尾单独的 \ 也按字面量处理。
 static void shell_unescape_arg(char *arg) {
     char *r = arg;
     char *w = arg;
@@ -118,6 +118,9 @@ static void shell_unescape_arg(char *arg) {
             r += 2;
         } else if (*r == '\\' && r[1] == '\\') {
             *w++ = '\\';
+            r += 2;
+        } else if (*r == '\\' && r[1] == '"') {
+            *w++ = '"';
             r += 2;
         } else {
             if (*r == '\\' && r[1] != '\0') {

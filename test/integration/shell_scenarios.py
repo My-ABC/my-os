@@ -86,7 +86,12 @@ def check_shell_escapes(session):
     session.send_line('secho "111\\y222"')
     session.wait_for("unknown escape '\\y'", timeout=10)
     session.wait_for("111\\y222", timeout=10)
-    session.pass_check("shell \\n and \\\\ escapes expand in arguments")
+    # Empty quotes are literal, so """ stays verbatim; \" escapes a quote.
+    session.send_line('secho """')
+    session.wait_for('"""', timeout=10)
+    session.send_line('secho \\"\\"\\"')
+    session.wait_for('"""', timeout=10)
+    session.pass_check("shell \\n, \\\\, and \\\" escapes expand in arguments")
 
 
 def check_storage_and_shell(session):
