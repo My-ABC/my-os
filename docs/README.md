@@ -6,8 +6,10 @@ translations and link back to their English counterpart.
 
 | Document | Description |
 |---|---|
+| [README-zh.md](README-zh.md) | Chinese translation of the root `README.md` project overview. |
 | [syscall_abi.md](syscall_abi.md) / [syscall_abi-zh.md](syscall_abi-zh.md) | `int 0x80` system-call ABI: call numbers, argument registers, sub-operations, and known limitations. |
 | [shell_command.md](shell_command.md) / [shell_command-zh.md](shell_command-zh.md) | Interactive shell command reference: every command, arguments, path semantics, and limitations. |
 
-Project-level documents stay at the repository root: `README.md` /
-`README-zh.md` for an overview and `TODO.md` / `TODO-zh.md` for the roadmap.
+`README.md` (English overview) and `TODO.md` / `TODO-zh.md` (the bilingual
+roadmap) stay at the repository root so GitHub renders the README on the
+repo page and the roadmap stays easy to find.

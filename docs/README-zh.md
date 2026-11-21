@@ -1,4 +1,4 @@
-[English](README.md) | 中文
+[English](../README.md) | 中文
 
 # MyOS
 
@@ -183,7 +183,7 @@ include/          按 src/ 子系统对应分类的头文件
 docs/             ABI 与 shell 命令参考（中英双语）
 scripts/          CI/CD 文件
 linker.ld         1MB 加载地址与段布局
-[TODO.md](./TODO.md) 英文项目路线图 | [TODO-zh.md](./TODO-zh.md) 中文项目路线图
+[TODO.md](../TODO.md) 英文项目路线图 | [TODO-zh.md](../TODO-zh.md) 中文项目路线图
 ```
 
 ## 说明
