@@ -101,22 +101,22 @@ $(BUILD_DIR)/paging_asm.o: boot/paging.asm
 run: iso
 	@if test -f "$(DISK)"; then \
 		echo "Attaching disk image: $(DISK)"; \
-		qemu-system-i386 -boot order=d -cdrom $(ISO) -drive file="$(DISK)",format=raw,if=ide -serial stdio; \
+		qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) -drive file="$(DISK)",format=raw,if=ide -serial stdio; \
 	else \
 		echo "No disk image found at $(DISK); booting without an IDE disk"; \
-		qemu-system-i386 -boot order=d -cdrom $(ISO) -serial stdio; \
+		qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) -serial stdio; \
 	fi
 
 # 直接 -kernel 启动，不经过 GRUB，仅用于启动链调试
 run-kernel: build
-	qemu-system-i386 -kernel $(KERNEL) -serial stdio
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -serial stdio
 
 # 无图形界面运行, 串口输出到终端
 run-nographic: build
-	qemu-system-i386 -kernel $(KERNEL) -nographic -serial stdio
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -nographic -serial stdio
 
 run-serial: build
-	qemu-system-i386 -kernel $(KERNEL) -serial stdio
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -serial stdio
 
 disk:
 	@if test -f "$(DISK)"; then \
@@ -129,15 +129,15 @@ disk:
 	fi
 
 run-disk: build disk
-	qemu-system-i386 -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
 
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
-	qemu-system-i386 -machine q35 -kernel $(KERNEL) -serial stdio
+	qemu-system-i386 -rtc base=utc -machine q35 -kernel $(KERNEL) -serial stdio
 
 # 使用 q35 机型运行，串口输出到终端
 run-q35-nographic: build
-	qemu-system-i386 -machine q35 -kernel $(KERNEL) -nographic
+	qemu-system-i386 -rtc base=utc -machine q35 -kernel $(KERNEL) -nographic
 
 iso: build
 	@mkdir -p iso/boot/grub
@@ -159,13 +159,13 @@ debug: build
 	@echo "=== In another terminal: i686-elf-gdb myos.bin ==="
 	@echo "=== (gdb) target remote localhost:1234 ==="
 	@echo "=== (gdb) b kmain  # set breakpoint ==="
-	qemu-system-i386 -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -serial stdio -S -s -no-reboot -no-shutdown
 
 gdb:
 	i686-elf-gdb -ex "target remote localhost:1234" $(KERNEL)
 
 run-iso: iso
-	qemu-system-i386 -machine q35 -cdrom $(ISO) -serial stdio
+	qemu-system-i386 -rtc base=utc -machine q35 -cdrom $(ISO) -serial stdio
 
 # 清理
 clean:
