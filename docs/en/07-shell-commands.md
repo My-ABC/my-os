@@ -25,7 +25,7 @@ below.
 
 | Command | Arguments | Description |
 |---|---|---|
-| `time` | — | Print the current time (RTC, Beijing time) as `YYYY-MM-DD HH:MM:SS`. |
+| `time` | `[12\|24]` | Print the current time (RTC, Beijing time) as `YYYY-MM-DD HH:MM:SS`. Defaults to 24-hour format; `time 12` appends `AM`/`PM` and uses 12-hour format, `time 24` is explicit 24-hour. |
 | `panic` | — | Trigger a debug break (`int3`) to demonstrate the blue-screen panic path. |
 | `svga_blue` | — | Fill the screen blue via VBE; falls back to a blue VGA text screen. |
 | `echo` | `<text>...` | Print the arguments separated by single spaces to the screen and the COM1 serial port. |
