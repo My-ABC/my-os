@@ -62,7 +62,9 @@ void idt_init(void) {
     idt_set_gate(33, (uint32_t)irq1, 0x08, 0x8E);
 
     extern void syscall(void);
-    idt_set_entry(0x80, (uint32_t)syscall, 0x08, 0xEE);
+    // Trap gate (0xEF) keeps IF unchanged so blocking syscalls can be
+    // woken by the keyboard IRQ; interrupt gate (0xEE) would deadlock them.
+    idt_set_entry(0x80, (uint32_t)syscall, 0x08, 0xEF);
 
     idtp.limit = sizeof(idt) - 1;
     idtp.base = (uint32_t)&idt;
