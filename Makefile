@@ -12,6 +12,7 @@ INCLUDE_DIRS = include include/arch/x86 include/drivers include/fs include/lib \
 CFLAGS = -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 -g \
 	$(addprefix -I,$(INCLUDE_DIRS))
 CFLAGS += -MMD -MP
+BUILD_DIR ?= build
 
 # PANIC_DEMO=1 时内核启动后主动触发 INT3, 用于演示/测试蓝屏
 ifdef PANIC_DEMO
@@ -30,6 +31,7 @@ endif
 ifdef SCANCODE_SET
 CFLAGS += -DSCANCODE_SET=$(SCANCODE_SET)
 endif
+
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
@@ -38,14 +40,12 @@ C_SRCS = $(shell find src -type f -name '*.c' -print)
 ASM_SRCS = $(filter-out boot/gdt.asm boot/paging.asm,$(wildcard boot/*.asm))
 
 # 自动生成目标文件列表
-C_OBJS = $(patsubst src/%.c, build/%.o, $(C_SRCS))
+C_OBJS = $(patsubst src/%.c, $(BUILD_DIR)/%.o, $(C_SRCS))
 DEPFILES = $(C_OBJS:.o=.d)
-ASM_OBJS = $(patsubst boot/%.asm, build/%.o, $(ASM_SRCS))
-ASM_OBJS += build/gdt_asm.o
-ASM_OBJS += build/paging_asm.o
+ASM_OBJS = $(patsubst boot/%.asm, $(BUILD_DIR)/%.o, $(ASM_SRCS))
+ASM_OBJS += $(BUILD_DIR)/gdt_asm.o
+ASM_OBJS += $(BUILD_DIR)/paging_asm.o
 OBJS = $(ASM_OBJS) $(C_OBJS)
-
--include $(DEPFILES)
 
 ISO = myos.iso
 KERNEL = myos.bin
@@ -53,8 +53,17 @@ QEMU ?= qemu-system-i386
 DISK ?= disk.img
 DISK_SIZE ?= 64M
 
+ifdef HIGHMEM_QEMU_TEST
+CFLAGS += -DPMM_QEMU_HIGHMEM_TEST
+BUILD_DIR := build/highmem-test
+KERNEL := build/highmem-test/myos.bin
+endif
+
+-include $(DEPFILES)
+
 # 构建
 build: $(OBJS)
+	mkdir -p $(dir $(KERNEL))
 	$(LD) $(LDFLAGS) $^ -o $(KERNEL)
 
 test:
@@ -63,24 +72,29 @@ test:
 test-qemu: build
 	python3 test/integration/run_qemu_integration.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
 
+test-qemu-highmem:
+	$(MAKE) HIGHMEM_QEMU_TEST=1 build
+	python3 test/integration/run_qemu_highmem.py --qemu "$(QEMU)" \
+		--kernel build/highmem-test/myos.bin
+
 # 编译 C 文件
-build/%.o: src/%.c
+$(BUILD_DIR)/%.o: src/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # 编译汇编文件
-build/%.o: boot/%.asm
-	mkdir -p build
+$(BUILD_DIR)/%.o: boot/%.asm
+	mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
 # 单独编译 gdt.asm
-build/gdt_asm.o: boot/gdt.asm
-	mkdir -p build
+$(BUILD_DIR)/gdt_asm.o: boot/gdt.asm
+	mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
 # 单独编译 paging.asm
-build/paging_asm.o: boot/paging.asm
-	mkdir -p build
+$(BUILD_DIR)/paging_asm.o: boot/paging.asm
+	mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
 # 运行：通过 GRUB ISO 启动；仅在已有镜像时附加 FAT32 IDE 磁盘
@@ -158,4 +172,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build test test-qemu disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

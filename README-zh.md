@@ -25,7 +25,7 @@
 - **系统调用** — Ring 3 可输出文本，并通过 `SYS_GETPID` 查询当前进程 PID
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
-- **PAE 分页** — 使用 64 位 PAE 页目录/页表项、32 字节 PDPT 和 32 位 CR3，并通过映射窗口访问高端物理页与页表。PMM 支持 64 GiB 以下的物理地址（36 位 PAE 上限）；实际可用内存由 Multiboot 内存图决定。当前启动阶段要求 Multiboot 信息块和内存图缓冲区位于低 16 MiB。宿主 PMM 测试覆盖高于 4 GiB 的页分配；QEMU 集成测试目前使用 128 MiB
+- **PAE 分页** — 使用 64 位 PAE 页目录/页表项、32 字节 PDPT 和 32 位 CR3，并通过映射窗口访问高端物理页与页表。PMM 支持 64 GiB 以下的物理地址（36 位 PAE 上限）；实际可用内存由 Multiboot 内存图决定。当前启动阶段要求 Multiboot 信息块和内存图缓冲区位于低 16 MiB。可选的 `make test-qemu-highmem` 会在 QEMU `-m 6G` 下启动，分配 4 GiB 以上的真实物理页，验证 PAE 映射及读写，然后释放该页；标准 QEMU 集成测试仍使用 128 MiB。
 - **PMM** — 实现了PMM
 - **堆分配器(内核)** — 实现了kmalloc, kfree, kcalloc, krealloc
 - **堆分配器(用户)** — 实现了堆分配器在系统调用
@@ -46,7 +46,7 @@
 
 各目标依赖：构建内核需要 `nasm` 和 i686 工具链；宿主机测试需要 Python 3 和宿主机 `cc`；
 QEMU 运行及集成测试需要 `qemu-system-i386`；ISO 目标还需要 `grub-pc-bin`、`xorriso`
-和 `grub-common`。
+和 `grub-common`。`make test-qemu-highmem` 也需要这些 GRUB/ISO 工具来生成临时测试镜像。
 
 ```bash
 make build          # -> myos.bin
@@ -59,6 +59,7 @@ make run-iso        # 使用 q35 机型通过 ISO 启动并打开图形窗口
 make iso            # 生成iso文件
 make test           # 运行内核例程的宿主机测试
 make test-qemu      # 构建内核并运行有时限的无头 QEMU 集成测试
+make test-qemu-highmem  # QEMU -m 6G：分配、映射、读写并释放 4 GiB 以上的物理页
 make disk           # 创建 64 MB FAT32 格式的 disk.img
 make run            # 有 disk.img 就挂载，否则不连接磁盘
 make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并连接磁盘
@@ -85,6 +86,11 @@ make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并�
 指定可执行文件。测试使用一种 QEMU PC/TCG 配置，不能替代其他固件、真实硬件
 测试，也不验证 GRUB ISO 启动。测试使用 Python 内置 socket，无需宿主机
 `timeout`、`socat` 或 netcat。
+
+`make test-qemu-highmem` 是独立且有时限的 GRUB/Multiboot QEMU TCG 测试，
+为虚拟机提供 6 GiB 内存。它会分配 4 GiB 以上的物理页，建立映射并校验写入
+和读回的数据，再取消映射、释放页面并确认该页可重新分配。测试使用独立的
+`build/highmem-test/` 目录，不改变标准 QEMU 集成测试的 128 MiB 内存配置。
 
 Makefile 默认使用 `i686-elf-gcc` / `i686-elf-ld`。没有交叉工具链时可以用宿主编译器的 32 位模式：
 
@@ -167,7 +173,7 @@ src/lib/          freestanding C 标准库函数
 include/          按 src/ 子系统对应分类的头文件
 scripts/          CI/CD 文件
 linker.ld         1MB 加载地址与段布局
-[TODO.md](./TODO.md) 项目路线图和后续实现任务
+[TODO.md](./TODO.md) 英文项目路线图 | [TODO-zh.md](./TODO-zh.md) 中文项目路线图
 ```
 
 ## 说明

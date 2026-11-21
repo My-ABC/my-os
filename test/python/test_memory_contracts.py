@@ -28,6 +28,15 @@ class MemoryContractTests(unittest.TestCase):
         self.assertIn("pmm_is_frame_used(frame)", body)
         self.assertIn("pmm_set_frame(frame, 0U)", body)
 
+    def test_pmm_reads_multiboot_memory_map_fields(self):
+        pmm = source("src/mm/pmm.c")
+        self.assertIn("#define MULTIBOOT_INFO_MMAP_LENGTH_INDEX 11U", pmm)
+        self.assertIn("#define MULTIBOOT_INFO_MMAP_ADDR_INDEX 12U", pmm)
+        mmap = function_body(pmm, "pmm_walk_mmap")
+        self.assertIn("info[MULTIBOOT_INFO_MMAP_ADDR_INDEX]", mmap)
+        self.assertIn("info[MULTIBOOT_INFO_MMAP_LENGTH_INDEX]", mmap)
+        self.assertIn("sizeof(uint32_t) * MULTIBOOT_INFO_MMAP_END_INDEX", pmm)
+
     def test_pae_64_bit_entries_cr3_and_64_gib_ceiling(self):
         paging = source("src/mm/paging.c")
         header = source("include/mm/paging.h")

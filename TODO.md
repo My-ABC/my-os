@@ -1,128 +1,128 @@
-# MyOS 项目 TODO
+# MyOS Project TODO
 
-此文件记录已完成的项目工作和后续路线图。完成条目后应勾选，并同步维护 README。
+This document tracks completed work and the project roadmap. When an item is completed, update both this file and [TODO-zh.md](./TODO-zh.md), and keep the English and Chinese READMEs and the kernel agent guide in sync.
 
-## 已完成
+## Completed
 
-### 内核、内存与程序运行
+### Kernel, Memory, and Program Execution
 
-- [x] 建立 32 位 x86 Multiboot/GRUB 启动流程，以及 GDT、IDT、TSS 和基础中断处理。
-- [x] 实现内核分页、PAE 页表和高端物理页映射；PMM 可管理 64 GiB 以下的物理地址，并有 4 GiB 以上页分配的宿主测试。
-- [x] 实现内核堆分配器及基础用户堆分配接口。
-- [x] 实现基础 Ring 3 进程调度和进程管理命令；目前最多运行两个进程，进程共享地址空间。
-- [x] 提供基础系统调用 `SYS_WRITE` 和 `SYS_GETPID`。
-- [x] 实现 ELF32 可加载段校验与装载、BSS 清零，以及内置和磁盘 ELF 程序运行。
-- [x] 修复 PAE 更改后 GRUB ISO 启动时可能出现的无限重启；构建依赖自动跟踪头文件，避免 ABI 变更后复用过期对象文件。
+- [x] Established the 32-bit x86 Multiboot/GRUB boot flow, including GDT, IDT, TSS, and basic interrupt handling.
+- [x] Implemented kernel paging, PAE page tables, and high-memory mapping. The PMM supports physical addresses below 64 GiB, has host tests for page allocation above 4 GiB, and the optional QEMU `-m 6G` test allocates a real page at `0x100000000`, maps it, verifies writes and reads, then frees and reallocates it.
+- [x] Implemented the kernel heap allocator and a basic user heap allocation interface.
+- [x] Implemented basic Ring 3 process scheduling and process-management commands; at most two processes can run, and they share an address space.
+- [x] Added the basic `SYS_WRITE` and `SYS_GETPID` system calls.
+- [x] Implemented ELF32 loadable-segment validation/loading and BSS zeroing, plus built-in and disk-based ELF program execution.
+- [x] Fixed a possible infinite reboot after PAE changes on the GRUB ISO boot path; build rules now track header dependencies to avoid reusing stale objects after ABI changes.
 
-### ATA、FAT32 与 Shell
+### ATA, FAT32, and Shell
 
-- [x] 实现 ATA 主盘 PIO/LBA28 扇区读写及启动时设备探测；未检测到磁盘时不显示磁盘路径提示符。
-- [x] 实现 FAT32 挂载、文件和目录操作，并在检测到 ATA 磁盘时自动尝试挂载。
-- [x] 实现 FAT32 ASCII 长文件名（LFN）及 8.3 短别名；支持 `help_aaaaa.1234` 等长文件名，并校验 LFN 序号和校验和。
-- [x] 实现 `utf16LE_to_ascii` 和 `ascii_to_utf16LE` 转换接口。
-- [x] 实现 Shell 当前路径提示符、现有目录导航和 `cd ..`；`cd` 不创建目录，`ls` 默认列出当前目录并支持指定路径。
-- [x] 实现 `rmdir -f` 递归删除非空目录，并限制删除当前目录及其父目录。
-- [x] 实现 `run` 命令，从 FAT32 磁盘装载并运行 ELF32 程序。
+- [x] Implemented ATA primary-master PIO/LBA28 sector access and startup device detection; the Shell omits the disk-path prompt when no disk is detected.
+- [x] Implemented FAT32 mounting and file/directory operations, with automatic mount attempts when an ATA disk is detected.
+- [x] Implemented FAT32 ASCII long file names (LFN) and 8.3 aliases, including names such as `help_aaaaa.1234`, with LFN sequence and checksum validation.
+- [x] Implemented the `utf16LE_to_ascii` and `ascii_to_utf16LE` conversion interfaces.
+- [x] Implemented the Shell's current-path prompt and navigation through existing directories, including `cd ..`; `cd` does not create directories, and `ls` defaults to the current directory while accepting an optional path.
+- [x] Implemented `rmdir -f` to recursively remove non-empty directories while protecting the current directory and its parents.
+- [x] Implemented the `run` command to load and execute an ELF32 program from a FAT32 disk.
 
-### 项目结构、测试与文档
+### Project Structure, Tests, and Documentation
 
-- [x] 整理源码和头文件布局，保留 `src/kernel.c` 为内核入口，并按 `arch/x86`、`mm`、`os`、`drivers`、`fs`、`lib` 分类。
-- [x] 按用途整理测试目录，将 Python、宿主 C、Shell 启动脚本和 QEMU 集成测试分开放置。
-- [x] 建立宿主测试和 QEMU 集成测试，覆盖 PAE/PMM、FAT32 LFN、Shell 操作、Ring 3 进程及磁盘 ELF 运行。
-- [x] 建立项目级 TODO 路线图，并在中英文 README 和内核 agent 指引中记录维护入口。
+- [x] Organized source and header files while keeping `src/kernel.c` as the kernel entry point and grouping code under `arch/x86`, `mm`, `os`, `drivers`, `fs`, and `lib`.
+- [x] Organized tests by purpose, separating Python tests, host C tests, Shell launchers, and QEMU integration tests; added the optional `make test-qemu-highmem` test for real high-page allocation and access.
+- [x] Added host and QEMU integration tests covering PAE/PMM, high physical-page allocation and access, FAT32 LFN, Shell operations, Ring 3 processes, and disk ELF execution.
+- [x] Created the project roadmap and documented its entry points in both READMEs and the kernel agent guide.
 
-## 内核、用户态与系统调用
+## Kernel, User Space, and System Calls
 
-- [ ] **完善 ISR14 页错误处理**
-  - [ ] 根据错误码和被中断的特权级区分用户态与内核态缺页。
-  - [ ] 只对已登记的 ELF 段、用户堆和用户栈按需分配页面。
-  - [ ] 区分未映射页与保护违规；非法用户访问应终止对应进程，内核态非法缺页应进入 panic。
-  - [ ] 用户页映射前清零；分配或映射失败时正确回收资源。
-  - [ ] 覆盖有效按需映射、越界访问、保护违规、内核态缺页和内存不足测试。
-  - 现有入口：[isr14_handler](./src/arch/x86/trap.c)。
-- [ ] **完善用户态与系统调用接口**
-  - [ ] 定义稳定、版本化的系统调用 ABI、参数约定和错误码。
-  - [ ] 校验用户指针、长度和地址范围，提供安全的用户/内核数据复制。
-  - [ ] 完善进程创建、退出、等待、信号/事件及资源回收接口。
-  - [ ] 增加文件、目录、控制台、时间和设备访问所需的系统调用。
-  - [ ] 为 ABI 和非法参数处理添加宿主与 QEMU 测试。
-- [ ] **将 Shell 完善并迁移到 Ring 3**
-  - [ ] 将命令解析、交互和内建命令逐步移出内核。
-  - [ ] 通过系统调用访问控制台、文件系统、进程和设备。
-  - [ ] 提供命令行编辑、历史记录、错误码和可执行程序搜索等基础体验。
-  - [ ] 保持用户 Shell 崩溃或退出时内核仍可恢复控制。
+- [ ] **Complete ISR14 page-fault handling**
+  - [ ] Distinguish user- and kernel-mode faults using the error code and interrupted privilege level.
+  - [ ] Demand-map pages only for registered ELF segments, the user heap, and the user stack.
+  - [ ] Distinguish unmapped pages from protection violations; terminate the process on illegal user access and panic on illegal kernel faults.
+  - [ ] Zero user pages before mapping and correctly release resources when allocation or mapping fails.
+  - [ ] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior.
+  - Existing entry point: [isr14_handler](./src/arch/x86/trap.c).
+- [ ] **Complete the user-space and system-call interfaces**
+  - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes.
+  - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers.
+  - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces.
+  - [ ] Add system calls for file, directory, console, time, and device access.
+  - [ ] Add host and QEMU tests for the ABI and invalid-argument handling.
+- [ ] **Complete the Shell and migrate it to Ring 3**
+  - [ ] Gradually move command parsing, interaction, and built-ins out of the kernel.
+  - [ ] Use system calls to access the console, filesystem, processes, and devices.
+  - [ ] Provide basic command-line editing, history, error codes, and executable search.
+  - [ ] Ensure the kernel can recover control if the user Shell crashes or exits.
 
-## 文件系统、存储与缓存
+## Filesystem, Storage, and Caches
 
-- [ ] **完善文件系统与 Shell 存储体验**
-  - [ ] 系统化检查 FAT32 路径解析、目录边界、错误传播和磁盘损坏处理。
-  - [ ] 完善文件句柄及打开/关闭/顺序读写接口，供用户态程序使用。
-  - [ ] 增加文件复制、移动、重命名等常用操作，并补齐持久化和回归测试。
-  - [ ] 明确 LFN、短文件名别名和非 ASCII 名称的支持范围及限制。
-- [ ] **实现块缓存**
-  - [ ] 为块设备提供按设备号和 LBA 索引的缓存及替换策略。
-  - [ ] 定义一致性、写回/同步、失效和错误传播规则。
-  - [ ] 让 FAT32 使用缓存并验证读写性能与数据一致性。
-- [ ] **实现页缓存**
-  - [ ] 将文件内容页与物理页管理、文件偏移及写回关联。
-  - [ ] 支持缓存命中、脏页回写、失效和与块缓存的协作。
-  - [ ] 为可执行文件装载及文件映射复用页缓存。
+- [ ] **Complete filesystem and Shell storage workflows**
+  - [ ] Systematically review FAT32 path resolution, directory bounds, error propagation, and corrupt-disk handling.
+  - [ ] Complete file-handle and open/close/sequential-read/write interfaces for user programs.
+  - [ ] Add common operations such as copy, move, and rename, with persistence and regression tests.
+  - [ ] Document the supported scope and limits for LFN, short-name aliases, and non-ASCII names.
+- [ ] **Implement a block cache**
+  - [ ] Add a cache indexed by device and LBA with a replacement policy.
+  - [ ] Define consistency, write-back/sync, invalidation, and error-propagation rules.
+  - [ ] Use the cache in FAT32 and validate I/O performance and data consistency.
+- [ ] **Implement a page cache**
+  - [ ] Associate file-content pages with physical-page management, file offsets, and write-back.
+  - [ ] Support cache hits, dirty-page write-back, invalidation, and block-cache coordination.
+  - [ ] Reuse the page cache for executable loading and file mappings.
 
-## 硬件、设备与 ACPI
+## Hardware, Devices, and ACPI
 
-- [ ] **梳理并枚举驱动生态缺口**
-  - [ ] 盘点现有 ATA、键盘、PIC/PIT、RTC、VGA/VBE、ACPI 驱动的能力和限制。
-  - [ ] 按总线和设备类别列出缺失驱动、优先级及对应测试设备。
-  - [ ] 基于实际需求逐项选择和实现驱动，不预先承诺完整兼容性。
-- [ ] **建立设备子系统**
-  - [ ] 设计统一的设备、总线和驱动注册/探测接口。
-  - [ ] 加入设备资源管理、驱动匹配、生命周期和错误恢复。
-  - [ ] 评估并实现 PCI 枚举，为后续网卡和其他 PCI 设备驱动提供基础。
-- [ ] **完善 ACPI**
-  - [ ] 将 ACPI 表发现、映射、长度/校验和验证整理为通用且有界的接口。
-  - [ ] 解析 MADT，提供处理器和中断控制器信息。
-  - [ ] 评估 HPET、MCFG 等表及对应硬件功能的支持。
-  - [ ] 完善电源状态、关机/重启错误处理，并评估 AML/DSDT 支持范围。
+- [ ] **Inventory and enumerate driver-ecosystem gaps**
+  - [ ] Review the capabilities and limits of existing ATA, keyboard, PIC/PIT, RTC, VGA/VBE, and ACPI drivers.
+  - [ ] List missing drivers by bus/device category, with priorities and test devices.
+  - [ ] Select and implement drivers incrementally based on actual needs; do not promise blanket compatibility in advance.
+- [ ] **Establish a device subsystem**
+  - [ ] Design common device, bus, and driver registration/probing interfaces.
+  - [ ] Add device-resource management, driver matching, lifecycle management, and error recovery.
+  - [ ] Evaluate and implement PCI enumeration to support future network-card and other PCI drivers.
+- [ ] **Complete ACPI support**
+  - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
+  - [ ] Parse MADT to provide processor and interrupt-controller information.
+  - [ ] Evaluate HPET, MCFG, and related hardware support.
+  - [ ] Improve power-state and shutdown/reboot error handling, and evaluate AML/DSDT support.
 
-## 并发与内存
+## Concurrency and Memory
 
-- [ ] **实现 SMP / 多核支持**
-  - [ ] 基于 MADT 枚举处理器并启动应用处理器。
-  - [ ] 引入每 CPU 状态、Local APIC 定时器和核间中断。
-  - [ ] 为调度器、内存管理、设备和缓存数据结构补充 SMP 同步原语。
-  - [ ] 支持跨核任务调度并添加多核 QEMU 回归测试。
-- [ ] **实现交换与磁盘分页（swap）**
-  - [ ] 定义交换区及页状态/所有权管理。
-  - [ ] 实现受控的页面换出、换入和替换策略。
-  - [ ] 处理 I/O 失败、并发缺页、脏页及无交换空间等情况。
-  - [ ] 在块缓存、页缓存和可靠缺页处理建立后再接入。
+- [ ] **Implement SMP / multicore support**
+  - [ ] Enumerate processors through MADT and start application processors.
+  - [ ] Add per-CPU state, Local APIC timers, and inter-processor interrupts.
+  - [ ] Add SMP synchronization primitives for the scheduler, memory manager, devices, and caches.
+  - [ ] Support cross-core task scheduling and add multicore QEMU regression tests.
+- [ ] **Implement swap and disk paging**
+  - [ ] Define swap-space and page-state/ownership management.
+  - [ ] Implement controlled page-out, page-in, and replacement policies.
+  - [ ] Handle I/O failures, concurrent faults, dirty pages, and exhausted swap space.
+  - [ ] Integrate only after block/page caches and reliable page-fault handling are in place.
 
-## 网络与图形
+## Networking and Graphics
 
-- [ ] **实现网络栈**
-  - [ ] 提供网络设备接口并接入至少一种受支持的网卡驱动。
-  - [ ] 实现以太网和 ARP。
-  - [ ] 实现 IPv4、路由和基本 ICMP。
-  - [ ] 实现 UDP，并设计用户态套接字接口。
-  - [ ] 实现 TCP 状态机、重传、流控和连接管理。
-- [ ] **建立图形子系统**
-  - [ ] 抽象 framebuffer 和显示设备，完善图形模式与像素格式管理。
-  - [ ] 实现窗口管理、合成、输入事件分发和焦点管理。
-  - [ ] 提供用户态绘图/窗口接口并构建基础 GUI。
+- [ ] **Implement a network stack**
+  - [ ] Provide a network-device interface and support at least one network-card driver.
+  - [ ] Implement Ethernet and ARP.
+  - [ ] Implement IPv4, routing, and basic ICMP.
+  - [ ] Implement UDP and design a user-space socket interface.
+  - [ ] Implement TCP state, retransmission, flow control, and connection management.
+- [ ] **Establish a graphics subsystem**
+  - [ ] Abstract framebuffers and display devices; improve graphics-mode and pixel-format management.
+  - [ ] Implement window management, compositing, input-event dispatch, and focus management.
+  - [ ] Provide user-space drawing/window interfaces and build a basic GUI.
 
-## 可执行文件、安全与用户空间生态
+## Executables, Security, and User-Space Ecosystem
 
-- [ ] **完善可执行格式支持**
-  - [ ] 扩展 ELF 动态段、重定位和依赖解析。
-  - [ ] 支持共享库装载、符号解析、生命周期和地址空间布局。
-  - [ ] 明确静态/动态程序兼容性并提供加载器测试。
-- [ ] **建立安全机制**
-  - [ ] 定义用户、进程和文件权限模型。
-  - [ ] 实现 capabilities 或等价的细粒度授权机制。
-  - [ ] 为进程和设备访问提供沙箱边界及资源限制。
-  - [ ] 对系统调用、路径解析、共享内存和进程间接口进行安全测试。
-- [ ] **移植标准用户空间**
-  - [ ] 设计并稳定满足 libc 所需的系统调用与 ABI。
-  - [ ] 移植 musl libc。
-  - [ ] 建立简单的用户态编译、链接和打包工具链。
-  - [ ] 移植并验证一组基础命令行工具。
+- [ ] **Complete executable-format support**
+  - [ ] Add ELF dynamic-segment, relocation, and dependency handling.
+  - [ ] Support shared-library loading, symbol resolution, lifecycle, and address-space layout.
+  - [ ] Define static/dynamic program compatibility and add loader tests.
+- [ ] **Establish security mechanisms**
+  - [ ] Define user, process, and file permission models.
+  - [ ] Implement capabilities or equivalent fine-grained authorization.
+  - [ ] Provide sandbox boundaries and resource limits for process/device access.
+  - [ ] Security-test system calls, path resolution, shared memory, and inter-process interfaces.
+- [ ] **Port a standard user-space environment**
+  - [ ] Design and stabilize the system-call ABI required by libc.
+  - [ ] Port musl libc.
+  - [ ] Establish a basic user-space compile, link, and packaging toolchain.
+  - [ ] Port and validate a set of basic command-line tools.

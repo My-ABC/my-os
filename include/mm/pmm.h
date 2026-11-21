@@ -19,6 +19,9 @@ typedef struct {
 
 void pmm_init(uint32_t multiboot_info_addr);
 uint64_t pmm_alloc_page(void);
+#ifdef PMM_QEMU_HIGHMEM_TEST
+uint64_t pmm_alloc_page_at_or_above(uint64_t minimum_address);
+#endif
 void pmm_free_page(uint64_t physical_addr);
 uint32_t pmm_get_free_frames(void);
 

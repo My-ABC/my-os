@@ -19,6 +19,60 @@
 #include "vbe.h"
 #include "ata.h"
 
+#ifdef PMM_QEMU_HIGHMEM_TEST
+static void highmem_qemu_test(void) {
+    const uint64_t minimum_address = 0x100000000ULL;
+    const uint32_t virtual_address = 0xE0000000U;
+    const uint32_t expected[4] = {
+        0x13579BDFU, 0x2468ACE0U, 0xA5C35A3CU, 0x5A3CC3A5U
+    };
+    uint64_t physical = pmm_alloc_page_at_or_above(minimum_address);
+    if (physical < minimum_address ||
+        (physical & (PAGE_SIZE - 1U)) != 0U) {
+        serial_print("[HIGHMEM] FAIL: no usable page at or above 4 GiB\n");
+        goto halt;
+    }
+
+    paging_map_page(virtual_address, physical, PAGE_PRESENT | PAGE_WRITABLE);
+    if (paging_get_page_physical(virtual_address) != physical) {
+        serial_print("[HIGHMEM] FAIL: PAE mapping did not resolve to allocated frame\n");
+        paging_unmap_page(virtual_address);
+        pmm_free_page(physical);
+        goto halt;
+    }
+
+    volatile uint32_t *mapped = (volatile uint32_t *)(uintptr_t)virtual_address;
+    for (uint32_t i = 0U; i < 4U; ++i) mapped[i] = expected[i];
+    for (uint32_t i = 0U; i < 4U; ++i) {
+        if (mapped[i] != expected[i]) {
+            serial_print("[HIGHMEM] FAIL: mapped page pattern mismatch\n");
+            paging_unmap_page(virtual_address);
+            pmm_free_page(physical);
+            goto halt;
+        }
+    }
+
+    paging_unmap_page(virtual_address);
+    pmm_free_page(physical);
+    uint64_t reused = pmm_alloc_page_at_or_above(minimum_address);
+    if (reused != physical) {
+        serial_print("[HIGHMEM] FAIL: freed high page was not reusable\n");
+        if (reused != 0U) pmm_free_page(reused);
+        goto halt;
+    }
+    pmm_free_page(reused);
+
+    serial_print("[HIGHMEM] PASS: physical=");
+    serial_print_hex((uint32_t)(physical >> 32));
+    serial_putchar(':');
+    serial_print_hex((uint32_t)physical);
+    serial_print(" mapped, pattern verified, unmapped, and freed\n");
+halt:
+    __asm__ volatile ("cli");
+    for (;;) __asm__ volatile ("hlt");
+}
+#endif
+
 void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
     gdt_init();
@@ -34,6 +88,10 @@ void kmain(uint32_t multiboot_info) {
     // 初始化分页（在GDT之后，VGA之前）
     paging_init();
     tss_update_cr3(paging_get_page_directory());
+
+#ifdef PMM_QEMU_HIGHMEM_TEST
+    highmem_qemu_test();
+#endif
 
     // Keep the Multiboot information block available to the later VBE probe.
     // The runtime low identity map intentionally stops at 4 MiB so user ELF

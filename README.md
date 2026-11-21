@@ -27,7 +27,7 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
 - **Memory paging** — implemented full memory paging.
-- **PAE paging** — 64-bit PAE entries, 32-byte PDPT/32-bit CR3, 4 KiB pages, and a mapping window for accessing high frames and page tables. The PMM supports physical addresses below 64 GiB (36-bit PAE limit); available RAM is determined by the Multiboot map. The boot-time Multiboot info and map buffers must currently be in the first 16 MiB. High-frame PMM allocation is host-tested; QEMU integration currently uses 128 MiB.
+- **PAE paging** — 64-bit PAE entries, 32-byte PDPT/32-bit CR3, 4 KiB pages, and a mapping window for accessing high frames and page tables. The PMM supports physical addresses below 64 GiB (36-bit PAE limit); available RAM is determined by the Multiboot map. The boot-time Multiboot info and map buffers must currently be in the first 16 MiB. The optional `make test-qemu-highmem` target boots with QEMU `-m 6G`, allocates a real page at or above 4 GiB, verifies PAE mapping and read/write access, and frees it. The standard QEMU integration suite uses 128 MiB.
 - **PMM** — impl PMM
 - **heap allocator(kernel)** — impl kmalloc, kfree, kcalloc, krealloc
 - **heap allocator(user)** — impl heap allocator in the syscall
@@ -48,7 +48,8 @@ The latest tagged release includes a GRUB-bootable ISO built by GitHub Actions:
 Requirements by target: kernel builds need `nasm` and an i686 toolchain; host
 tests need Python 3 and a host `cc`; QEMU runs and integration tests need
 `qemu-system-i386`; ISO targets additionally need `grub-pc-bin`, `xorriso`, and
-`grub-common`.
+`grub-common`. The `make test-qemu-highmem` target also requires those GRUB/ISO
+tools to create its temporary test image.
 
 ```bash
 make build          # -> myos.bin
@@ -61,6 +62,7 @@ make run-iso        # boot the ISO with q35 and a graphical window
 make iso            # gen iso file
 make test           # run host-side tests for kernel routines
 make test-qemu      # build and run the bounded headless QEMU integration suite
+make test-qemu-highmem  # QEMU -m 6G: allocate/map/test/free a page above 4 GiB
 make disk           # create disk.img as a 64 MB FAT32 image
 make run            # attach disk.img when it exists; otherwise boot without a disk
 make run-disk       # create disk.img if needed and boot -kernel with it attached
@@ -101,6 +103,13 @@ It uses Python's built-in socket support, so host `timeout`, `socat`, and
 netcat are not required.
 This emulates one QEMU PC/TCG configuration and is not a substitute for testing
 other firmware, hardware, or booting the GRUB ISO.
+
+`make test-qemu-highmem` is a separate, bounded GRUB/Multiboot boot under QEMU TCG
+with 6 GiB of RAM. It verifies an allocated physical page at or above 4 GiB by
+mapping the page, checking a written pattern, unmapping it, freeing it, and
+confirming the frame can be allocated again. It uses a separate
+`build/highmem-test/` directory and does not change the standard QEMU test's
+128 MiB memory configuration.
 
 The Makefile defaults to `i686-elf-gcc` / `i686-elf-ld`. Without a cross toolchain you can use the host compiler in 32-bit mode:
 
@@ -186,7 +195,7 @@ src/lib/          freestanding C library routines
 include/          headers grouped to mirror src/ subsystems
 scripts/          CI/CD files
 linker.ld         1 MB load address and section layout
-[TODO.md](./TODO.md) project roadmap and tracked future implementation work
+[TODO.md](./TODO.md) English project roadmap | [TODO-zh.md](./TODO-zh.md) Chinese project roadmap
 ```
 
 ## Notes
