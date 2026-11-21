@@ -135,6 +135,9 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## 64-bit Mode
 
+> **Deprecated — not planned for now.** This section is kept for reference
+> only; the 32-bit PAE kernel remains the target architecture.
+
 - [ ] **Port the kernel to 64-bit long mode**
   - [ ] Replace the 32-bit PAE bootstrap with a long-mode transition (IA-32e, PML4/PDPT/PD/PT), keeping the Multiboot entry path.
   - [ ] Port kernel code to the x86-64 ABI: widen pointers, rewrite inline assembly and stack-frame contracts, and update every `include/` header.
