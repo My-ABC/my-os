@@ -11,6 +11,7 @@ int ring3_schedule(void (*func)(void));
 int ring3_schedule_foreground(void (*func)(void),
                              uint32_t image_start, uint32_t image_end);
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame);
+struct irq_frame *ring3_yield_current(struct irq_frame *frame);
 uint32_t ring3_current_pid(void);
 uint32_t ring3_foreground_pid(void);
 uint32_t ring3_process_list(uint32_t *pids, uint32_t *states, uint32_t capacity);

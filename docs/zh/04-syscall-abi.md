@@ -8,12 +8,12 @@ English: [English version](../en/04-syscall-abi.md)
 ## 调用约定
 
 - 触发方式：执行 `int 0x80`。IDT 门 `0x80` 为 DPL=3 的 32 位陷阱门（trap gate，`idt.c` 中 `idt_set_entry(0x80, syscall, 0x08, 0xEF)`），Ring 3 和 Ring 0（CPL ≤ 3）都可以触发。
-- 汇编桩 `syscall`：`pushad` → `call syscall_handler` → 把返回值写回保存的 EAX（`[esp+28]`）→ `popad` → `iret`。
+- 汇编桩 `syscall`：按 `struct irq_frame` 布局保存寄存器与段寄存器，调用 `syscall_handler`，再复用 IRQ0 的恢复序列返回。
 - **寄存器约定**：
   - `eax` = 系统调用号（进入时），返回值（离开时）
   - `ebx` = 参数 1，`ecx` = 参数 2，`edx` = 参数 3；最多 3 个参数，无栈传参
   - 除 `eax` 外所有通用寄存器由 `pushad`/`popad` 保证不变
-- **中断状态**：陷阱门不清除 IF，handler 继承调用者的中断状态（Ring 3 用户态 EFLAGS 为 `0x202`，即 IF=1）。因此 IRQ0（PIT）和 IRQ1（键盘）可以在 handler 执行期间触发：键盘 IRQ 会把扫描码放入环形缓冲，`SYS_READ`/`SYS_GETCHAR` 的 `keyboard_wait_key` 阻塞等待因此可以被正常唤醒。IRQ0 命中的是内核态帧（`cs & 3 != 3`），`ring3_timer_switch` 直接返回、不发生上下文切换，所以系统调用本身不会被调度打断（见"已知限制"）。
+- **中断状态**：陷阱门不清除 IF，handler 继承调用者的中断状态（Ring 3 用户态 EFLAGS 为 `0x202`，即 IF=1）。因此 IRQ0（PIT）和 IRQ1（键盘）可以在 handler 执行期间触发：键盘 IRQ 会把扫描码放入环形缓冲，`SYS_READ`/`SYS_GETCHAR` 的 `keyboard_wait_key` 阻塞等待因此可以被正常唤醒。IRQ0 命中的是内核态帧（`cs & 3 != 3`），`ring3_timer_switch` 不会在内核系统调用中途切换；进程可以在安全的系统调用边界通过 `SYS_YIELD` 主动让出 CPU。
 - **返回值**：`eax`。未定义的调用号返回 `-1`（`0xFFFFFFFF`）。**没有 errno，错误语义不统一**。
 - **Ring 0 调用**：内核可通过 `sys_call(call_number, arg1, arg2, arg3)`（内联 `int 0x80`）或直接 `int 0x80` 调用。内核上下文中 `ring3_current_pid()` 返回 0，因此 `SYS_GETPID` 返回 0，`SYS_WRITE` 因前后台检查（要求 `pid != 0`）被静默丢弃。
 - C 侧封装：`sys_call` 以及 `sys_malloc`/`sys_calloc`/`sys_realloc`/`sys_free`/`sys_shutdown`/`sys_reboot`/`sys_getpid`（`include/os/syscall.h`）。
@@ -42,6 +42,7 @@ English: [English version](../en/04-syscall-abi.md)
 | 18 | `SYS_FSTAT` | `ebx` = 路径字符串 | 文件大小；目录返回 -2；失败 -1 | 不跟随 fd，直接按路径查询。 |
 | 19 | `SYS_GETCWD` | `ebx` = `buf`，`ecx` = `size` | 路径长度（不含 NUL）或 -1 | 把当前工作目录（含 NUL）复制到用户缓冲区；`size` 必须 ≥ 长度+1。 |
 | 20 | `SYS_CHDIR` | `ebx` = 路径字符串 | 0 或 -1 | 切换工作目录；目标必须是已存在的目录。 |
+| 21 | `SYS_YIELD` | 无 | 0 | 主动让出 CPU，保存当前 Ring 3 上下文并返回 Shell；进程之后由 PIT 调度恢复。 |
 
 ## `SYS_MEMORY`（7）子操作码 — `ebx`
 
@@ -80,7 +81,7 @@ English: [English version](../en/04-syscall-abi.md)
 - **无用户指针校验**：`SYS_WRITE`/`SYS_READ`/`SYS_MEMORY` 直接解引用用户传入的指针，未检查范围、越界或内核地址。Ring 3 传入未登记的非法指针会触发页错误并终止该进程；内核上下文传入非法指针会进入 kernel page fault panic（`kfault.elf` 测试覆盖）。
 - **无 ABI 版本**：调用号是裸整数，无版本字段。
 - **错误语义不统一**：未定义调用号返回 `-1`，内存操作失败返回 0，成功调用各自返回 0/指针/时间戳，调用方需逐个判断。
-- **阻塞调用不让出 CPU**：`SYS_READ`/`SYS_GETCHAR` 期间 IRQ0 照常触发，但 `ring3_timer_switch` 看到的是内核态帧而直接返回，其他 Ring 3 进程在系统调用返回前无法被调度。键盘等待本身可被 IRQ1 正常唤醒（trap gate 保留 IF）。
+- **阻塞调用不让出 CPU**：`SYS_READ`/`SYS_GETCHAR` 期间 IRQ0 照常触发，但 `ring3_timer_switch` 看到的是内核态帧而直接返回，其他 Ring 3 进程在调用返回前无法被调度。键盘等待本身可被 IRQ1 正常唤醒（trap gate 保留 IF）；需要合作式让出时可调用 `SYS_YIELD`。
 - **`SYS_READ`/`SYS_GETCHAR` 只认键盘**：不经过文件/控制台抽象。
 - **无设备访问接口**（串口、ATA 直访等）；无进程创建/等待类调用（`SYS_EXIT` 已有，`kill` 仍只能由 Shell 发起）。
 - fd 表全局共享且进程退出不回收 fd；`SYS_FREAD`/`SYS_FWRITE` 为整文件读改写，I/O 复杂度高。

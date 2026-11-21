@@ -145,20 +145,48 @@ irq1:
 global syscall
 extern syscall_handler
 extern syscall_exit_frame
+extern syscall_switch_frame
 syscall:
-    pushad
+    push dword 0
+    push dword 128
+    pusha
+    xor eax, eax
+    mov ax, ds
+    push eax
+    xor eax, eax
+    mov ax, es
+    push eax
+    xor eax, eax
+    mov ax, fs
+    push eax
+    xor eax, eax
+    mov ax, gs
+    push eax
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    push esp
     call syscall_handler
+    add esp, 4
+    mov [esp + 44], eax
     cmp dword [syscall_exit_frame], 0
-    je .syscall_return
+    je .syscall_check_yield
     ; SYS_EXIT: resume the saved kernel frame instead of the dead process
     mov eax, [syscall_exit_frame]
     mov dword [syscall_exit_frame], 0
     mov esp, eax
     jmp irq0_resume
-.syscall_return:
-    mov [esp + 28], eax
-    popad
-    iret
+.syscall_check_yield:
+    cmp dword [syscall_switch_frame], 0
+    je irq0_resume
+    mov eax, [syscall_switch_frame]
+    mov dword [syscall_switch_frame], 0
+    mov esp, eax
+    jmp irq0_resume
 
 isr_common_stub:
     pusha

@@ -5,6 +5,7 @@ global user_entry
 %define SYS_WRITE 1
 %define SYS_TIME 6
 %define SYS_GETPID 9
+%define SYS_YIELD 21
 
 user_entry:
     sub esp, 64
@@ -54,8 +55,10 @@ user_entry:
     mov eax, SYS_TIME
     int 0x80
     cmp eax, ebp
-    je .wait_next_second
-    jmp .run
+    jne .run
+    mov eax, SYS_YIELD
+    int 0x80
+    jmp .wait_next_second
 
 user_prefix:
     db "RING3 is RUN, procss_id: ", 0

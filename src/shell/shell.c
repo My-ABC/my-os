@@ -776,10 +776,59 @@ int cmd_run(int argc, char *argv[]) {
     return result;
 }
 
+static void shell_print_prompt(void) {
+    char cwd[128];
+    if (fat32_mounted() && fat32_get_cwd(cwd, sizeof(cwd)) >= 0) {
+        printf("myos %s > ", cwd);
+    } else {
+        printf("myos > ");
+    }
+}
+
+static void shell_read_line(char *line, int size) {
+    int length = 0;
+    int prompt_visible = 0;
+
+    while (length < size - 1) {
+        if (ring3_foreground_pid() == 0U) {
+            if (!prompt_visible && length == 0) {
+                shell_print_prompt();
+                prompt_visible = 1;
+            }
+        } else {
+            prompt_visible = 0;
+        }
+
+        if (!keyboard_hit()) {
+            __asm__ volatile ("sti; hlt" : : : "memory");
+            continue;
+        }
+
+        char c = keyboard_getchar();
+        if (c == '\n' || c == '\r') {
+            line[length] = '\0';
+            putchar('\n');
+            return;
+        }
+        if (c == '\b') {
+            if (length > 0) {
+                --length;
+                putchar('\b');
+                putchar(' ');
+                putchar('\b');
+            }
+            continue;
+        }
+        line[length++] = c;
+        putchar(c);
+    }
+
+    line[length] = '\0';
+}
+
 void start_shell(void) {
     char line[128];
     char *argv[16];
-    char cwd[128];
     int argc;
 
     vga_clear();
@@ -787,12 +836,7 @@ void start_shell(void) {
     printf("Type 'help' for available commands.\n");
 
     while (1) {
-        if (fat32_mounted() && fat32_get_cwd(cwd, sizeof(cwd)) >= 0) {
-            printf("myos %s > ", cwd);
-        } else {
-            printf("myos > ");
-        }
-        gets(line, sizeof(line));
+        shell_read_line(line, sizeof(line));
         argc = split_line(line, argv, 16);
         if (argc == 0) continue;
         int found = 0;

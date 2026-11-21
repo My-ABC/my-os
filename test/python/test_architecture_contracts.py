@@ -56,6 +56,7 @@ class ArchitectureContractTests(unittest.TestCase):
         frame = source("include/arch/x86/regs.h")
         assembly = source("boot/interrupt.asm")
         irq0 = assembly.split("irq0:", 1)[1].split("irq1:", 1)[0]
+        syscall = assembly.split("syscall:", 1)[1].split("isr_common_stub:", 1)[0]
         self.assertRegex(frame, r"struct irq_frame\s*\{\s*uint32_t gs, fs, es, ds;")
         self.assertIn("uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;", frame)
         self.assertIn("uint32_t int_no, err_code;", frame)
@@ -68,6 +69,26 @@ class ArchitectureContractTests(unittest.TestCase):
                 self.assertIn(operation, irq0)
         offsets = [irq0.index(operation) for operation in order]
         self.assertEqual(offsets, sorted(offsets), "IRQ0 assembly order drifted")
+        for operation in ("push dword 0", "push dword 128", "pusha",
+                          "push esp", "call syscall_handler",
+                          "mov [esp + 44], eax",
+                          "cmp dword [syscall_switch_frame], 0",
+                          "jmp irq0_resume"):
+            with self.subTest(syscall_operation=operation):
+                self.assertIn(operation, syscall)
+
+    def test_ring3_yield_saves_syscall_frame_for_later_resume(self):
+        header = source("include/os/syscall.h")
+        syscall = source("src/os/syscall.c")
+        ring3 = source("src/os/ring3.c")
+        self.assertIn("#define SYS_YIELD    21", header)
+        self.assertIn("case SYS_YIELD:", function_body(syscall, "syscall_handler"))
+        yield_body = function_body(ring3, "ring3_yield_current")
+        self.assertIn("uint32_t flags = irq_save()", yield_body)
+        self.assertIn("(frame->cs & 3U) != 3U", yield_body)
+        self.assertIn("process->frame = frame", yield_body)
+        self.assertIn("process->state = RING3_PROCESS_READY", yield_body)
+        self.assertIn("return kernel_frame", yield_body)
 
     def test_tss_kernel_stack_update_targets_esp0(self):
         body = function_body(source("src/arch/x86/tss.c"), "tss_set_kernel_stack")

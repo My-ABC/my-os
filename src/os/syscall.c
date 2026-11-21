@@ -18,6 +18,7 @@
 /* Set by SYS_EXIT; the syscall stub switches to this kernel frame instead
  * of returning to the exiting process. */
 uint32_t syscall_exit_frame;
+uint32_t syscall_switch_frame;
 
 struct sysfs_fd {
     uint8_t used;
@@ -327,18 +328,13 @@ static int sysfs_fwrite(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
     return (int)size;
 }
 
-uint32_t syscall_handler() {
+uint32_t syscall_handler(struct irq_frame *frame) {
     syscall_exit_frame = 0U;
-    uint32_t eax, ebx, ecx, edx;
-    __asm__ volatile(
-        "mov %%eax, %0\n"
-        "mov %%ebx, %1\n"
-        "mov %%ecx, %2\n"
-        "mov %%edx, %3\n"
-        : "=r"(eax), "=r"(ebx), "=r"(ecx), "=r"(edx)
-        :
-        : "memory"
-    );
+    syscall_switch_frame = 0U;
+    uint32_t eax = frame->eax;
+    uint32_t ebx = frame->ebx;
+    uint32_t ecx = frame->ecx;
+    uint32_t edx = frame->edx;
 
     switch (eax) {
         case SYS_WRITE: { // 参数: ebx: const char *str
@@ -407,6 +403,9 @@ uint32_t syscall_handler() {
             if (frame != 0) syscall_exit_frame = (uint32_t)frame;
             return 0;
         }
+        case SYS_YIELD:
+            syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
+            return 0;
         case SYS_FOPEN:
             return (uint32_t)sysfs_fopen(ebx, ecx);
         case SYS_FCLOSE: {

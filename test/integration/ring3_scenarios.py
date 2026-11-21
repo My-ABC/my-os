@@ -1,9 +1,17 @@
+import time
+
 from common import IntegrationFailure
 
 
 def check_ring3_and_builtin_elf(session):
     session.send_line("ring3")
     session.wait_for("[RING3] Started one background process")
+    started = time.monotonic()
+    session.send_line("secho r3ok")
+    session.wait_for("r3ok", timeout=2)
+    if time.monotonic() - started >= 2:
+        raise IntegrationFailure("shell input stalled while a Ring 3 process ran")
+    session.pass_check("shell stays responsive while a Ring 3 process runs")
     session.send_line("ps")
     session.wait_for_regex(rb"\[PS\] 1 (?:READY|RUNNING)")
     session.pass_check("Ring 3 scheduling and process listing")

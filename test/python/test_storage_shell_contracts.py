@@ -27,10 +27,14 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn("component_length == 2U", resolver)
         self.assertIn("output[output_length - 1U] != '/'", resolver)
         text = source("src/shell/shell.c")
-        prompt = function_body(text, "start_shell")
+        prompt = function_body(text, "shell_print_prompt")
         self.assertIn("fat32_get_cwd(cwd, sizeof(cwd))", prompt)
         self.assertIn('printf("myos %s > ", cwd)', prompt)
         self.assertIn('printf("myos > ")', prompt)
+        input_loop = function_body(text, "shell_read_line")
+        self.assertIn("ring3_foreground_pid() == 0U", input_loop)
+        self.assertIn("keyboard_hit()", input_loop)
+        self.assertIn('"sti; hlt"', input_loop)
         self.assertIn('serial_print("[SHELL] CWD ")',
                       function_body(text, "cmd_cd"))
         self.assertIn("fat32_set_cwd(path)",

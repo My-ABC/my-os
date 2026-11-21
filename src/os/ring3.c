@@ -220,6 +220,23 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     return processes[next].frame;
 }
 
+struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
+    uint32_t flags = irq_save();
+    if (current_process < 0 || kernel_frame == 0 ||
+        (frame->cs & 3U) != 3U) {
+        irq_restore(flags);
+        return 0;
+    }
+
+    struct ring3_process *process = &processes[(uint32_t)current_process];
+    process->frame = frame;
+    process->state = RING3_PROCESS_READY;
+    current_process = -1;
+    tss_set_kernel_stack((uint32_t)stack_top);
+    /* Keep IRQs disabled until the assembly stub switches back to the shell. */
+    return kernel_frame;
+}
+
 uint32_t ring3_current_pid(void) {
     if (current_process < 0) return 0U;
     return processes[(uint32_t)current_process].pid;
@@ -292,7 +309,11 @@ int ring3_user_range_permitted(uint32_t addr) {
 }
 
 struct irq_frame *ring3_terminate_current(void) {
-    if (current_process < 0) return 0;
+    uint32_t flags = irq_save();
+    if (current_process < 0) {
+        irq_restore(flags);
+        return 0;
+    }
     struct ring3_process *process = &processes[(uint32_t)current_process];
     uint32_t pid = process->pid;
     process->state = RING3_PROCESS_DEAD;
@@ -302,6 +323,7 @@ struct irq_frame *ring3_terminate_current(void) {
     tss_set_kernel_stack((uint32_t)stack_top);
     struct irq_frame *frame = kernel_frame;
     kernel_frame = 0;
+    /* The exception/syscall stub switches stacks immediately after this. */
     return frame;
 }
 

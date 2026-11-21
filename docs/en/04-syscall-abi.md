@@ -8,12 +8,12 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 ## Calling convention
 
 - Trigger: execute `int 0x80`. IDT gate `0x80` is a DPL=3 32-bit trap gate (`idt_set_entry(0x80, syscall, 0x08, 0xEF)` in `idt.c`); both Ring 3 and Ring 0 (CPL ≤ 3) can invoke it.
-- Assembly stub `syscall`: `pushad` → `call syscall_handler` → writes the return value back into the saved EAX (`[esp+28]`) → `popad` → `iret`.
+- Assembly stub `syscall`: saves registers and segment selectors in the `struct irq_frame` layout, calls `syscall_handler`, then reuses the IRQ0 restore sequence to return.
 - **Register convention**:
   - `eax` = system call number (on entry), return value (on exit)
   - `ebx` = argument 1, `ecx` = argument 2, `edx` = argument 3; at most 3 arguments, no stack arguments
   - All other general-purpose registers are preserved by `pushad`/`popad`
-- **Interrupt state**: a trap gate does not clear IF, so the handler inherits the caller's interrupt state (Ring 3 user EFLAGS is `0x202`, i.e. IF=1). IRQ0 (PIT) and IRQ1 (keyboard) can therefore fire while the handler runs: the keyboard IRQ fills the scancode ring buffer, so the `keyboard_wait_key` blocking wait inside `SYS_READ`/`SYS_GETCHAR` is woken normally. IRQ0 sees a kernel-mode frame (`cs & 3 != 3`), and `ring3_timer_switch` returns it unchanged without a context switch, so a system call is never descheduled mid-handler (see "Known limitations").
+- **Interrupt state**: a trap gate does not clear IF, so the handler inherits the caller's interrupt state (Ring 3 user EFLAGS is `0x202`, i.e. IF=1). IRQ0 (PIT) and IRQ1 (keyboard) can therefore fire while the handler runs: the keyboard IRQ fills the scancode ring buffer, so the `keyboard_wait_key` blocking wait inside `SYS_READ`/`SYS_GETCHAR` is woken normally. IRQ0 sees a kernel-mode frame (`cs & 3 != 3`), and `ring3_timer_switch` does not switch in the middle of a kernel syscall; processes can explicitly yield at a safe syscall boundary with `SYS_YIELD`.
 - **Return value**: `eax`. Undefined call numbers return `-1` (`0xFFFFFFFF`). **There is no errno; error semantics are not uniform.**
 - **Ring 0 calls**: the kernel can invoke calls via `sys_call(call_number, arg1, arg2, arg3)` (inline `int 0x80`) or raw `int 0x80`. In kernel context `ring3_current_pid()` returns 0, so `SYS_GETPID` returns 0 and `SYS_WRITE` is silently dropped by the foreground check (which requires `pid != 0`).
 - C wrappers: `sys_call` plus `sys_malloc`/`sys_calloc`/`sys_realloc`/`sys_free`/`sys_shutdown`/`sys_reboot`/`sys_getpid` (`include/os/syscall.h`).
@@ -42,6 +42,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 18 | `SYS_FSTAT` | `ebx` = path string | file size; -2 for a directory; -1 on error | Queries by path, not by fd. |
 | 19 | `SYS_GETCWD` | `ebx` = `buf`, `ecx` = `size` | path length (excluding NUL) or -1 | Copies the current working directory (NUL included) into the user buffer; `size` must be ≥ length+1. |
 | 20 | `SYS_CHDIR` | `ebx` = path string | 0 or -1 | Changes the working directory; the target must be an existing directory. |
+| 21 | `SYS_YIELD` | none | 0 | Voluntarily yields the CPU, saving the current Ring 3 context and returning to the shell; the process is resumed by PIT scheduling. |
 
 ## `SYS_MEMORY` (7) sub-operation codes — `ebx`
 
@@ -80,7 +81,7 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 - **No user-pointer validation**: `SYS_WRITE`/`SYS_READ`/`SYS_MEMORY` dereference caller-supplied pointers directly, without range checks or kernel-address rejection. An illegal pointer from Ring 3 triggers a page fault that kills the process; an illegal pointer in kernel context leads to a kernel page-fault panic (covered by the `kfault.elf` test).
 - **No ABI versioning**: call numbers are bare integers with no version field.
 - **Non-uniform error semantics**: undefined call numbers return `-1`, memory-operation failures return 0, and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
-- **Blocking calls do not yield the CPU**: IRQ0 still fires during `SYS_READ`/`SYS_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching, so other Ring 3 processes cannot be scheduled until the call returns. The keyboard wait itself is woken normally by IRQ1 (the trap gate preserves IF).
+- **Blocking calls do not yield the CPU**: IRQ0 still fires during `SYS_READ`/`SYS_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching, so other Ring 3 processes cannot be scheduled until the call returns. The keyboard wait itself is woken normally by IRQ1 (the trap gate preserves IF); cooperative code can call `SYS_YIELD` at safe syscall boundaries.
 - **`SYS_READ`/`SYS_GETCHAR` only talk to the keyboard**: no file/console abstraction.
 - **No device-access interfaces** (serial, raw ATA, etc.) and no process create/wait calls (`SYS_EXIT` exists; `kill` is still shell-only).
 - The fd table is global and fds are not reclaimed on process exit; `SYS_FREAD`/`SYS_FWRITE` do whole-file read-modify-write, so I/O is expensive.

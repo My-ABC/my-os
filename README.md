@@ -22,8 +22,8 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
 - **Ring 3 processes** — software context switching preempted by PIT IRQ0; run up to two user processes with separate kernel and user stacks
 - **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
-- **System calls** — Ring 3 can write output and query its process ID with `SYS_GETPID`
-- **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; the `elf` command schedules it as a foreground Ring 3 task and returns to the shell
+- **System calls** — Ring 3 can write output, query its process ID with `SYS_GETPID`, and cooperatively yield with `SYS_YIELD`
+- **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; foreground output hides the Shell prompt until the process exits or is backgrounded, while Shell input remains available
 - **Page-fault handling** — ISR14 demand-maps only registered user ranges (ELF image, 32 KiB user stack, user heap) with zeroed pages, kills processes on illegal user access or protection violations, and panics on illegal kernel faults
 - **shell(kernel)** — impl a shell on kernel mode 
 - **SVGA** — `svga_blue` fills the GRUB framebuffer with blue
@@ -181,8 +181,14 @@ directory. Without a mounted FAT32 disk, the prompt remains `myos >`.
 
 Each `ring3` command starts one Ring 3 demo process in the background. Processes
 are preemptively scheduled by the PIT; their output is hidden until `fg <pid>`
-is used. `bg <pid>` hides it again, `ps` lists process states, and
+is used. The demo yields while waiting between clock updates so shell input
+remains responsive. `bg <pid>` hides output again, `ps` lists process states, and
 `kill <pid>` terminates a process.
+
+While a process is foregrounded, the shell hides its prompt to keep process
+output from appearing on the prompt line. The shell still polls keyboard input,
+so `bg <pid>` and `kill <pid>` remain available; the prompt returns when the
+process exits or is backgrounded.
 
 The `elf` command starts the built-in ELF32 demo in the foreground, so its
 `Hello from ELF32` system-call output is visible while the shell remains

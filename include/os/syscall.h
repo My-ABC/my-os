@@ -24,6 +24,7 @@
 #define SYS_FSTAT    18  // 获取路径的文件大小/类型
 #define SYS_GETCWD   19  // 获取当前工作目录
 #define SYS_CHDIR    20  // 切换当前工作目录
+#define SYS_YIELD    21  // 主动让出 CPU
 
 #define MEMORY_MALLOC  1
 #define MEMORY_CALLOC  2
