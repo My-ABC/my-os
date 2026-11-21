@@ -219,8 +219,22 @@ void keyboard_irq(void) {
 
     char c;
     if (was_extended) {
-        // 扩展码（小键盘 Enter, / 等）
-        c = scancode == 0x1C ? '\n' : (scancode == 0x35 ? '/' : 0);
+        // 扩展码（小键盘 Enter, /, 方向键）
+        if (scancode == 0x1C) {
+            c = '\n';
+        } else if (scancode == 0x35) {
+            c = '/';
+        } else if (scancode == 0x48) {
+            c = KEYBOARD_KEY_UP;
+        } else if (scancode == 0x50) {
+            c = KEYBOARD_KEY_DOWN;
+        } else if (scancode == 0x4B) {
+            c = KEYBOARD_KEY_LEFT;
+        } else if (scancode == 0x4D) {
+            c = KEYBOARD_KEY_RIGHT;
+        } else {
+            c = 0;
+        }
     } else {
         const char *scancode_ascii = (current_scancode_set == 1) ? 
                                       scancode_ascii_set1 : scancode_ascii_set2;

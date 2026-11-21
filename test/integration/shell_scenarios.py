@@ -17,6 +17,90 @@ def check_startup(session):
     session.pass_check("keyboard-driven shell command executes")
 
 
+def check_shell_history(session):
+    session.send_line("secho hist-first")
+    session.wait_for("hist-first")
+    session.send_line("secho hist-second")
+    session.wait_for("hist-second")
+    # Two Up presses recall the first marker command; Enter re-runs it.
+    hist_start = len(session.serial_data)
+    session.send_key("up")
+    session.send_key("up")
+    session.send_key("ret")
+    session.wait_for_regex(rb"hist-first", start=hist_start, timeout=10)
+    session.pass_check("shell history recalls and re-runs a previous command")
+
+
+def check_shell_line_editing(session):
+    # "wrogn" -> delete 'g' before the cursor, step Right to end of line,
+    # retype 'g': "wrong". Exercises Left, Backspace-at-cursor, Right.
+    session.send_text("secho hist-wrogn")
+    session.send_named_key("left")
+    session.send_named_key("backspace")
+    session.send_named_key("right")
+    session.send_text("g")
+    session.send_named_key("ret")
+    session.wait_for("hist-wrong", timeout=10)
+    # "hist-et" -> Left before 't', insert 'x' mid-line: "hist-ext".
+    session.send_text("secho hist-et")
+    session.send_named_key("left")
+    session.send_text("x")
+    session.send_named_key("ret")
+    session.wait_for("hist-ext", timeout=10)
+    session.pass_check("shell cursor keys and mid-line editing work")
+
+
+def check_shell_quoted_args(session):
+    # Double quotes group an argument: "x  yz" stays one 5-byte argument
+    # instead of splitting into "x" and "yz".
+    session.send_line('write qtest "x  yz"')
+    session.wait_for("Wrote 5 bytes to /qtest", timeout=10)
+    quoted_read = len(session.serial_data)
+    session.send_line("cat qtest")
+    session.wait_for_regex(rb"x  yz", start=quoted_read)
+    session.send_line("rm qtest")
+    session.pass_check("shell double quotes preserve spaces inside an argument")
+
+
+def check_shell_escapes(session):
+    # \n becomes a real newline and \\ a literal backslash inside args.
+    session.send_line("write esc a\\nb")
+    session.wait_for("Wrote 3 bytes to /esc", timeout=10)
+    esc_read = len(session.serial_data)
+    session.send_line("cat esc")
+    # serial_putchar expands '\n' to CRLF on the wire
+    session.wait_for_regex(b"a\r\nb", start=esc_read)
+    session.send_line("rm esc")
+    session.send_line("write esc2 x\\\\y")
+    session.wait_for("Wrote 3 bytes to /esc2", timeout=10)
+    esc2_read = len(session.serial_data)
+    session.send_line("cat esc2")
+    session.wait_for_regex(b"x\\\\y", start=esc2_read)
+    session.send_line("rm esc2")
+    # Unterminated quote stays literal; mid-word quote is literal too.
+    session.send_line('secho "111')
+    session.wait_for('"111', timeout=10)
+    session.send_line('secho 111"')
+    session.wait_for('111"', timeout=10)
+    # Invalid escape warns, then the argument is kept literal.
+    session.send_line('secho "111\\y222"')
+    session.wait_for("unknown escape '\\y'", timeout=10)
+    session.wait_for("111\\y222", timeout=10)
+    # Empty quotes are literal, so """ stays verbatim; \" escapes a quote.
+    session.send_line('secho """')
+    session.wait_for('"""', timeout=10)
+    session.send_line('secho \\"\\"\\"')
+    session.wait_for('"""', timeout=10)
+    # \" inside quotes does not terminate the quoted argument.
+    q1 = len(session.serial_data)
+    session.send_line('secho "\\"\\""')
+    session.wait_for_regex(b'""\r?\n', start=q1, timeout=10)
+    q2 = len(session.serial_data)
+    session.send_line('secho "\\""')
+    session.wait_for_regex(b'"\r?\n', start=q2, timeout=10)
+    session.pass_check("shell \\n, \\\\, and \\\" escapes expand in arguments")
+
+
 def check_storage_and_shell(session):
     session.send_line("disk")
     session.wait_for("ATA primary master and FAT32 filesystem initialized")

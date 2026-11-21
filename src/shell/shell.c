@@ -75,6 +75,8 @@ static char **split_args(const char *str, char *argv[], int max_args) {
 }
 
 // 实际拆分函数，返回 argc
+// 以双引号开头的参数会保留内部空格直到配对的闭引号（引号不计入参数）；
+// 未闭合的引号则取到行尾。
 static int split_line(char *line, char *argv[], int max_args) {
     int argc = 0;
     char *p = line;
@@ -82,6 +84,35 @@ static int split_line(char *line, char *argv[], int max_args) {
     while (*p && argc < max_args - 1) {
         while (*p == ' ') p++;
         if (*p == '\0') break;
+        if (*p == '"') {
+            /* 找闭引号时跳过 \" 转义, 它不结束引号 */
+            char *close = p + 1;
+            while (*close != '\0') {
+                if (*close == '\\' && close[1] != '\0') {
+                    close += 2;
+                    continue;
+                }
+                if (*close == '"') break;
+                ++close;
+            }
+            /* 引号分组要求非空内容; "" 和未闭合的 " 都按字面量处理 */
+            if (*close == '"' && close != p + 1) {
+                argv[argc++] = ++p;
+                while (*p != '\0') {
+                    if (*p == '\\' && p[1] != '\0') {
+                        p += 2;
+                        continue;
+                    }
+                    if (*p == '"') break;
+                    ++p;
+                }
+                if (*p == '"') {
+                    *p = '\0';
+                    ++p;
+                }
+                continue;
+            }
+        }
         argv[argc++] = p;
         while (*p && *p != ' ') p++;
         if (*p) {
@@ -91,6 +122,34 @@ static int split_line(char *line, char *argv[], int max_args) {
     }
     argv[argc] = NULL;
     return argc;
+}
+
+// 展开参数中的转义序列（原地压缩）: \n -> 换行, \\ -> 反斜杠,
+// \" -> 双引号; 其余 \x 保持原样并打印警告, 行尾单独的 \ 也按字面量处理。
+static void shell_unescape_arg(char *arg) {
+    char *r = arg;
+    char *w = arg;
+    while (*r != '\0') {
+        if (*r == '\\' && r[1] == 'n') {
+            *w++ = '\n';
+            r += 2;
+        } else if (*r == '\\' && r[1] == '\\') {
+            *w++ = '\\';
+            r += 2;
+        } else if (*r == '\\' && r[1] == '"') {
+            *w++ = '"';
+            r += 2;
+        } else {
+            if (*r == '\\' && r[1] != '\0') {
+                printf("Warning: unknown escape '\\%c' kept literal\n", r[1]);
+                serial_print("Warning: unknown escape '\\");
+                serial_putchar(r[1]);
+                serial_print("' kept literal\n");
+            }
+            *w++ = *r++;
+        }
+    }
+    *w = '\0';
 }
 
 // 命令实现
@@ -785,15 +844,82 @@ static void shell_print_prompt(void) {
     }
 }
 
+#define SHELL_HISTORY_MAX 16
+
+static char shell_history[SHELL_HISTORY_MAX][128];
+static int shell_history_count = 0;
+static char shell_history_draft[128];
+
+static void shell_history_push(const char *line) {
+    uint32_t length = strlen(line);
+    int blank = 1;
+    for (uint32_t i = 0; i < length; ++i) {
+        if (line[i] != ' ') {
+            blank = 0;
+            break;
+        }
+    }
+    if (blank) return;
+    if (shell_history_count > 0 &&
+        strcmp(shell_history[shell_history_count - 1], line) == 0) {
+        return;
+    }
+    if (shell_history_count == SHELL_HISTORY_MAX) {
+        memmove(&shell_history[0], &shell_history[1],
+                (SHELL_HISTORY_MAX - 1) * sizeof(shell_history[0]));
+        --shell_history_count;
+    }
+    strncpy(shell_history[shell_history_count], line,
+            sizeof(shell_history[0]) - 1U);
+    shell_history[shell_history_count][sizeof(shell_history[0]) - 1U] = '\0';
+    ++shell_history_count;
+}
+
+/* Absolute cursor cell for `offset` characters after the prompt origin,
+ * wrapping at the console width. */
+static void shell_cursor_to(int offset, uint16_t origin_row,
+                            uint16_t origin_col, uint16_t *row, uint16_t *col) {
+    uint32_t columns = vga_columns();
+    uint32_t linear = (uint32_t)origin_col + (uint32_t)offset;
+    *row = (uint16_t)(origin_row + linear / columns);
+    *col = (uint16_t)(linear % columns);
+}
+
+/* Repaint the input line: erase `old_length` cells after the prompt,
+ * print `line`/`length`, then leave the cursor at insertion offset
+ * `cursor`. `origin` is captured right after the prompt prints. */
+static void shell_paint_line(const char *line, int length, int cursor,
+                             int old_length, uint16_t origin_row,
+                             uint16_t origin_col) {
+    uint16_t row, col;
+    vga_set_cursor(origin_row, origin_col);
+    for (int i = 0; i < old_length; ++i) {
+        putchar(' ');
+    }
+    vga_set_cursor(origin_row, origin_col);
+    for (int i = 0; i < length; ++i) {
+        putchar(line[i]);
+    }
+    shell_cursor_to(cursor, origin_row, origin_col, &row, &col);
+    vga_set_cursor(row, col);
+}
+
 static void shell_read_line(char *line, int size) {
     int length = 0;
+    int cursor = 0;  /* insertion point within line[] */
     int prompt_visible = 0;
+    int history_index = -1;  /* -1: editing a fresh line, draft holds it */
+    uint16_t origin_row = 0;
+    uint16_t origin_col = 0;
+    int origin_valid = 0;
 
-    while (length < size - 1) {
+    for (;;) {
         if (ring3_foreground_pid() == 0U) {
             if (!prompt_visible && length == 0) {
                 shell_print_prompt();
                 prompt_visible = 1;
+                vga_get_cursor(&origin_row, &origin_col);
+                origin_valid = 1;
             }
         } else {
             prompt_visible = 0;
@@ -805,25 +931,114 @@ static void shell_read_line(char *line, int size) {
         }
 
         char c = keyboard_getchar();
+        if (!origin_valid) {
+            /* No prompt origin (foreground Ring 3 task): keep the old
+             * append-only echo behavior and ignore editing keys. */
+            if (c == '\n' || c == '\r') {
+                line[length] = '\0';
+                putchar('\n');
+                return;
+            }
+            if (c == '\b') {
+                if (length > 0) {
+                    --length;
+                    cursor = length;
+                    putchar('\b');
+                    putchar(' ');
+                    putchar('\b');
+                }
+                continue;
+            }
+            if ((c < KEYBOARD_KEY_UP || c > KEYBOARD_KEY_RIGHT) &&
+                length < size - 1) {
+                line[length++] = c;
+                cursor = length;
+                putchar(c);
+            }
+            continue;
+        }
+        if (c == KEYBOARD_KEY_LEFT || c == KEYBOARD_KEY_RIGHT) {
+            if (c == KEYBOARD_KEY_LEFT && cursor > 0) {
+                --cursor;
+            } else if (c == KEYBOARD_KEY_RIGHT && cursor < length) {
+                ++cursor;
+            } else {
+                continue;
+            }
+            uint16_t row, col;
+            shell_cursor_to(cursor, origin_row, origin_col, &row, &col);
+            vga_set_cursor(row, col);
+            continue;
+        }
+        if (c == KEYBOARD_KEY_UP || c == KEYBOARD_KEY_DOWN) {
+            const char *text;
+            int text_length;
+            int new_index = history_index;
+
+            if (c == KEYBOARD_KEY_UP) {
+                if (shell_history_count == 0) continue;
+                if (history_index == -1) {
+                    int copy = length < (int)sizeof(shell_history_draft) - 1
+                               ? length : (int)sizeof(shell_history_draft) - 1;
+                    memcpy(shell_history_draft, line, copy);
+                    shell_history_draft[copy] = '\0';
+                    new_index = shell_history_count - 1;
+                } else if (history_index > 0) {
+                    --new_index;
+                } else {
+                    continue;
+                }
+                text = shell_history[new_index];
+            } else {
+                if (history_index == -1) continue;
+                if (history_index < shell_history_count - 1) {
+                    ++new_index;
+                    text = shell_history[new_index];
+                } else {
+                    new_index = -1;
+                    text = shell_history_draft;
+                }
+            }
+            history_index = new_index;
+            text_length = (int)strlen(text);
+            int old_displayed = length;
+            int copy = text_length < size - 1 ? text_length : size - 1;
+            memcpy(line, text, copy);
+            line[copy] = '\0';
+            length = copy;
+            cursor = length;
+            shell_paint_line(line, length, cursor, old_displayed,
+                             origin_row, origin_col);
+            continue;
+        }
         if (c == '\n' || c == '\r') {
             line[length] = '\0';
             putchar('\n');
             return;
         }
         if (c == '\b') {
-            if (length > 0) {
+            if (cursor > 0) {
+                memmove(line + cursor - 1, line + cursor,
+                        (uint32_t)(length - cursor));
                 --length;
-                putchar('\b');
-                putchar(' ');
-                putchar('\b');
+                --cursor;
+                line[length] = '\0';
+                shell_paint_line(line, length, cursor, length + 1,
+                                 origin_row, origin_col);
             }
             continue;
         }
-        line[length++] = c;
-        putchar(c);
+        if (length < size - 1) {
+            memmove(line + cursor + 1, line + cursor,
+                    (uint32_t)(length - cursor));
+            line[cursor] = c;
+            ++length;
+            ++cursor;
+            line[length] = '\0';
+            shell_paint_line(line, length, cursor, length - 1,
+                             origin_row, origin_col);
+        }
     }
-
-    line[length] = '\0';
 }
 
 void start_shell(void) {
@@ -837,7 +1052,11 @@ void start_shell(void) {
 
     while (1) {
         shell_read_line(line, sizeof(line));
+        shell_history_push(line);
         argc = split_line(line, argv, 16);
+        for (int i = 0; i < argc; ++i) {
+            shell_unescape_arg(argv[i]);
+        }
         if (argc == 0) continue;
         int found = 0;
         for (int i = 0; cmd_table[i].name != NULL; i++) {

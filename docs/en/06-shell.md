@@ -7,19 +7,43 @@ via `start_shell()`.
 
 ## Input loop
 
-- Line buffer: 128 bytes; `gets()` reads keys through the PS/2 keyboard
-  driver.
-- `split_line()` tokenizes on whitespace into at most 16 arguments.
+- Line buffer: 128 bytes; `shell_read_line()` polls the PS/2 keyboard
+  driver with `keyboard_hit()` and sleeps via `sti; hlt` while waiting.
+  While a foreground Ring 3 process exists the prompt is hidden but input
+  is still accepted so `bg`/`kill` keep working.
+- Command history: the last 16 non-blank lines are kept in a static
+  table; consecutive duplicates are skipped. `Up`/`Down` recall entries
+  (the in-progress line is preserved as a draft and restored when
+  stepping back past the newest entry). Recall repaints the input through
+  `vga_set_cursor`, which also works in VBE mode; history is only
+  available while the prompt is visible.
+- Line editing: `Left`/`Right` move an insertion cursor within the
+  line; printable keys insert at the cursor and `Backspace` deletes the
+  character before it (previously both only worked at end of line).
+  Every edit repaints the line from the recorded prompt origin via
+  `vga_set_cursor`/`vga_columns`, so wrapped lines are handled; editing
+  keys are ignored while no prompt origin exists (foreground Ring 3
+  task running).
+- `split_line()` tokenizes on whitespace into at most 16 arguments; an
+  argument starting with `"` keeps its inner spaces up to the matching
+  closing quote (the quotes themselves are stripped), but only when the
+  quoted content is non-empty — `""`, unterminated `"`, and `"` anywhere
+  else in a word are all literal. `\"` inside a quoted argument does not
+  close it. Every argument then goes through
+  `shell_unescape_arg()`: `\n` becomes a real newline, `\\` a literal
+  backslash, and `\"` a literal `"`; any other `\x` sequence prints an
+  `unknown escape` warning and is kept literally.
 - Dispatch is an exact `strcmp` against `cmd_table` (name, handler,
   one-line description); unknown input prints `Unknown command`.
 - Prompt: `myos <cwd> > ` when FAT32 is mounted, `myos > ` otherwise.
 
 ## Path resolution
 
-Disk commands resolve arguments through `disk_resolve_path()`:
+Disk commands resolve arguments through `fat32_resolve_path()`:
 
 - Absolute paths (`/...`) are used as-is; relative paths are prefixed with
-  the shell CWD (`disk_cwd`, changed by `cd`).
+  the shared working directory (`g_cwd` in `src/fs/fat32.c`, changed by
+  `cd` and also used by the `SYS_GETCWD`/`SYS_CHDIR` syscalls).
 - `.` components are dropped, `..` pops one component, repeated `/` is
   collapsed, and the result is normalized to a canonical absolute path.
 - Names are case-sensitive (LFN-aware FAT32 lookup).

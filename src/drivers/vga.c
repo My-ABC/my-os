@@ -220,14 +220,33 @@ void vga_print_dec(uint32_t num) {
     }
 }
 
-// 获取当前光标位置
+// 当前控制台的列数 (VBE 按字符单元格, 文本模式为 80)
+uint16_t vga_columns(void) {
+    if (vbe_available()) {
+        uint32_t columns = vbe_columns();
+        if (columns != 0 && columns <= 0xFFFFU) {
+            return (uint16_t)columns;
+        }
+    }
+    return VGA_WIDTH;
+}
+
+// 获取当前光标位置 (VBE 模式下返回字符单元格坐标)
 void vga_get_cursor(uint16_t* row, uint16_t* col) {
+    if (vbe_available()) {
+        vbe_get_cursor(row, col);
+        return;
+    }
     *row = cursor_row;
     *col = cursor_col;
 }
 
-// 设置光标位置
+// 设置光标位置 (VBE 模式下按字符单元格定位)
 void vga_set_cursor(uint16_t row, uint16_t col) {
+    if (vbe_available()) {
+        vbe_set_cursor(row, col);
+        return;
+    }
     if (row < VGA_HEIGHT && col < VGA_WIDTH) {
         cursor_row = row;
         cursor_col = col;

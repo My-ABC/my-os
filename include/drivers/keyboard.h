@@ -6,6 +6,12 @@
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_COMMAND_PORT 0x64
 
+// 扩展方向键以控制字节形式进入按键缓冲区, 不会与可打印 ASCII 冲突
+#define KEYBOARD_KEY_UP    0x01
+#define KEYBOARD_KEY_DOWN  0x02
+#define KEYBOARD_KEY_LEFT  0x03
+#define KEYBOARD_KEY_RIGHT 0x04
+
 void keyboard_init(void);
 
 // 设置扫描码集 (1 或 2)

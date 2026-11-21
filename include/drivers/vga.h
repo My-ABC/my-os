@@ -51,4 +51,6 @@ void vga_get_cursor(uint16_t* row, uint16_t* col);
 
 void vga_set_cursor(uint16_t row, uint16_t col);
 
+uint16_t vga_columns(void);
+
 #endif

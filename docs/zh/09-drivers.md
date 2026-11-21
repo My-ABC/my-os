@@ -8,7 +8,7 @@
 | 驱动 | 文件 | 说明 |
 |---|---|---|
 | ATA PIO | `ata.c` | 主盘、LBA28、512 字节扇区；见 [08-filesystem.md](08-filesystem.md) |
-| 键盘 | `keyboard.c` | PS/2 scancode→ASCII，IRQ1，可配置 scancode set（`SCANCODE_SET`） |
+| 键盘 | `keyboard.c` | PS/2 scancode→ASCII，IRQ1，可配置 scancode set（`SCANCODE_SET`）；方向键输出 `KEYBOARD_KEY_*` 控制字节（0x01–0x04） |
 | PIC | `pic.c` | 8259 主/从重映射与逐线屏蔽辅助函数 |
 | PIT | `pit.c` | 8253 通道 0，`PIT_FREQUENCY` = 100 Hz，tick 计数 |
 | RTC | `rtc.c` | MC146818 CMOS 时间、BCD 解码、北京时间换算、Unix 时间戳 |

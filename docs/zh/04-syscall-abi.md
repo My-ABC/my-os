@@ -82,7 +82,7 @@ English: [English version](../en/04-syscall-abi.md)
 - **无 ABI 版本**：调用号是裸整数，无版本字段。
 - **错误语义不统一**：未定义调用号返回 `-1`，内存操作失败返回 0，成功调用各自返回 0/指针/时间戳，调用方需逐个判断。
 - **阻塞调用不让出 CPU**：`SYS_READ`/`SYS_GETCHAR` 期间 IRQ0 照常触发，但 `ring3_timer_switch` 看到的是内核态帧而直接返回，其他 Ring 3 进程在调用返回前无法被调度。键盘等待本身可被 IRQ1 正常唤醒（trap gate 保留 IF）；需要合作式让出时可调用 `SYS_YIELD`。
-- **`SYS_READ`/`SYS_GETCHAR` 只认键盘**：不经过文件/控制台抽象。
+- **`SYS_READ`/`SYS_GETCHAR` 只认键盘**：不经过文件/控制台抽象。方向键以控制字节 `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT`（0x01–0x04）形式下发：`SYS_GETCHAR` 将其作为普通字符返回，`SYS_READ` 原样写入缓冲区。
 - **无设备访问接口**（串口、ATA 直访等）；无进程创建/等待类调用（`SYS_EXIT` 已有，`kill` 仍只能由 Shell 发起）。
 - fd 表全局共享且进程退出不回收 fd；`SYS_FREAD`/`SYS_FWRITE` 为整文件读改写，I/O 复杂度高。
 - `SYS_WRITE` 的前后台抑制是隐式行为，调用方无法主动选择输出通道。

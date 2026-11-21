@@ -214,6 +214,37 @@ int vbe_available(void) {
     return vbe_state.valid != 0;
 }
 
+uint32_t vbe_columns(void) {
+    if (!vbe_available()) {
+        return 0;
+    }
+    return vbe_state.width / ASCII_FONT_WIDTH;
+}
+
+void vbe_get_cursor(uint16_t *row, uint16_t *col) {
+    if (!vbe_available()) {
+        *row = 0;
+        *col = 0;
+        return;
+    }
+    *row = (uint16_t)vbe_cursor_y;
+    *col = (uint16_t)vbe_cursor_x;
+}
+
+void vbe_set_cursor(uint16_t row, uint16_t col) {
+    uint32_t columns = vbe_state.width / ASCII_FONT_WIDTH;
+    uint32_t rows = vbe_state.height / ASCII_FONT_HEIGHT;
+
+    if (!vbe_available() || row >= rows || col >= columns) {
+        return;
+    }
+    vbe_erase_cursor();
+    vbe_cursor_x = col;
+    vbe_cursor_y = row;
+    vbe_cursor_blink_ticks = 0;
+    vbe_draw_cursor();
+}
+
 void vbe_set_color(uint8_t foreground, uint8_t background) {
     vbe_foreground = vbe_palette_color(foreground);
     vbe_background = vbe_palette_color(background);
