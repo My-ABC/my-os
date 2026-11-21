@@ -31,6 +31,17 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 7 | `SYS_MEMORY` | `ebx` = operation code, see below | see below | User-heap memory operations. |
 | 8 | `SYS_POWER` | `ebx` = operation code, see below | 0 | Power operations. |
 | 9 | `SYS_GETPID` | none | current Ring 3 PID | Returns 0 when called from kernel context. |
+| 10 | `SYS_EXIT` | none | does not return | Terminates the current Ring 3 process and reclaims its resources (see "Process exit" below). From kernel context it degenerates to a plain 0 return. |
+| 11 | `SYS_FOPEN` | `ebx` = path string, `ecx` = mode | fd (0–7) or -1 | Opens a FAT32 file. Modes: `0`=`SYSFS_O_RDONLY` (file must exist), `1`=`SYSFS_O_RDWR` (allowed to not exist; created on first write). Directories are always rejected. |
+| 12 | `SYS_FCLOSE` | `ebx` = fd | 0 or -1 | Closes a file descriptor. |
+| 13 | `SYS_FREAD` | `ebx` = fd, `ecx` = `buf`, `edx` = `size` | bytes read, 0 at EOF, -1 on error | Reads from the current offset, which advances. |
+| 14 | `SYS_FWRITE` | `ebx` = fd, `ecx` = `buf`, `edx` = `size` | bytes written or -1 | Only `O_RDWR` descriptors may write; writes at the current offset and advances, zero-extending when the file is too small. |
+| 15 | `SYS_FUNLINK` | `ebx` = path string | 0 or -1 | Deletes a FAT32 file (`fat32_delete_file`). |
+| 16 | `SYS_FMKDIR` | `ebx` = path string | 0 or -1 | Creates a FAT32 directory (`fat32_make_directory`). |
+| 17 | `SYS_FRMDIR` | `ebx` = path string | 0 or -1 | Removes an empty FAT32 directory (`fat32_remove_directory`, non-recursive). |
+| 18 | `SYS_FSTAT` | `ebx` = path string | file size; -2 for a directory; -1 on error | Queries by path, not by fd. |
+| 19 | `SYS_GETCWD` | `ebx` = `buf`, `ecx` = `size` | path length (excluding NUL) or -1 | Copies the current working directory (NUL included) into the user buffer; `size` must be ≥ length+1. |
+| 20 | `SYS_CHDIR` | `ebx` = path string | 0 or -1 | Changes the working directory; the target must be an existing directory. |
 
 ## `SYS_MEMORY` (7) sub-operation codes — `ebx`
 
@@ -52,6 +63,18 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 | 1 | `POWER_SHUTDOWN` | ACPI shutdown |
 | 2 | `POWER_REBOOT` | ACPI reboot |
 
+## Filesystem calls (10–20)
+
+- **Path resolution**: every path argument is a user-mode NUL-terminated string, first resolved and normalized against the current working directory (`fat32_resolve_path`, sharing the same `g_cwd` as the shell; relative paths, `.` and `..` are supported), then passed to FAT32. Paths are limited to 127 characters.
+- **File descriptors**: the kernel keeps one global fd table (`SYSFS_MAX_FDS` = 8 entries); an fd is a table index 0–7. The table is global, not per-process; exiting processes do **not** auto-close their fds (a later process may inherit offset state — a known limitation).
+- **Read/write semantics**: the FAT32 layer only offers whole-file I/O, so `SYS_FREAD` re-reads the entire file (≤ `FAT32_MAX_FILE_SIZE` = 1 MiB) into a kernel buffer on every call and copies out the data at the offset; `SYS_FWRITE` uses read-modify-write: read the existing content, overwrite at the offset, and write the whole file back at `max(old size, offset+length)`. Large files and frequent small writes are inefficient — a known limitation.
+- **User-pointer validation**: calls 10–20 validate pointers with `sys_user_buffer_ok`/`sys_copy_user_string` so they must land in registered user ranges (ELF image, user stacks, user heap); invalid pointers return -1 instead of panicking. Calls 1–9 still perform no validation.
+- **Working directory**: `g_cwd` lives in `src/fs/fat32.c`; the shell's `cd`/prompt and the user-mode `SYS_CHDIR`/`SYS_GETCWD` share the same directory.
+
+## Process exit (`SYS_EXIT`)
+
+`SYS_EXIT` calls `ring3_terminate_current()`: it releases the process's user stack and ELF image pages, marks it DEAD, clears the foreground PID (if any), and stores the saved kernel `irq_frame` into the global `syscall_exit_frame`. When the `syscall` stub sees a nonzero value it skips `popad`/`iret` back to user mode, switches `esp` to that kernel frame, and replays the IRQ0 epilogue to resume the shell context — the same path ISR14 uses to kill a process. `syscall_exit_frame` is cleared at the top of every `syscall_handler` invocation.
+
 ## Known limitations (to resolve before stabilizing the ABI)
 
 - **No user-pointer validation**: `SYS_WRITE`/`SYS_READ`/`SYS_MEMORY` dereference caller-supplied pointers directly, without range checks or kernel-address rejection. An illegal pointer from Ring 3 triggers a page fault that kills the process; an illegal pointer in kernel context leads to a kernel page-fault panic (covered by the `kfault.elf` test).
@@ -59,5 +82,6 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 - **Non-uniform error semantics**: undefined call numbers return `-1`, memory-operation failures return 0, and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
 - **Blocking calls do not yield the CPU**: IRQ0 still fires during `SYS_READ`/`SYS_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching, so other Ring 3 processes cannot be scheduled until the call returns. The keyboard wait itself is woken normally by IRQ1 (the trap gate preserves IF).
 - **`SYS_READ`/`SYS_GETCHAR` only talk to the keyboard**: no file/console abstraction.
-- **No file, directory, or device-access interfaces**; no process create/exit/wait calls.
+- **No device-access interfaces** (serial, raw ATA, etc.) and no process create/wait calls (`SYS_EXIT` exists; `kill` is still shell-only).
+- The fd table is global and fds are not reclaimed on process exit; `SYS_FREAD`/`SYS_FWRITE` do whole-file read-modify-write, so I/O is expensive.
 - `SYS_WRITE`'s foreground/background suppression is implicit; callers cannot choose an output channel.

@@ -288,3 +288,96 @@ int fat32_delete_file(const char *path) {
     return mark_entry_and_lfn_deleted(&location, lfn_locations, lfn_count);
 }
 
+
+static char g_cwd[128] = "/";
+
+int fat32_get_cwd(char *buf, uint32_t size) {
+    if (buf == 0 || size == 0U) return -1;
+    uint32_t length = strlen(g_cwd);
+    if (length + 1U > size) return -1;
+    memcpy(buf, g_cwd, length + 1U);
+    return (int)length;
+}
+
+int fat32_set_cwd(const char *path) {
+    if (path == 0) return -1;
+    uint32_t length = strlen(path);
+    if (length == 0U || length >= sizeof(g_cwd) || path[0] != '/') return -1;
+    memcpy(g_cwd, path, length + 1U);
+    return 0;
+}
+
+int fat32_resolve_path(const char *input, char *output, uint32_t size) {
+    char combined[256];
+    const char *path = input != 0 ? input : "";
+    uint32_t length;
+
+    if (size < 2U) return -1;
+    if (path[0] == '/') {
+        length = strlen(path);
+        if (length >= sizeof(combined)) return -1;
+        memcpy(combined, path, length + 1U);
+    } else {
+        uint32_t cwd_length = strlen(g_cwd);
+        uint32_t path_length = strlen(path);
+        uint32_t separator = cwd_length > 1U && path_length > 0U ? 1U : 0U;
+        length = cwd_length + separator + path_length;
+        if (length >= sizeof(combined)) return -1;
+        memcpy(combined, g_cwd, cwd_length);
+        if (separator != 0U) combined[cwd_length] = '/';
+        memcpy(combined + cwd_length + separator, path, path_length + 1U);
+    }
+
+    uint32_t output_length = 1U;
+    output[0] = '/';
+    uint32_t position = 0U;
+    while (position < length) {
+        while (position < length && combined[position] == '/') ++position;
+        uint32_t start = position;
+        while (position < length && combined[position] != '/') ++position;
+        uint32_t component_length = position - start;
+        if (component_length == 0U ||
+            (component_length == 1U && combined[start] == '.')) {
+            continue;
+        }
+        if (component_length == 2U && combined[start] == '.' &&
+            combined[start + 1U] == '.') {
+            while (output_length > 1U &&
+                   output[output_length - 1U] != '/') {
+                --output_length;
+            }
+            if (output_length > 1U) --output_length;
+            continue;
+        }
+
+        uint32_t separator = output_length > 1U ? 1U : 0U;
+        if (output_length >= size ||
+            separator > size - output_length - 1U ||
+            component_length > size - output_length - separator - 1U) {
+            return -1;
+        }
+        if (separator != 0U) output[output_length++] = '/';
+        memcpy(output + output_length, combined + start, component_length);
+        output_length += component_length;
+    }
+    output[output_length] = '\0';
+    return 0;
+}
+
+int fat32_stat(const char *path, uint32_t *size, int *is_dir) {
+    if (!g_fs.mounted || path == 0 || size == 0 || is_dir == 0) return -1;
+    char parent[128], name[128];
+    if (split_path(path, parent, sizeof(parent), name, sizeof(name)) != 0) {
+        return -1;
+    }
+    uint32_t dir_cluster = resolve_directory(parent);
+    if (dir_cluster < 2U) return -1;
+    uint8_t entry[32];
+    if (find_entry_by_name(dir_cluster, name, 0, entry, 0, 0) != 1) {
+        return -1;
+    }
+    *is_dir = (entry[11] & FAT32_ATTR_DIRECTORY) != 0U ? 1 : 0;
+    *size = *is_dir ? 0U : le32(entry + 28);
+    return 0;
+}
+

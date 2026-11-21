@@ -28,4 +28,12 @@ int fat32_make_directory(const char *path);
 int fat32_remove_directory(const char *path);
 int fat32_remove_directory_recursive(const char *path);
 
+/* Working directory (normalized absolute path, shared by shell and user
+ * processes) and path resolution/stat helpers. */
+int fat32_get_cwd(char *buf, uint32_t size);
+int fat32_set_cwd(const char *path);
+int fat32_resolve_path(const char *input, char *output, uint32_t size);
+/* Returns 0 and fills size/is_dir on success, -1 when missing or on error. */
+int fat32_stat(const char *path, uint32_t *size, int *is_dir);
+
 #endif

@@ -8,8 +8,26 @@
 #include "pmm.h"
 #include "string.h"
 #include "ring3.h"
+#include "fat32.h"
+#include "heap.h"
 
 #define USER_BLOCK_MAGIC 0x55534552U
+#define SYSFS_MAX_FDS 8U
+#define SYSFS_PATH_MAX 128U
+
+/* Set by SYS_EXIT; the syscall stub switches to this kernel frame instead
+ * of returning to the exiting process. */
+uint32_t syscall_exit_frame;
+
+struct sysfs_fd {
+    uint8_t used;
+    uint8_t mode;
+    uint32_t offset;
+    uint32_t size;
+    char path[SYSFS_PATH_MAX];
+};
+
+static struct sysfs_fd sysfs_fds[SYSFS_MAX_FDS];
 
 struct user_block {
     uint32_t magic;
@@ -179,7 +197,138 @@ uint32_t sys_user_heap_contains(uint32_t addr) {
     return addr >= USER_HEAP_START && addr < USER_HEAP_END;
 }
 
+/* Validate that every page covering [addr, addr+len) belongs to a registered
+ * user range (live ELF image, user stack, or user heap). Rejects kernel
+ * addresses and unmapped holes so bad pointers return -1 instead of
+ * panicking the kernel on the subsequent copy. */
+static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
+    if (len == 0U) return 1;
+    if (addr >= USER_SPACE_END || len > USER_SPACE_END - addr) return 0;
+    uint32_t last = addr + len - 1U;
+    for (uint32_t page = addr & ~(PAGE_SIZE - 1U); page <= last;
+         page += PAGE_SIZE) {
+        if (!ring3_user_range_permitted(page) &&
+            !sys_user_heap_contains(page)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Copy a NUL-terminated user string into a kernel buffer, bounded by
+ * dst_size. Returns the string length (excluding NUL) or -1. */
+static int sys_copy_user_string(uint32_t addr, char *dst, uint32_t dst_size) {
+    if (addr >= USER_SPACE_END || dst_size < 2U) return -1;
+    for (uint32_t i = 0; i + 1U < dst_size; ++i) {
+        uint32_t a = addr + i;
+        if (a >= USER_SPACE_END ||
+            (!ring3_user_range_permitted(a) && !sys_user_heap_contains(a))) {
+            return -1;
+        }
+        char c = *(const volatile char *)a;
+        dst[i] = c;
+        if (c == '\0') return (int)i;
+    }
+    return -1;
+}
+
+static int sysfs_resolve_path(uint32_t user_path, char *out,
+                              uint32_t out_size) {
+    if (!fat32_mounted()) return -1;
+    char input[SYSFS_PATH_MAX];
+    if (sys_copy_user_string(user_path, input, sizeof(input)) < 0) return -1;
+    return fat32_resolve_path(input, out, out_size);
+}
+
+static int sysfs_fd_index(uint32_t fd) {
+    return fd < SYSFS_MAX_FDS && sysfs_fds[fd].used != 0U ? (int)fd : -1;
+}
+
+static int sysfs_fopen(uint32_t user_path, uint32_t mode) {
+    if (mode > SYSFS_O_RDWR) return -1;
+    char path[SYSFS_PATH_MAX];
+    if (sysfs_resolve_path(user_path, path, sizeof(path)) != 0) return -1;
+
+    uint32_t size = 0U;
+    int is_dir = 0;
+    int exists = fat32_stat(path, &size, &is_dir) == 0;
+    if (is_dir != 0 || (exists == 0 && mode == SYSFS_O_RDONLY)) return -1;
+
+    for (uint32_t i = 0; i < SYSFS_MAX_FDS; ++i) {
+        if (sysfs_fds[i].used == 0U) {
+            sysfs_fds[i].used = 1U;
+            sysfs_fds[i].mode = (uint8_t)mode;
+            sysfs_fds[i].offset = 0U;
+            sysfs_fds[i].size = exists ? size : 0U;
+            strncpy(sysfs_fds[i].path, path, SYSFS_PATH_MAX - 1U);
+            sysfs_fds[i].path[SYSFS_PATH_MAX - 1U] = '\0';
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int sysfs_fread(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
+    if (!sys_user_buffer_ok(buf, size)) return -1;
+    if (size == 0U) return 0;
+
+    uint8_t *kbuf = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+    if (kbuf == 0) return -1;
+    uint32_t file_size = 0U;
+    if (fat32_read_file(fd->path, kbuf, FAT32_MAX_FILE_SIZE,
+                        &file_size) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+    fd->size = file_size;
+    if (fd->offset >= file_size) {
+        kfree(kbuf);
+        return 0;
+    }
+    uint32_t chunk = size;
+    if (chunk > file_size - fd->offset) chunk = file_size - fd->offset;
+    memcpy((void *)buf, kbuf + fd->offset, chunk);
+    fd->offset += chunk;
+    kfree(kbuf);
+    return (int)chunk;
+}
+
+static int sysfs_fwrite(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
+    if (fd->mode != SYSFS_O_RDWR) return -1;
+    if (!sys_user_buffer_ok(buf, size)) return -1;
+    if (size == 0U) return 0;
+    if ((uint64_t)fd->offset + size > FAT32_MAX_FILE_SIZE) return -1;
+
+    uint32_t old_size = 0U;
+    int is_dir = 0;
+    int exists = fat32_stat(fd->path, &old_size, &is_dir) == 0;
+    if (exists != 0 && is_dir != 0) return -1;
+
+    uint32_t needed = fd->offset + size;
+    if (needed < old_size) needed = old_size;
+    uint8_t *kbuf = (uint8_t *)kmalloc(needed);
+    if (kbuf == 0) return -1;
+    memset(kbuf, 0, needed);
+    if (exists != 0) {
+        uint32_t got = 0U;
+        if (fat32_read_file(fd->path, kbuf, needed, &got) != 0) {
+            kfree(kbuf);
+            return -1;
+        }
+    }
+    memcpy(kbuf + fd->offset, (const void *)buf, size);
+    if (fat32_write_file(fd->path, kbuf, needed) != 0) {
+        kfree(kbuf);
+        return -1;
+    }
+    fd->offset += size;
+    fd->size = needed;
+    kfree(kbuf);
+    return (int)size;
+}
+
 uint32_t syscall_handler() {
+    syscall_exit_frame = 0U;
     uint32_t eax, ebx, ecx, edx;
     __asm__ volatile(
         "mov %%eax, %0\n"
@@ -253,6 +402,79 @@ uint32_t syscall_handler() {
             return 0;
         case SYS_GETPID:
             return ring3_current_pid();
+        case SYS_EXIT: {
+            struct irq_frame *frame = ring3_terminate_current();
+            if (frame != 0) syscall_exit_frame = (uint32_t)frame;
+            return 0;
+        }
+        case SYS_FOPEN:
+            return (uint32_t)sysfs_fopen(ebx, ecx);
+        case SYS_FCLOSE: {
+            int index = sysfs_fd_index(ebx);
+            if (index < 0) return (uint32_t)-1;
+            memset(&sysfs_fds[index], 0, sizeof(sysfs_fds[index]));
+            return 0;
+        }
+        case SYS_FREAD: {
+            int index = sysfs_fd_index(ebx);
+            if (index < 0) return (uint32_t)-1;
+            return (uint32_t)sysfs_fread(&sysfs_fds[index], ecx, edx);
+        }
+        case SYS_FWRITE: {
+            int index = sysfs_fd_index(ebx);
+            if (index < 0) return (uint32_t)-1;
+            return (uint32_t)sysfs_fwrite(&sysfs_fds[index], ecx, edx);
+        }
+        case SYS_FUNLINK: {
+            char path[SYSFS_PATH_MAX];
+            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
+                return (uint32_t)-1;
+            }
+            return fat32_delete_file(path) == 0 ? 0U : (uint32_t)-1;
+        }
+        case SYS_FMKDIR: {
+            char path[SYSFS_PATH_MAX];
+            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
+                return (uint32_t)-1;
+            }
+            return fat32_make_directory(path) == 0 ? 0U : (uint32_t)-1;
+        }
+        case SYS_FRMDIR: {
+            char path[SYSFS_PATH_MAX];
+            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
+                return (uint32_t)-1;
+            }
+            return fat32_remove_directory(path) == 0 ? 0U : (uint32_t)-1;
+        }
+        case SYS_FSTAT: {
+            char path[SYSFS_PATH_MAX];
+            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
+                return (uint32_t)-1;
+            }
+            uint32_t size = 0U;
+            int is_dir = 0;
+            if (fat32_stat(path, &size, &is_dir) != 0) return (uint32_t)-1;
+            return is_dir != 0 ? (uint32_t)-2 : size;
+        }
+        case SYS_GETCWD: {
+            if (!sys_user_buffer_ok(ebx, ecx)) return (uint32_t)-1;
+            char cwd[SYSFS_PATH_MAX];
+            int length = fat32_get_cwd(cwd, sizeof(cwd));
+            if (length < 0 || (uint32_t)length + 1U > ecx) {
+                return (uint32_t)-1;
+            }
+            memcpy((void *)ebx, cwd, (uint32_t)length + 1U);
+            return (uint32_t)length;
+        }
+        case SYS_CHDIR: {
+            char path[SYSFS_PATH_MAX];
+            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0 ||
+                fat32_list_directory(path, 0) != 0 ||
+                fat32_set_cwd(path) != 0) {
+                return (uint32_t)-1;
+            }
+            return 0;
+        }
 
         default:
             return -1;

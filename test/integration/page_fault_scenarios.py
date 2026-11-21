@@ -67,7 +67,7 @@ def check_user_oom(session):
 
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 8 DEAD", start=ps_start, timeout=5)
+    session.wait_for_regex(rb"\[PS\] 9 DEAD", start=ps_start, timeout=5)
     session.pass_check("oom.elf is reaped after the out-of-memory kill")
 
     session.send_line("secho oom-suite-ok")

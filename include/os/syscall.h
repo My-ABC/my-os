@@ -13,6 +13,17 @@
 #define SYS_MEMORY   7   // 用户内存操作
 #define SYS_POWER    8   // 电源操作
 #define SYS_GETPID   9   // 获取当前 Ring 3 进程 ID
+#define SYS_EXIT     10  // 退出当前 Ring 3 进程
+#define SYS_FOPEN    11  // 打开 FAT32 文件，返回 fd
+#define SYS_FCLOSE   12  // 关闭文件描述符
+#define SYS_FREAD    13  // 从文件描述符读取
+#define SYS_FWRITE   14  // 向文件描述符写入
+#define SYS_FUNLINK  15  // 删除 FAT32 文件
+#define SYS_FMKDIR   16  // 创建 FAT32 目录
+#define SYS_FRMDIR   17  // 删除空 FAT32 目录
+#define SYS_FSTAT    18  // 获取路径的文件大小/类型
+#define SYS_GETCWD   19  // 获取当前工作目录
+#define SYS_CHDIR    20  // 切换当前工作目录
 
 #define MEMORY_MALLOC  1
 #define MEMORY_CALLOC  2
@@ -21,6 +32,9 @@
 
 #define POWER_SHUTDOWN 1
 #define POWER_REBOOT   2
+
+#define SYSFS_O_RDONLY 0
+#define SYSFS_O_RDWR   1
 
 // 用户堆虚拟地址范围（供页错误按需映射做范围判定）
 #define USER_HEAP_START 0x01000000U

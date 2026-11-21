@@ -121,6 +121,7 @@ irq0:
     add esp, 4
     mov esp, eax
 
+irq0_resume:
     pop eax
     mov gs, ax
     pop eax
@@ -143,9 +144,18 @@ irq1:
 
 global syscall
 extern syscall_handler
+extern syscall_exit_frame
 syscall:
     pushad
     call syscall_handler
+    cmp dword [syscall_exit_frame], 0
+    je .syscall_return
+    ; SYS_EXIT: resume the saved kernel frame instead of the dead process
+    mov eax, [syscall_exit_frame]
+    mov dword [syscall_exit_frame], 0
+    mov esp, eax
+    jmp irq0_resume
+.syscall_return:
     mov [esp + 28], eax
     popad
     iret

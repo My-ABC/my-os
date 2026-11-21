@@ -317,65 +317,6 @@ int cmd_elf(int argc, char *argv[]) {
     return 0;
 }
 
-static char disk_cwd[128] = "/";
-
-static int disk_resolve_path(const char *input, char *output, uint32_t size) {
-    char combined[256];
-    const char *path = input != 0 ? input : "";
-    uint32_t length;
-
-    if (size < 2U) return -1;
-    if (path[0] == '/') {
-        length = strlen(path);
-        if (length >= sizeof(combined)) return -1;
-        memcpy(combined, path, length + 1U);
-    } else {
-        uint32_t cwd_length = strlen(disk_cwd);
-        uint32_t path_length = strlen(path);
-        uint32_t separator = cwd_length > 1U && path_length > 0U ? 1U : 0U;
-        length = cwd_length + separator + path_length;
-        if (length >= sizeof(combined)) return -1;
-        memcpy(combined, disk_cwd, cwd_length);
-        if (separator != 0U) combined[cwd_length] = '/';
-        memcpy(combined + cwd_length + separator, path, path_length + 1U);
-    }
-
-    uint32_t output_length = 1U;
-    output[0] = '/';
-    uint32_t position = 0U;
-    while (position < length) {
-        while (position < length && combined[position] == '/') ++position;
-        uint32_t start = position;
-        while (position < length && combined[position] != '/') ++position;
-        uint32_t component_length = position - start;
-        if (component_length == 0U ||
-            (component_length == 1U && combined[start] == '.')) {
-            continue;
-        }
-        if (component_length == 2U && combined[start] == '.' &&
-            combined[start + 1U] == '.') {
-            while (output_length > 1U &&
-                   output[output_length - 1U] != '/') {
-                --output_length;
-            }
-            if (output_length > 1U) --output_length;
-            continue;
-        }
-
-        uint32_t separator = output_length > 1U ? 1U : 0U;
-        if (output_length >= size ||
-            separator > size - output_length - 1U ||
-            component_length > size - output_length - separator - 1U) {
-            return -1;
-        }
-        if (separator != 0U) output[output_length++] = '/';
-        memcpy(output + output_length, combined + start, component_length);
-        output_length += component_length;
-    }
-    output[output_length] = '\0';
-    return 0;
-}
-
 int cmd_disk(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
@@ -414,8 +355,13 @@ static void fat32_print_entry(const char *name, uint32_t attr, uint32_t size) {
 
 int cmd_ls(int argc, char *argv[]) {
     char path[128];
-    const char *target = argc > 1 ? argv[1] : disk_cwd;
-    if (disk_resolve_path(target, path, sizeof(path)) != 0) {
+    char cwd[128];
+    const char *target = argv[1];
+    if (argc <= 1) {
+        if (fat32_get_cwd(cwd, sizeof(cwd)) < 0) return -1;
+        target = cwd;
+    }
+    if (fat32_resolve_path(target, path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -438,7 +384,7 @@ int cmd_cat(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argv[1], path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argv[1], path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -469,7 +415,7 @@ int cmd_write(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argv[1], path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argv[1], path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -618,8 +564,8 @@ int cmd_cp(int argc, char *argv[]) {
         return -1;
     }
     char src[128], dst[128], dst_final[256];
-    if (disk_resolve_path(argv[first], src, sizeof(src)) != 0 ||
-        disk_resolve_path(argv[first + 1], dst, sizeof(dst)) != 0 ||
+    if (fat32_resolve_path(argv[first], src, sizeof(src)) != 0 ||
+        fat32_resolve_path(argv[first + 1], dst, sizeof(dst)) != 0 ||
         disk_resolve_destination(src, dst, dst_final,
                                  sizeof(dst_final)) != 0) {
         printf("Path is too long\n");
@@ -658,8 +604,8 @@ int cmd_mv(int argc, char *argv[]) {
         return -1;
     }
     char src[128], dst[128], dst_final[256];
-    if (disk_resolve_path(argv[1], src, sizeof(src)) != 0 ||
-        disk_resolve_path(argv[2], dst, sizeof(dst)) != 0 ||
+    if (fat32_resolve_path(argv[1], src, sizeof(src)) != 0 ||
+        fat32_resolve_path(argv[2], dst, sizeof(dst)) != 0 ||
         disk_resolve_destination(src, dst, dst_final,
                                  sizeof(dst_final)) != 0) {
         printf("Path is too long\n");
@@ -689,7 +635,7 @@ int cmd_rm(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argv[1], path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argv[1], path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -707,7 +653,7 @@ int cmd_cd(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argc == 2 ? argv[1] : "/", path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argc == 2 ? argv[1] : "/", path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -723,11 +669,12 @@ int cmd_cd(int argc, char *argv[]) {
         serial_putchar('\n');
         return -1;
     }
-    strncpy(disk_cwd, path, sizeof(disk_cwd));
-    disk_cwd[sizeof(disk_cwd) - 1U] = '\0';
-    printf("Current directory: %s\n", disk_cwd);
+    if (fat32_set_cwd(path) != 0) return -1;
+    char cwd[128];
+    fat32_get_cwd(cwd, sizeof(cwd));
+    printf("Current directory: %s\n", cwd);
     serial_print("[SHELL] CWD ");
-    serial_print(disk_cwd);
+    serial_print(cwd);
     serial_putchar('\n');
     return 0;
 }
@@ -738,7 +685,7 @@ int cmd_mkdir(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argv[1], path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argv[1], path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -751,14 +698,16 @@ int cmd_mkdir(int argc, char *argv[]) {
 }
 
 static int disk_path_contains_current(const char *path) {
+    char cwd[128];
+    if (fat32_get_cwd(cwd, sizeof(cwd)) < 0) return 0;
     uint32_t path_length = strlen(path);
-    uint32_t cwd_length = strlen(disk_cwd);
+    uint32_t cwd_length = strlen(cwd);
     if (path_length == 1U && path[0] == '/') return 1;
     if (path_length > cwd_length ||
-        memcmp(path, disk_cwd, path_length) != 0) {
+        memcmp(path, cwd, path_length) != 0) {
         return 0;
     }
-    return path_length == cwd_length || disk_cwd[path_length] == '/';
+    return path_length == cwd_length || cwd[path_length] == '/';
 }
 
 int cmd_rmdir(int argc, char *argv[]) {
@@ -775,7 +724,7 @@ int cmd_rmdir(int argc, char *argv[]) {
     }
 
     char path[128];
-    if (disk_resolve_path(target, path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(target, path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -808,7 +757,7 @@ int cmd_run(int argc, char *argv[]) {
         return -1;
     }
     char path[128];
-    if (disk_resolve_path(argv[1], path, sizeof(path)) != 0) {
+    if (fat32_resolve_path(argv[1], path, sizeof(path)) != 0) {
         printf("Path is too long\n");
         return -1;
     }
@@ -830,6 +779,7 @@ int cmd_run(int argc, char *argv[]) {
 void start_shell(void) {
     char line[128];
     char *argv[16];
+    char cwd[128];
     int argc;
 
     vga_clear();
@@ -837,8 +787,8 @@ void start_shell(void) {
     printf("Type 'help' for available commands.\n");
 
     while (1) {
-        if (fat32_mounted()) {
-            printf("myos %s > ", disk_cwd);
+        if (fat32_mounted() && fat32_get_cwd(cwd, sizeof(cwd)) >= 0) {
+            printf("myos %s > ", cwd);
         } else {
             printf("myos > ");
         }

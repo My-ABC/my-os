@@ -217,3 +217,18 @@ def check_run_from_disk(session):
     session.pass_check("run loads and executes ELF32 from the FAT32 disk")
     session.send_line("kill 4")
     session.wait_for("[RING3] Killed PID 4")
+
+
+def check_fs_syscalls(session):
+    fs_start = len(session.serial_data)
+    session.send_line("run fsdemo.elf")
+    session.wait_for_regex(rb"FSDEMO-START", start=fs_start)
+    session.wait_for_regex(rb"FSDEMO-DONE", start=fs_start)
+    if b"FSDEMO-FAIL" in session.serial_data[fs_start:]:
+        raise IntegrationFailure("fsdemo.elf reported FSDEMO-FAIL")
+    session.pass_check("filesystem syscalls open/write/stat/read/cwd/exit")
+    verify_start = len(session.serial_data)
+    session.send_line("cat fsdemo.txt")
+    session.wait_for_regex(rb"fs-hello-1234", start=verify_start)
+    session.pass_check("fsdemo.elf file contents persisted on FAT32")
+    session.send_line("rm fsdemo.txt")

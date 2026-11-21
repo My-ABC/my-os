@@ -18,6 +18,7 @@ from page_fault_scenarios import (
 )
 from ring3_scenarios import check_ring3_and_builtin_elf
 from shell_scenarios import (
+    check_fs_syscalls,
     check_run_from_disk,
     check_startup,
     check_storage_and_shell,
@@ -49,6 +50,7 @@ def run_main_session(qemu, kernel, disk, timeout):
             check_ring3_and_builtin_elf,
             check_run_from_disk,
             check_page_faults,
+            check_fs_syscalls,
             check_user_oom,
         ],
         qemu, kernel, disk, timeout,

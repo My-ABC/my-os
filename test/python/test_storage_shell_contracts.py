@@ -23,20 +23,23 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn("argv[argc] = NULL", body)
 
     def test_shell_cd_normalizes_parent_path_and_prompt_shows_current_directory(self):
-        text = source("src/shell/shell.c")
-        resolver = function_body(text, "disk_resolve_path")
+        resolver = function_body(fat32_source(), "fat32_resolve_path")
         self.assertIn("component_length == 2U", resolver)
         self.assertIn("output[output_length - 1U] != '/'", resolver)
+        text = source("src/shell/shell.c")
         prompt = function_body(text, "start_shell")
-        self.assertIn("if (fat32_mounted())", prompt)
-        self.assertIn('printf("myos %s > ", disk_cwd)', prompt)
+        self.assertIn("fat32_get_cwd(cwd, sizeof(cwd))", prompt)
+        self.assertIn('printf("myos %s > ", cwd)', prompt)
         self.assertIn('printf("myos > ")', prompt)
         self.assertIn('serial_print("[SHELL] CWD ")',
+                      function_body(text, "cmd_cd"))
+        self.assertIn("fat32_set_cwd(path)",
                       function_body(text, "cmd_cd"))
 
     def test_ls_defaults_to_current_path_and_accepts_explicit_path(self):
         body = function_body(source("src/shell/shell.c"), "cmd_ls")
-        self.assertIn("argc > 1 ? argv[1] : disk_cwd", body)
+        self.assertIn("fat32_get_cwd(cwd, sizeof(cwd))", body)
+        self.assertIn("fat32_resolve_path(target, path, sizeof(path))", body)
         self.assertIn("fat32_list_directory(path, fat32_print_entry)", body)
 
     def test_cp_recursive_uses_two_pass_directory_walk(self):
