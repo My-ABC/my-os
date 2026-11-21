@@ -80,6 +80,20 @@ static void vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     volatile uint8_t *pixel;
     uint32_t bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
 
+    /* Callers are expected to keep x < width and y < height; a bad
+     * cursor/state value must not turn into a kernel page fault. */
+    if (x >= vbe_state.width || y >= vbe_state.height) {
+        serial_print("[VBE] dropped out-of-bounds pixel x=");
+        serial_print_dec(x);
+        serial_print(" y=");
+        serial_print_dec(y);
+        serial_print(" w=");
+        serial_print_dec(vbe_state.width);
+        serial_print(" h=");
+        serial_print_dec(vbe_state.height);
+        serial_print("\n");
+        return;
+    }
     pixel = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
             y * vbe_state.pitch + x * bytes_per_pixel;
     vbe_store_pixel(pixel, color);

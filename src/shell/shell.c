@@ -154,12 +154,28 @@ static void shell_unescape_arg(char *arg) {
 
 // 命令实现
 int cmd_time(int argc, char *argv[]) {
+    int use_12h = 0;
+    if (argc > 1) {
+        if (strcmp(argv[1], "12") == 0) {
+            use_12h = 1;
+        } else if (strcmp(argv[1], "24") != 0) {
+            printf("Usage: time [12|24]\n");
+            return -1;
+        }
+    }
     rtc_time_t now;
     rtc_read_time(&now);
     rtc_to_beijing_time(&now);
-    printf("%04d-%02d-%02d %02d:%02d:%02d\n",
+    uint32_t hour = now.hour;
+    const char *ampm = "";
+    if (use_12h) {
+        ampm = hour < 12 ? " AM" : " PM";
+        hour = hour % 12;
+        if (hour == 0) hour = 12;
+    }
+    printf("%04d-%02d-%02d %02d:%02d:%02d%s\n",
            now.year, now.month, now.day,
-           now.hour, now.minute, now.second);
+           hour, now.minute, now.second, ampm);
     return 0;
 }
 
