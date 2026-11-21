@@ -175,11 +175,12 @@ src/kernel.c      内核初始化和顶层启动流程
 src/arch/x86/     x86 描述符、中断和端口 I/O
 src/mm/           物理/虚拟内存与堆
 src/os/           ELF 装载、Ring 3 和系统调用
-src/shell/        交互式 shell 与命令参考
+src/shell/        交互式 shell
 src/drivers/      ATA、控制台、键盘、定时器、RTC 和显示驱动
 src/fs/           FAT32 文件系统
 src/lib/          freestanding C 标准库函数
 include/          按 src/ 子系统对应分类的头文件
+docs/             ABI 与 shell 命令参考（中英双语）
 scripts/          CI/CD 文件
 linker.ld         1MB 加载地址与段布局
 [TODO.md](./TODO.md) 英文项目路线图 | [TODO-zh.md](./TODO-zh.md) 中文项目路线图

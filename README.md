@@ -197,11 +197,12 @@ src/kernel.c      kernel initialization and top-level startup
 src/arch/x86/     x86 descriptors, interrupts, and port I/O
 src/mm/           physical/virtual memory and heap
 src/os/           ELF loading, Ring 3, and system calls
-src/shell/        interactive shell and command reference
+src/shell/        interactive shell
 src/drivers/      ATA, console, keyboard, timer, RTC, and display drivers
 src/fs/           FAT32 filesystem
 src/lib/          freestanding C library routines
 include/          headers grouped to mirror src/ subsystems
+docs/             ABI and shell command references (English + Chinese)
 scripts/          CI/CD files
 linker.ld         1 MB load address and section layout
 [TODO.md](./TODO.md) English project roadmap | [TODO-zh.md](./TODO-zh.md) Chinese project roadmap

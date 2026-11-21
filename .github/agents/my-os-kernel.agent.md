@@ -23,8 +23,9 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `src/kernel.c`: keep the kernel entry and top-level initialization here.
 - `src/arch/x86/`: x86 descriptor tables, interrupt/trap handlers, TSS, and port I/O.
 - `src/mm/`: physical frames, virtual mappings/TLB, and kernel heap allocation.
-- `src/os/`: panic handling, ELF loading, Ring 3 processes, and system calls. `syscall_abi.md` (English) and `syscall_abi-zh.md` (Chinese) document the current `int 0x80` call numbers, argument registers, and known ABI limitations.
-- `src/shell/`: interactive shell (`shell.c`), its public header in `include/shell/`, and the command reference docs `shell_command.md` (English) / `shell_command-zh.md` (Chinese) covering every command, its arguments, and FAT32 path semantics.
+- `src/os/`: panic handling, ELF loading, Ring 3 processes, and system calls.
+- `src/shell/`: interactive shell (`shell.c`) with its public header in `include/shell/`.
+- `docs/`: bilingual reference docs — `syscall_abi.md`/`syscall_abi-zh.md` (the `int 0x80` call numbers, argument registers, and known ABI limitations) and `shell_command.md`/`shell_command-zh.md` (every shell command, its arguments, and FAT32 path semantics). `docs/README.md` indexes them; keep English as the default with `-zh` translations linking back.
 - `src/drivers/`: ATA PIO, keyboard, PIC/PIT, RTC, serial, VGA/VBE, ACPI, and font data.
 - `src/fs/`: FAT32 split into `fat32_core.c` (sector/cluster IO, FAT chains, mount), `fat32_name.c` (8.3/LFN/UTF-16 name codec), `fat32_dir.c` (directory entries, paths, mkdir/rmdir), and `fat32.c` (public file operations); shared internals live in `fat32_int.h` (`g_fs`, `g_sector`, `g_cluster`, cross-file prototypes).
 - `src/lib/`: freestanding standard-library string and stdio routines.
