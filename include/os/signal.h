@@ -6,6 +6,7 @@
 /* Implemented signal numbers; other values are reserved */
 #define SIGINT    2
 #define SIGKILL   9
+#define SIG_VALID(sig) ((sig) == SIGINT || (sig) == SIGKILL)
 
 #define NSIG      32
 

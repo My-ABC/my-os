@@ -35,6 +35,11 @@ static void sys_gets(char *buf, int size) {
     int i = 0;
     while (i < size - 1) {
         char c = keyboard_getchar();
+        if (c == KEYBOARD_KEY_SIGINT) {
+            ring3_signal_send(ring3_current_pid(), SIGINT);
+            if (sys_signal_fatal_abort()) return;
+            continue;
+        }
         if (c == 0) {
             if (sys_signal_fatal_abort()) return;
             __asm__ volatile ("hlt" ::: "memory");
@@ -392,6 +397,13 @@ uint32_t syscall_handler(struct irq_frame *frame) {
         case SYS_GETCHAR: {
             for (;;) {
                 char c = keyboard_getchar();
+                if (c == KEYBOARD_KEY_SIGINT) {
+                    /* Ctrl+C read by the syscall itself: deliver SIGINT
+                     * to ourselves, then honor the disposition. */
+                    ring3_signal_send(ring3_current_pid(), SIGINT);
+                    if (sys_signal_fatal_abort()) return 0;
+                    continue;
+                }
                 if (c != 0) return (uint8_t)c;
                 if (sys_signal_fatal_abort()) return 0;
                 __asm__ volatile ("hlt" ::: "memory");
