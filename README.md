@@ -16,7 +16,7 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **GDT** — global descriptor table, supports code segment, data segment, user mode segment, TSS
 - **TSS** — impl esp0, ss0
 - **Keyboard** — IRQ1, supports scancode set 1 and 2 (including the numeric keypad and `0xE0` extended codes), 32-byte ring buffer
-- **RTC** — CMOS real-time clock, reads year/month/day and hour/minute/second, supports 4-digit year to avoid Y2K bugs, supports timezone conversion and Unix timestamps
+- **RTC** — CMOS real-time clock, reads year/month/day and hour/minute/second, handles 12/24-hour CMOS modes, supports 4-digit year to avoid Y2K bugs, UTC→Beijing conversion and Unix timestamps
 - **Blue screen of death** — INT3 dumps all registers on a blue screen, then reboots
 - **ACPI reboot** — resets through the FADT reset register, falling back to `0xCF9`, the keyboard controller, and finally a triple fault
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
