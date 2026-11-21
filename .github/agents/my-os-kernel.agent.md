@@ -25,7 +25,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `src/mm/`: physical frames, virtual mappings/TLB, and kernel heap allocation.
 - `src/os/`: panic handling, ELF loading, Ring 3 processes, and system calls.
 - `src/shell/`: interactive shell (`shell.c`) with its public header in `include/shell/`.
-- `docs/`: bilingual reference docs — `syscall_abi.md`/`syscall_abi-zh.md` (the `int 0x80` call numbers, argument registers, and known ABI limitations) and `shell_command.md`/`shell_command-zh.md` (every shell command, its arguments, and FAT32 path semantics). `docs/README.md` indexes them; keep English as the default with `-zh` translations linking back.
+- `docs/`: hand-written bilingual references split by language — `docs/en/` (`syscall_abi.md` for the `int 0x80` call numbers/argument registers/ABI limitations, `shell_command.md` for every shell command and FAT32 path semantics) and `docs/zh/` (the Chinese translations). No README index inside `docs/`; each pair cross-links to its translation.
 - `src/drivers/`: ATA PIO, keyboard, PIC/PIT, RTC, serial, VGA/VBE, ACPI, and font data.
 - `src/fs/`: FAT32 split into `fat32_core.c` (sector/cluster IO, FAT chains, mount), `fat32_name.c` (8.3/LFN/UTF-16 name codec), `fat32_dir.c` (directory entries, paths, mkdir/rmdir), and `fat32.c` (public file operations); shared internals live in `fat32_int.h` (`g_fs`, `g_sector`, `g_cluster`, cross-file prototypes).
 - `src/lib/`: freestanding standard-library string and stdio routines.
@@ -34,7 +34,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 - `.github/workflows/pr_hi.yml`: runs the greeting script for pull requests.
 - `.github/workflows/release.yml`: builds the kernel and ISO for tagged releases or manual dispatch.
 - `test/`: keep tests grouped by role: `python/` for discovered Python tests and source-contract checks (split by architecture, device, memory, ELF, and storage/shell); `c/` for host C test programs; `shell/` for one launcher per C suite; `support/` for the host-`cc` compile helper and C assertion header; and `integration/` for QEMU-only checks. Host C suites include PMM allocation/free checks above 4 GiB. The standard QEMU integration entry point is `run_qemu_integration.py`; `qemu_session.py`, `fat32_image.py`, and scenario modules (`shell_scenarios.py`, `ring3_scenarios.py`, `page_fault_scenarios.py`) separate emulator control, test-disk setup, and behavioral checks. `fault_demo.asm` is assembled three ways (`stack.elf`, `faultu.elf`, `faultp.elf`) to exercise page-fault demand mapping and process termination. `run_qemu_highmem.py` is the separate bounded 6 GiB test for real high-frame allocation, mapping, data verification, and release. Run it explicitly via `make test-qemu-highmem`; the standard 128 MiB suite is `make test-qemu`, and both are separate from host-only `make test`.
-- `README.md`: English user/build documentation rendered on the repo page; keep behavior and commands aligned. `README-zh.md` (also copied into `docs/`) is its Chinese translation. `TODO.md` / `TODO-zh.md` stay at the root as the bilingual roadmap.
+- `README.md`: English user/build documentation rendered on the repo page; keep behavior and commands aligned. `README-zh.md` is its Chinese translation. `TODO.md` / `TODO-zh.md` stay at the root as the bilingual roadmap.
 - `.github/agents/my-os-kernel.agent.md`: repository-specific agent instructions. Keep this file synchronized with repository changes.
 
 ## Architecture constraints

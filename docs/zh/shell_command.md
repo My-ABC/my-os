@@ -1,6 +1,6 @@
 # MyOS Shell 命令参考
 
-[English](shell_command.md) | 中文
+[English](../en/shell_command.md) | 中文
 
 本文档描述 `src/os/shell.c` 提供的交互式 Shell。Shell 每次读取最多 128 个
 字符的行，按空白拆分为最多 16 个参数，然后在命令表中精确匹配分发。除下文

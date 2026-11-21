@@ -3,7 +3,7 @@
 本文档记录当前 `int 0x80` 系统调用接口的实际行为，供 Ring 3 程序和后续 ABI 稳定化工作参考。
 定义见 `include/os/syscall.h`，实现在 `src/os/syscall.c`，汇编入口在 `boot/interrupt.asm` 的 `syscall` 桩。
 
-English version: [syscall_abi.md](syscall_abi.md)
+English: [syscall_abi.md](../en/syscall_abi.md)
 
 ## 调用约定
 
