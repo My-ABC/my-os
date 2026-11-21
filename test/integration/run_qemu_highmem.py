@@ -80,7 +80,8 @@ def main():
 
         serial_path = tempdir / "serial.log"
         command = [
-            qemu, "-machine", "pc,accel=tcg", "-m", "6G",
+            qemu, "-machine", "pc,accel=tcg", "-rtc", "base=utc",
+            "-m", "6G",
             "-cdrom", str(iso), "-boot", "d", "-display", "none",
             "-no-reboot", "-no-shutdown", "-monitor", "none",
             "-serial", f"file:{serial_path}",

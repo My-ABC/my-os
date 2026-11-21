@@ -72,6 +72,7 @@ class QemuSession:
         command = [
             qemu_path,
             "-machine", "pc,accel=tcg",
+            "-rtc", "base=utc",
             "-m", "128M",
             "-kernel", str(Path(self.kernel).resolve()),
             "-display", "none",
