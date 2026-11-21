@@ -60,6 +60,15 @@ void rtc_read_time(rtc_time_t *time) {
         // 再次读取秒，如果相等则说明读取是稳定的
     } while (time->second != rtc_read_register(RTC_SECONDS));
     
+    /* In 12-hour mode bit 7 of the hours register is the PM flag, so it
+     * must be extracted before any numeric conversion: BCD-decoding the
+     * raw byte would treat the flag as part of the value. */
+    uint8_t is_pm = 0;
+    if (!is_24h) {
+        is_pm = (time->hour & 0x80) != 0;
+        time->hour &= 0x7F;
+    }
+
     // 转换BCD码为十进制
     if (is_bcd) {
         time->second = bcd_to_dec(time->second);
@@ -72,15 +81,12 @@ void rtc_read_time(rtc_time_t *time) {
             century = bcd_to_dec(century);
         }
     }
-    
-    // 处理12小时制
+
+    // 处理12小时制：12 AM -> 0，12 PM -> 12
     if (!is_24h) {
-        // 如果是12小时制，需要处理AM/PM
-        if (time->hour & 0x80) {
-            // PM位
-            time->hour = ((time->hour & 0x7F) + 12) % 24;
-        } else {
-            time->hour = time->hour % 12;
+        time->hour %= 12;
+        if (is_pm) {
+            time->hour += 12;
         }
     }
     
