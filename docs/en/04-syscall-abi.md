@@ -24,12 +24,12 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 
 | Class | Name | Sub-operations |
 |-------|------|----------------|
-| 1 | `SYS_IO` | `IO_WRITE`(1), `IO_GETCHAR`(2), `IO_READ`(3), `IO_CLEAR`(4) |
+| 1 | `SYS_IO` | `IO_WRITE`(1), `IO_GETCHAR`(2), `IO_READ`(3), `IO_CLEAR`(4), `IO_CURSOR_GET`(5), `IO_CURSOR_SET`(6) |
 | 2 | `SYS_TIME` | `TIME_GET`(1), `TIME_TO`(2), `TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1), `MEMORY_CALLOC`(2), `MEMORY_REALLOC`(3), `MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1), `PWR_REBOOT`(2) |
-| 5 | `SYS_PROCESS` | `PROC_GETPID`(1), `PROC_EXIT`(2), `PROC_YIELD`(3) |
-| 6 | `SYS_FS` | `FS_OPEN`(1) … `FS_CHDIR`(10) |
+| 5 | `SYS_PROCESS` | `PROC_GETPID`(1), `PROC_EXIT`(2), `PROC_YIELD`(3), `PROC_LIST`(4), `PROC_SET_FG`(5), `PROC_EXEC`(6) |
+| 6 | `SYS_FS` | `FS_OPEN`(1) … `FS_READDIR`(12) |
 | 7 | `SYS_SIG` | `SIG_KILL`(1), `SIG_SIGNAL`(2), `SIG_RETURN`(3) |
 
 ## `SYS_IO` (1)
@@ -40,6 +40,8 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 2 | `IO_GETCHAR` | none | char | Blocks until a keyboard character is available, looping until a nonzero char; effectively never returns 0. |
 | 3 | `IO_READ` | `ecx` = `char *buf`, `edx` = `size` | always 0 | Reads one line from the keyboard into `buf` (via `gets`, with echo). Writes at most `size-1` chars plus NUL; `size <= 1` produces an empty string. Blocks until a newline arrives. |
 | 4 | `IO_CLEAR` | none | 0 | Clears the screen (`vga_clear`). |
+| 5 | `IO_CURSOR_GET` | none | `(row << 16) \| col` | Returns the current cursor position via `vga_get_cursor`. |
+| 6 | `IO_CURSOR_SET` | `ecx` = row, `edx` = col | 0 | Moves the cursor via `vga_set_cursor` (works in both VGA text and VBE modes). |
 
 ## `SYS_TIME` (2)
 
@@ -74,6 +76,9 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 | 1 | `PROC_GETPID` | none | current Ring 3 PID | Returns 0 when called from kernel context. |
 | 2 | `PROC_EXIT` | `ecx` = exit status (accepted, not recorded yet) | does not return | Terminates the current Ring 3 process and reclaims its resources (see "Process exit" below). From kernel context it degenerates to a plain 0 return. |
 | 3 | `PROC_YIELD` | none | 0 | Voluntarily yields the CPU, saving the current Ring 3 context and returning to the shell; the process is resumed by PIT scheduling. |
+| 4 | `PROC_LIST` | `ecx` = buffer, `edx` = size | process count, or -1 | Enumerates live processes into 12-byte records `{pid, state, is_foreground}`; `state` uses `RING3_PROCESS_*` values. Buffer must pass user-pointer validation and hold `count * 12` bytes. |
+| 5 | `PROC_SET_FG` | `ecx` = pid (`0` clears the foreground) | 0 or -1 | Sets or clears the foreground process via `ring3_set_foreground`/`ring3_set_background`. |
+| 6 | `PROC_EXEC` | `ecx` = ELF32 path on FAT32 | 0 or -1 | Reads the file, validates/loads it with `elf32_load`, and schedules it as a **foreground** Ring 3 process (same path as the shell `run` command). Returns -1 on any failure; the new pid is not reported. |
 
 ## `SYS_FS` (6)
 
@@ -89,6 +94,8 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 | 8 | `FS_STAT` | `ecx` = path string | file size; -2 for a directory; -1 on error | Queries by path, not by fd. |
 | 9 | `FS_GETCWD` | `ecx` = `buf`, `edx` = `size` | path length (excluding NUL) or -1 | Copies the current working directory (NUL included) into the user buffer; `size` must be ≥ length+1. |
 | 10 | `FS_CHDIR` | `ecx` = path string | 0 or -1 | Changes the working directory; the target must be an existing directory. |
+| 11 | `FS_RENAME` | `ecx` = old path, `edx` = new path | 0 or -1 | Moves/renames a file or directory (`fat32_move`); both paths resolve against the cwd. |
+| 12 | `FS_READDIR` | `ecx` = path, `edx` = `buf`, `esi` = `size` | bytes written, or -1 | Lists a directory into the user buffer as newline-terminated lines `d name` / `- name` (`d` = directory). Staged in a 4 KiB kernel buffer; `size` truncates the copy. |
 
 ## `SYS_SIG` (7)
 

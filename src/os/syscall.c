@@ -14,6 +14,7 @@
 #include "heap.h"
 #include "tsc.h"
 #include "pit.h"
+#include "elf.h"
 
 #define USER_BLOCK_MAGIC 0x55534552U
 #define SYSFS_MAX_FDS 8U
@@ -294,6 +295,33 @@ static int sys_copy_user_string(uint32_t addr, char *dst, uint32_t dst_size) {
     return -1;
 }
 
+struct readdir_ctx {
+    char *buf;
+    uint32_t len;
+    uint32_t cap;
+};
+
+static struct readdir_ctx sysfs_readdir_ctx;
+
+/* fat32_list_directory callback: append "d name\n" or "- name\n" lines.
+ * Runs with no file I/O, only writes into the kernel staging buffer. */
+static void sysfs_readdir_cb(const char *name, uint32_t attr,
+                             uint32_t size) {
+    struct readdir_ctx *ctx = &sysfs_readdir_ctx;
+    uint32_t nlen = 0;
+    while (name[nlen] != '\0' && nlen < 255U) ++nlen;
+    uint32_t need = 2U + nlen + 1U;
+    if (ctx->len + need > ctx->cap) return;
+    char *p = ctx->buf + ctx->len;
+    *p++ = (attr & 0x10U) ? 'd' : '-';
+    *p++ = ' ';
+    memcpy(p, name, nlen);
+    p += nlen;
+    *p++ = '\n';
+    ctx->len += need;
+    (void)size;
+}
+
 static int sysfs_resolve_path(uint32_t user_path, char *out,
                               uint32_t out_size) {
     if (!fat32_mounted()) return -1;
@@ -429,6 +457,14 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case IO_CLEAR:
                     vga_clear();
                     return 0;
+                case IO_CURSOR_GET: {
+                    uint16_t row = 0, col = 0;
+                    vga_get_cursor(&row, &col);
+                    return ((uint32_t)row << 16) | col;
+                }
+                case IO_CURSOR_SET:
+                    vga_set_cursor((uint16_t)a1, (uint16_t)a2);
+                    return 0;
                 default:
                     return 0;
             }
@@ -508,6 +544,43 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case PROC_YIELD:
                     syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
                     return 0;
+                case PROC_LIST: {
+                    if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
+                    uint32_t pids[RING3_PROCESS_COUNT];
+                    uint32_t states[RING3_PROCESS_COUNT];
+                    uint32_t fg = ring3_foreground_pid();
+                    uint32_t count = ring3_process_list(pids, states,
+                                                        RING3_PROCESS_COUNT);
+                    if (a2 < count * 12U) return (uint32_t)-1;
+                    for (uint32_t i = 0; i < count; ++i) {
+                        uint32_t *rec = (uint32_t *)(a1 + i * 12U);
+                        rec[0] = pids[i];
+                        rec[1] = states[i];
+                        rec[2] = pids[i] == fg ? 1U : 0U;
+                    }
+                    return count;
+                }
+                case PROC_SET_FG:
+                    if (a1 == 0U) {
+                        uint32_t fg = ring3_foreground_pid();
+                        return fg != 0U && ring3_set_background(fg) == 0
+                               ? 0 : (uint32_t)-1;
+                    }
+                    return ring3_set_foreground(a1) == 0 ? 0 : (uint32_t)-1;
+                case PROC_EXEC: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    uint8_t *image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+                    if (image == 0) return (uint32_t)-1;
+                    uint32_t size = 0;
+                    int rc = fat32_read_file(path, image, FAT32_MAX_FILE_SIZE,
+                                             &size);
+                    if (rc == 0) rc = elf_run(image, size);
+                    kfree(image);
+                    return rc == 0 ? 0U : (uint32_t)-1;
+                }
                 default:
                     return 0;
             }
@@ -580,6 +653,37 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         return (uint32_t)-1;
                     }
                     return 0;
+                }
+                case FS_RENAME: {
+                    char old_path[SYSFS_PATH_MAX];
+                    char new_path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, old_path, sizeof(old_path)) != 0 ||
+                        sysfs_resolve_path(a2, new_path, sizeof(new_path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    return fat32_move(old_path, new_path) == 0 ? 0U : (uint32_t)-1;
+                }
+                case FS_READDIR: {
+                    if (!sys_user_buffer_ok(a2, a3)) return (uint32_t)-1;
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    sysfs_readdir_ctx.buf = (char *)kmalloc(4096);
+                    if (sysfs_readdir_ctx.buf == 0) return (uint32_t)-1;
+                    sysfs_readdir_ctx.len = 0;
+                    sysfs_readdir_ctx.cap = 4096;
+                    int rc = fat32_list_directory(path, sysfs_readdir_cb);
+                    if (rc == 0 && sysfs_readdir_ctx.len > 0) {
+                        uint32_t copy = sysfs_readdir_ctx.len < a3
+                                        ? sysfs_readdir_ctx.len : a3;
+                        memcpy((void *)a2, sysfs_readdir_ctx.buf, copy);
+                        rc = (int)copy;
+                    } else {
+                        rc = -1;
+                    }
+                    kfree(sysfs_readdir_ctx.buf);
+                    return rc < 0 ? (uint32_t)-1 : (uint32_t)rc;
                 }
                 default:
                     return 0;

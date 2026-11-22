@@ -24,12 +24,12 @@ English: [English version](../en/04-syscall-abi.md)
 
 | 大类 | 名称 | 子操作 |
 |------|------|--------|
-| 1 | `SYS_IO` | `IO_WRITE`(1)、`IO_GETCHAR`(2)、`IO_READ`(3)、`IO_CLEAR`(4) |
+| 1 | `SYS_IO` | `IO_WRITE`(1)、`IO_GETCHAR`(2)、`IO_READ`(3)、`IO_CLEAR`(4)、`IO_CURSOR_GET`(5)、`IO_CURSOR_SET`(6) |
 | 2 | `SYS_TIME` | `TIME_GET`(1)、`TIME_TO`(2)、`TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1)、`MEMORY_CALLOC`(2)、`MEMORY_REALLOC`(3)、`MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1)、`PWR_REBOOT`(2) |
-| 5 | `SYS_PROCESS` | `PROC_GETPID`(1)、`PROC_EXIT`(2)、`PROC_YIELD`(3) |
-| 6 | `SYS_FS` | `FS_OPEN`(1) … `FS_CHDIR`(10) |
+| 5 | `SYS_PROCESS` | `PROC_GETPID`(1)、`PROC_EXIT`(2)、`PROC_YIELD`(3)、`PROC_LIST`(4)、`PROC_SET_FG`(5)、`PROC_EXEC`(6) |
+| 6 | `SYS_FS` | `FS_OPEN`(1) … `FS_READDIR`(12) |
 | 7 | `SYS_SIG` | `SIG_KILL`(1)、`SIG_SIGNAL`(2)、`SIG_RETURN`(3) |
 
 ## `SYS_IO`（1）
@@ -40,6 +40,8 @@ English: [English version](../en/04-syscall-abi.md)
 | 2 | `IO_GETCHAR` | 无 | 字符 | 阻塞读取单个键盘字符，循环到拿到非 0 字符为止；实际不会返回 0。 |
 | 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 恒 0 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL；`size <= 1` 时只写空串。阻塞直到收到换行。 |
 | 4 | `IO_CLEAR` | 无 | 0 | 清屏（`vga_clear`）。 |
+| 5 | `IO_CURSOR_GET` | 无 | `(row << 16) \| col` | 经 `vga_get_cursor` 返回当前光标位置。 |
+| 6 | `IO_CURSOR_SET` | `ecx` = 行，`edx` = 列 | 0 | 经 `vga_set_cursor` 移动光标（VGA 文本与 VBE 模式均可用）。 |
 
 ## `SYS_TIME`（2）
 
@@ -74,6 +76,9 @@ English: [English version](../en/04-syscall-abi.md)
 | 1 | `PROC_GETPID` | 无 | 当前 Ring 3 进程 PID | 内核上下文调用时返回 0。 |
 | 2 | `PROC_EXIT` | `ecx` = 退出码（已接受，暂不记录） | 不返回 | 终止当前 Ring 3 进程并回收其资源（见下文"进程退出"）。内核上下文调用时退化为普通返回 0。 |
 | 3 | `PROC_YIELD` | 无 | 0 | 主动让出 CPU，保存当前 Ring 3 上下文并返回 Shell；进程之后由 PIT 调度恢复。 |
+| 4 | `PROC_LIST` | `ecx` = 缓冲区，`edx` = 大小 | 进程数或 -1 | 枚举存活进程为 12 字节记录 `{pid, state, is_foreground}`；`state` 取 `RING3_PROCESS_*` 值。缓冲区须通过用户指针校验且容纳 `count * 12` 字节。 |
+| 5 | `PROC_SET_FG` | `ecx` = pid（`0` 取消前台） | 0 或 -1 | 经 `ring3_set_foreground`/`ring3_set_background` 设置或清除前台进程。 |
+| 6 | `PROC_EXEC` | `ecx` = FAT32 上的 ELF32 路径 | 0 或 -1 | 读取文件、`elf32_load` 校验装载，并**以前台**调度为 Ring 3 进程（与 Shell `run` 命令同路径）。失败返回 -1；不返回新 pid。 |
 
 ## `SYS_FS`（6）
 
@@ -89,6 +94,8 @@ English: [English version](../en/04-syscall-abi.md)
 | 8 | `FS_STAT` | `ecx` = 路径字符串 | 文件大小；目录返回 -2；失败 -1 | 不跟随 fd，直接按路径查询。 |
 | 9 | `FS_GETCWD` | `ecx` = `buf`，`edx` = `size` | 路径长度（不含 NUL）或 -1 | 把当前工作目录（含 NUL）复制到用户缓冲区；`size` 必须 ≥ 长度+1。 |
 | 10 | `FS_CHDIR` | `ecx` = 路径字符串 | 0 或 -1 | 切换工作目录；目标必须是已存在的目录。 |
+| 11 | `FS_RENAME` | `ecx` = 旧路径，`edx` = 新路径 | 0 或 -1 | 移动/重命名文件或目录（`fat32_move`）；两路径均相对当前目录解析。 |
+| 12 | `FS_READDIR` | `ecx` = 路径，`edx` = `buf`，`esi` = `size` | 写入字节数或 -1 | 将目录列入用户缓冲区，每行 `d name` / `- name`（`d` = 目录）。先暂存 4 KiB 内核缓冲再拷贝；`size` 截断。 |
 
 ## `SYS_SIG`（7）
 
