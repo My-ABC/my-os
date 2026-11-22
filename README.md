@@ -2,6 +2,8 @@ English | [中文](README-zh.md) | [Documentation](docs/en/)
 
 # MyOS
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/My-ABC/my-os)
+
 A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided framebuffer console and COM1, and handles CPU exceptions and hardware IRQs.
 
 ## Features
