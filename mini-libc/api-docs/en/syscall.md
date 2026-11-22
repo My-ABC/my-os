@@ -1,0 +1,13 @@
+# `sys/syscall.h`
+
+Raw ABI constants mirroring `include/os/syscall.h` — use the
+higher-level wrappers instead of calling `syscallN` directly.
+
+Classes: `SYS_IO=1 SYS_TIME=2 SYS_MEMORY=3 SYS_POWER=4
+SYS_PROCESS=5 SYS_FS=6 SYS_SIG=7`.
+Notable sub-ops: `IO_READ/WRITE/GETCHAR/CURSOR_*`,
+`TIME_GET/TIME_TO/TIME_SLEEP`, `MEMORY_MALLOC/CALLOC/REALLOC/FREE`,
+`PROC_GETPID/EXIT/YIELD/LIST/SET_FG/EXEC`,
+`FS_OPEN/CLOSE/READ/WRITE/UNLINK/MKDIR/RMDIR/STAT/GETCWD/CHDIR/
+RENAME/READDIR`, `SIG_KILL/SIGNAL/RETURN`.
+`SYSFS_O_RDONLY/O_RDWR`, `PROC_STATE_*`.

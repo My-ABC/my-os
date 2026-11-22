@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdarg.h>
+#include <fs.h>
 
 /* mini-libc stdio: formatted console/string I/O over the MyOS syscalls.
  * No FILE layer yet — all console output goes to SYS_IO/IO_WRITE
@@ -30,8 +31,25 @@ int getchar(void);
  * mixed with getchar/scanf on the same stream. */
 int getline(char *buf, int size);
 
-#ifndef EOF
-#define EOF (-1)
-#endif
+/* ---- FILE streams ----
+ * stdin/stdout are console streams (stderr deferred). fopen() returns
+ * unbuffered FILE* streams over the fs.h FAT32 fd layer. */
+extern FILE *stdin;
+extern FILE *stdout;
+
+FILE   *fopen(const char *path, const char *mode);
+int     fclose(FILE *f);
+size_t  fread(void *buf, size_t size, size_t count, FILE *f);
+size_t  fwrite(const void *buf, size_t size, size_t count, FILE *f);
+int     fgetc(FILE *f);
+int     fputc(int c, FILE *f);
+int     fputs(const char *s, FILE *f);
+char   *fgets(char *buf, int size, FILE *f);
+int     fprintf(FILE *f, const char *fmt, ...);
+int     fscanf(FILE *f, const char *fmt, ...);
+int     feof(FILE *f);
+int     ferror(FILE *f);
+void    clearerr(FILE *f);
+int     fflush(FILE *f);
 
 #endif /* _MINI_LIBC_STDIO_H */

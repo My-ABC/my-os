@@ -6,6 +6,23 @@ mini-libc 面向 **C11**，使用 freestanding 编译器构建（`i686-elf-gcc -
 
 English: [English version](../en/14-mini-libc.md)
 
+## API 参考
+
+`mini-libc/api-docs/` 是按头文件组织的双语 API
+参考（`en/reference.md`、`zh/reference.md`）；头文件
+变更时需同步更新。
+
+## 测试
+
+`mini-libc/test/` 是 QEMU 集成测试套件（`run_tests.py`）：
+按子系统分目录的测试 ELF——`core/`（string、ctype、
+stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
+`os/`（errno、time、unistd）、`negative/`（assert 失败）。
+运行器将每个测试编译链接 `build/libmyc.a`，连同 fixture
+文件注入 FAT32 镜像（每盘最多 6 个 ELF——64 MiB 镜像
+根目录约 16 个目录项），每组启动一次 QEMU，验证串口
+输出 `DONE-<tag> fails=0`。通过 `make test-libmyc` 运行。
+
 ## 目录结构
 
 | 文件 | 内容 |
@@ -15,13 +32,22 @@ English: [English version](../en/14-mini-libc.md)
 | `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
 | `include/time.h` | 基于 `SYS_TIME` 的 `time`/`gmtime`/`localtime`/`mktime`/`strftime`/`difftime`/`clock`/`sleep`/`usleep`（本地时间固定 UTC+8） |
 | `include/errno.h` | `errno` 全局量与常用 `E*` 常量（与 Linux 取值一致） |
-| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` 与 `va_list` 内建封装 |
-| `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl）；trap 前后保存/恢复 callee-saved 寄存器（`ebx`/`esi`/`edi`/`ebp`），因内核可能破坏它们 |
+| `include/fs.h` | 基于 `SYS_FS` 的 FAT32 文件/目录 API：`fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir`，以及极简无缓冲 `FILE`（`fs_fopen`/`fs_fclose`/`fs_fread`/`fs_fwrite`/`fs_fgetc`/`fs_fputc`/`fs_feof`/`fs_ferror`/`fs_clearerr`） |
+| `include/unistd.h` `sys/types.h` | 基于 `SYS_PROCESS`/`SYS_FS` 的进程/fd/路径 API：`_exit`/`getpid`/`sched_yield`/`execve`，`read`/`write`/`close`，`unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`；内核不支持的调用返回 `ENOSYS` |
+| `include/assert.h` | `assert(e)`——失败时向 stdout 打印表达式/文件/函数/行号后 `abort()`；`NDEBUG` 下编译为空 |
+| `include/signal.h` | 基于 `SYS_SIG` 的 `signal`/`kill`/`raise`，`sig_t`、`SIGINT`/`SIGKILL`、`SIG_DFL`/`SIG_IGN`（SIGINT 可捕获、SIGKILL 必杀；无屏蔽 API） |
+| `include/process.h` | 基于 `SYS_PROCESS` 的 `proc_list`/`proc_set_foreground`/`proc_foreground`（`PROC_LIST`/`PROC_SET_FG`） |
+| `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` 长度宏，`imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax`（LP32 下 `intmax_t`=int） |
+| `include/stdnoreturn.h` | `noreturn` 宏 → `_Noreturn`（纯头文件） |
+| `include/setjmp.h` | 基于 callee-saved 寄存器 + esp/eip 的 `setjmp`/`longjmp`（`jmp_buf` = 6 个 int）；`longjmp(env,0)` 返回 1 |
+| `include/stdlib.h` | `exit`/`_Exit`/`abort`/`atexit`，基于 `SYS_MEMORY` 的 `malloc`/`calloc`/`realloc`/`free`/`aligned_alloc`（16 字节头，8 字节基础对齐；C11 约束校验，违例 EINVAL），`atoi`/`atol`/`strtol`/`strtoul`，`rand`/`srand`，`qsort`/`bsearch`，`abs`/`labs`/`div`/`ldiv`，`getenv` |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |
+| `syscall.S` `setjmp.S` | `int 0x80` 原始包装 `syscall0`–`syscall3`（cdecl）；`setjmp`/`longjmp` 寄存器/栈保存恢复桩 |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h` 的 freestanding 实现 |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
-更多模块（`stdlib.h`、基于 `SYS_FS` fd 的 `FILE*` 流、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
+更多模块（`signal.h`、宽字符支持、`FILE*` 缓冲、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
 
 ## 调用内核
 
