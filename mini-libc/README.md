@@ -21,8 +21,8 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 
 ## API reference
 
-`api-docs/` — bilingual per-header API reference
-(`en/reference.md`, `zh/reference.md`).
+`docs/en/mini-libc/` and `docs/zh/mini-libc/` — bilingual per-header API reference
+(one chapter per public header).
 
 ## Tests
 

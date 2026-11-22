@@ -8,8 +8,8 @@ English: [English version](../en/14-mini-libc.md)
 
 ## API 参考
 
-`mini-libc/api-docs/` 是按头文件组织的双语 API
-参考（`en/reference.md`、`zh/reference.md`）；头文件
+`docs/en/mini-libc/` and `docs/zh/mini-libc/` 是按头文件组织的双语 API
+参考（每个公开头文件一章）；头文件
 变更时需同步更新。
 
 ## 测试
