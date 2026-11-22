@@ -48,6 +48,7 @@ TESTS = [
     ("os",      "errno.elf",    "os/errno.c",      "DONE-errno"),
     ("os",      "time.elf",     "os/time.c",       "DONE-time"),
     ("os",      "unistd.elf",   "os/unistd.c",     "DONE-unistd"),
+    ("os",      "signal.elf",   "os/signal.c",     "DONE-signal"),
 ]
 # negative test: must abort; checked separately
 AFail = ("negative", "afail.elf", "negative/afail.c")
@@ -120,7 +121,7 @@ def main():
         # keep <=6 ELFs per disk (plus tdata.txt) and boot one QEMU
         # session per chunk.
         chunks = [TESTS[i:i + 6] for i in range(0, len(TESTS), 6)]
-        chunks[-1] = chunks[-1] + [AFail + (None,)]
+        chunks.append([AFail + (None,)])   # negative test, own session
         results = []
         for chunk in chunks:
             elfs = build_tests_chunk(workdir, chunk)
