@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* mini-libc raw syscall wrappers for the MyOS class/sub-op ABI.
  *
  * ABI: eax = class (SYS_*), ebx = sub-operation, ecx/edx/esi = args,
