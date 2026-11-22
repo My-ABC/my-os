@@ -13,6 +13,7 @@
 - [`setjmp.h`](setjmp.md)
 - [`signal.h`](signal.md)
 - [`process.h`](process.md)
+- [`console.h`](console.md)
 - [`inttypes.h`](inttypes.md)
 - [`sys/syscall.h`](syscall.md)
 

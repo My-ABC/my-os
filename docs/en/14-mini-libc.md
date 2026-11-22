@@ -38,6 +38,7 @@ chunk, and verifies `DONE-<tag> fails=0` on serial. Run it via
 | `include/unistd.h` `sys/types.h` | Process/fd/path API over `SYS_PROCESS`/`SYS_FS`: `_exit`/`getpid`/`sched_yield`/`execve`, `read`/`write`/`close`, `unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`; unsupported calls return `ENOSYS` |
 | `include/assert.h` | `assert(e)` — prints expr/file/func/line to stdout then `abort()`; compiled out under `NDEBUG` |
 | `include/signal.h` | `signal`/`kill`/`raise`, `sig_t`, `SIGINT`/`SIGKILL`, `SIG_DFL`/`SIG_IGN` over `SYS_SIG` (SIGINT catchable, SIGKILL fatal; no mask API) |
+| `include/console.h` | `con_getchar`/`con_clear`/`con_cursor_get`/`con_cursor_set` over `SYS_IO` (line-editing primitives) |
 | `include/process.h` | `proc_list`/`proc_set_foreground`/`proc_foreground` over `SYS_PROCESS` (`PROC_LIST`/`PROC_SET_FG`) |
 | `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` length macros, `imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax` (`intmax_t`=int on LP32) |
 | `include/stdnoreturn.h` | `noreturn` macro → `_Noreturn` (header-only) |
@@ -46,7 +47,7 @@ chunk, and verifies `DONE-<tag> fails=0` on serial. Run it via
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
 | `syscall.S` `setjmp.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl); `setjmp`/`longjmp` register/stack save-restore stubs |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
 
 More modules (`signal.h`, wide-char support, `FILE*` buffering, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".

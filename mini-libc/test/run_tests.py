@@ -50,6 +50,7 @@ TESTS = [
     ("os",      "unistd.elf",   "os/unistd.c",     "DONE-unistd"),
     ("os",      "signal.elf",   "os/signal.c",     "DONE-signal"),
     ("os",      "process.elf", "os/process.c",   "DONE-process"),
+    ("os",      "console.elf", "os/console.c",   "DONE-console"),
 ]
 # negative test: must abort; checked separately
 AFail = ("negative", "afail.elf", "negative/afail.c")

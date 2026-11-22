@@ -49,6 +49,7 @@ mini-libc/test/run_tests.py`).
 | `include/unistd.h` `sys/types.h` | Process/fd/path API: `_exit`/`getpid`/`getppid`/`sched_yield`/`fork`/`execve`, `read`/`write`/`close`, `unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`; unsupported calls return `ENOSYS` |
 | `include/assert.h` | `assert(e)` — prints expr/file/func/line to stdout then `abort()`; compiled out under `NDEBUG` |
 | `include/signal.h` | `signal`/`kill`/`raise`, `sig_t`, `SIGINT`/`SIGKILL`, `SIG_DFL`/`SIG_IGN` over `SYS_SIG` (SIGINT catchable, SIGKILL fatal; no mask API) |
+| `include/console.h` | `con_getchar`/`con_clear`/`con_cursor_get`/`con_cursor_set` over `SYS_IO` (line-editing primitives) |
 | `include/process.h` | `proc_list`/`proc_set_foreground`/`proc_foreground` over `SYS_PROCESS` (`PROC_LIST`/`PROC_SET_FG`) |
 | `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` length macros, `imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax` (`intmax_t`=int on LP32) |
 | `include/stdnoreturn.h` | `noreturn` macro → `_Noreturn` (header-only) |
@@ -57,7 +58,7 @@ mini-libc/test/run_tests.py`).
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
 | `syscall.S` `setjmp.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl); `setjmp`/`longjmp` register/stack save-restore stubs |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` facilities |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` facilities |
 | `examples/hello.c` | Minimal Ring 3 hello-world using the syscall wrappers |
 
 ## Calling the kernel
