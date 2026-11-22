@@ -213,8 +213,8 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Design and stabilize the system-call ABI required by libc.
   - [ ] Establish a basic user-space compile, link, and packaging toolchain.
 - [ ] **Implement mini-libc (`mini-libc/`, MIT licensed)**
-  - [ ] Syscall wrappers over the class/sub-op ABI (`write`, `read`, `open`/`close`, `malloc` family, `exit`, `yield`, signals).
-  - [x] `string.h`/`stdlib.h` freestanding implementations (memcpy/memset/strlen/strcmp/malloc wrappers, `aligned_alloc`/`atexit`, strtol/qsort/rand, `assert.h`, `setjmp.h`, `inttypes.h`, `stdnoreturn.h`, `signal.h`, `process.h`, `console.h`; QEMU test suite in `mini-libc/test/` (15/15).
+  - [x] Syscall wrappers over the class/sub-op ABI (`syscall0`-`syscall3` in `syscall.S`; `write`/`read`/`open`/`close`, `malloc` family, `exit`, `yield`, signals all covered by the modules below).
+  - [x] `string.h`/`stdlib.h` freestanding implementations (memcpy/memset/strlen/strcmp/malloc wrappers, `aligned_alloc`/`atexit`, strtol/qsort/rand, `assert.h`, `setjmp.h`, `inttypes.h`, `stdnoreturn.h`, `signal.h`, `process.h`, `console.h`; QEMU test suite in `test/mini-libc/` (15/15).
   - [x] `stdio.h` console/string coverage: `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` with flags, width, precision.
   - [x] `stdio.h` `FILE*` streams: `stdin`/`stdout` console streams plus `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush` (unbuffered).
   - [x] `errno.h` (`errno` global + `E*` constants), `time.h` (UTC+8 calendar/clock over `SYS_TIME`), `fs.h`/`unistd.h` (FAT32 fd + process/path wrappers over `SYS_FS`/`SYS_PROCESS`).

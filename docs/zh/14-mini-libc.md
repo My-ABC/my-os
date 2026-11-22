@@ -14,7 +14,7 @@ English: [English version](../en/14-mini-libc.md)
 
 ## 测试
 
-`mini-libc/test/` 是 QEMU 集成测试套件（`run_tests.py`）：
+`test/mini-libc/` 是 QEMU 集成测试套件（`run_tests.py`）：
 按子系统分目录的测试 ELF——`core/`（string、ctype、
 stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
 `os/`（errno、time、unistd）、`negative/`（assert 失败）。

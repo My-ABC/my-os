@@ -15,7 +15,7 @@ Each test prints `ok <check>` / `FAIL <check>` lines and ends with
 build/libmyc.a, injects the ELFs (plus tdata.txt) into a FAT32 image,
 boots QEMU once, and `run`s each test checking serial output.
 
-Usage: python3 mini-libc/test/run_tests.py [--qemu QEMU_BIN] [--keep]
+Usage: python3 test/mini-libc/run_tests.py [--qemu QEMU_BIN] [--keep]
 Requires: make libmyc (run first), gcc -m32, mkfs.fat, qemu-system-i386.
 """
 import argparse
@@ -26,7 +26,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TESTDIR = ROOT / "mini-libc" / "test"
+TESTDIR = ROOT / "test" / "mini-libc"
 LIBMYC_A = ROOT / "build" / "libmyc.a"
 KERNEL = ROOT / "myos.bin"
 

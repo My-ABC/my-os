@@ -26,7 +26,7 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 
 ## Tests
 
-`test/` contains a QEMU integration suite (`run_tests.py`):
+`test/mini-libc/` (repo-level `test/`) contains a QEMU integration suite (`run_tests.py`):
 per-module test ELFs under `core/` (string, ctype, stdlib,
 inttypes, setjmp, assert), `stdio/`, `fs/`, `os/` (errno, time,
 unistd), and `negative/` (assert-failure abort). The runner compiles
@@ -34,7 +34,7 @@ each test against `build/libmyc.a`, injects them plus fixture files
 into a FAT32 image (<=6 ELFs per disk — the 64 MiB image's root
 directory holds ~16 entries), boots QEMU once per chunk, and checks
 serial output for `DONE-<tag> fails=0`. Run: `make test-libmyc` (or `python3
-mini-libc/test/run_tests.py`).
+test/mini-libc/run_tests.py`).
 
 ## Layout
 

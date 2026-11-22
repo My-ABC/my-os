@@ -14,7 +14,7 @@ in sync with header changes.
 
 ## Tests
 
-`mini-libc/test/` holds a QEMU integration suite
+`test/mini-libc/` holds a QEMU integration suite
 (`run_tests.py`): test ELFs grouped by subsystem — `core/`
 (string, ctype, stdlib, inttypes, setjmp, assert), `stdio/`,
 `fs/`, `os/` (errno, time, unistd), and `negative/` (assert
