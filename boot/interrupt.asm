@@ -175,7 +175,7 @@ syscall:
     mov [esp + 44], eax
     cmp dword [syscall_exit_frame], 0
     je .syscall_check_yield
-    ; SYS_EXIT: resume the saved kernel frame instead of the dead process
+    ; PROC_EXIT: resume the saved kernel frame instead of the dead process
     mov eax, [syscall_exit_frame]
     mov dword [syscall_exit_frame], 0
     mov esp, eax

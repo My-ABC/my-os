@@ -42,11 +42,11 @@ Delivery is poll-based at safe points rather than interrupt-driven:
   it. The currently running process is only marked when the
   interrupted frame is a user frame — a kernel frame means it is
   inside a syscall.
-- `SYS_READ`/`SYS_GETCHAR` use signal-aware wait loops that poll
+- `IO_READ`/`IO_GETCHAR` use signal-aware wait loops that poll
   `ring3_signal_pending_fatal()` and
   `ring3_signal_deliver_current()`, so a process blocked on keyboard
   input is interrupted promptly. Fatal termination reuses the
-  `SYS_EXIT` saved-kernel-frame mechanism.
+  `PROC_EXIT` saved-kernel-frame mechanism.
 
 Disposition handling in `sig_actionable()`:
 
@@ -69,15 +69,15 @@ When a process has a pending, unblocked signal with a custom handler,
   cdecl `handler(sig)` call.
 - The restorer is a fixed user page at `0x00900000`
   (`USER_SIG_TRAMPOLINE`, mapped lazily on first delivery) containing
-  `mov eax, SYS_SIGRETURN; int 0x80`. When the handler returns, the
+  `mov eax, SIG_RETURN; int 0x80`. When the handler returns, the
   stub restores the saved frame — registers, `eip`, and `useresp`
   included — so execution resumes exactly where it was interrupted.
 - The delivered signal is added to `sig_blocked` for the duration of
-  the handler and unblocked by `SYS_SIGRETURN`.
+  the handler and unblocked by `SIG_RETURN`.
 
 Delivery happens from `ring3_signal_scan()` on IRQ0 (for both the
 running process's live frame and READY processes' saved frames) and
-from the `SYS_READ`/`SYS_GETCHAR` wait loops via
+from the `IO_READ`/`IO_GETCHAR` wait loops via
 `ring3_signal_deliver_current()`. A signal that becomes pending while
 a handler is already running (`sig_active != 0`) is deferred to a
 later tick; fatal signals still kill immediately. Delivering into a
@@ -92,19 +92,19 @@ syscall frame abandons that syscall — there is no restart or
   `SIGINT` for the foreground process; with no foreground process the
   byte is ignored. The shell echoes `^C` whenever it consumes the
   byte, discards the line being edited, and redraws the prompt once
-  no foreground process remains. If a `SYS_READ`/`SYS_GETCHAR` wait loop reads the
+  no foreground process remains. If a `IO_READ`/`IO_GETCHAR` wait loop reads the
   byte first, it delivers `SIGINT` to itself instead, so a process
   blocked on keyboard input is still interrupted (subject to its
   disposition).
-- **`SYS_KILL` (22)**: `ebx` = pid, `ecx` = signal number; marks the
+- **`SIG_KILL` (`SYS_SIG`/1)**: `ecx` = pid, `edx` = signal number; marks the
   signal pending on the target process. Only `SIGINT`/`SIGKILL` are
   accepted; reserved numbers return -1. Returns 0 or -1.
-- **`SYS_SIGNAL` (23)**: `ebx` = signal number, `ecx` = handler
+- **`SIG_SIGNAL` (`SYS_SIG`/2)**: `ecx` = signal number, `edx` = handler
   (0 = default, 1 = ignore, otherwise a user address below
   `USER_SPACE_END`). Sets the disposition for the *current* process.
   `SIGKILL` cannot be caught; reserved numbers return -1.
   Returns 0 or -1.
-- **`SYS_SIGRETURN` (24)**: no arguments; restores the context saved
+- **`SIG_RETURN` (`SYS_SIG`/3)**: no arguments; restores the context saved
   at handler delivery. Invoked only by the kernel-placed restorer
   stub — user code should never call it directly. Returns the
   restored `eax`, or -1 when no handler is active.

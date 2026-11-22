@@ -37,7 +37,7 @@ below.
 | `fg` | `<pid>` | Make a process's output visible again (foreground). |
 | `bg` | `<pid>` | Hide a process's output (background). |
 | `kill` | `<pid>` | Terminate a process by PID. |
-| `elf` | — | Load and run the ELF32 demo program built into the kernel image. The demo installs a `SIGINT` handler, prints `Hello from ELF32`, and waits; Ctrl+C delivers the signal, the handler prints `Bye` and exits via `SYS_EXIT`. |
+| `elf` | — | Load and run the ELF32 demo program built into the kernel image. The demo installs a `SIGINT` handler, prints `Hello from ELF32`, and waits; Ctrl+C delivers the signal, the handler prints `Bye` and exits via `PROC_EXIT`. |
 | `disk` | — | Probe the ATA primary master and mount the FAT32 filesystem. |
 | `ls` | `[dir]` | List a directory (default: current directory). Directories are shown with a trailing `/` and `<DIR>`; files show their size in bytes. |
 | `cat` | `<file>` | Print a file's contents to the screen and serial port. Reads at most 64 KiB. |

@@ -71,7 +71,7 @@ class MemoryContractTests(unittest.TestCase):
         self.assertIn("#define USER_HEAP_END   0x40000000U", header)
         self.assertIn("address + pages * PAGE_SIZE < address", text)
         body = function_body(text, "syscall_handler")
-        for call in ("SYS_WRITE", "SYS_GETPID", "SYS_MEMORY", "SYS_POWER"):
+        for call in ("SYS_IO", "SYS_PROCESS", "SYS_MEMORY", "SYS_POWER"):
             self.assertIn("case " + call, body)
 
 

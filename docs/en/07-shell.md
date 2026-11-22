@@ -48,7 +48,7 @@ Disk commands resolve arguments through `fat32_resolve_path()`:
 
 - Absolute paths (`/...`) are used as-is; relative paths are prefixed with
   the shared working directory (`g_cwd` in `src/fs/fat32.c`, changed by
-  `cd` and also used by the `SYS_GETCWD`/`SYS_CHDIR` syscalls).
+  `cd` and also used by the `FS_GETCWD`/`FS_CHDIR` syscalls).
 - `.` components are dropped, `..` pops one component, repeated `/` is
   collapsed, and the result is normalized to a canonical absolute path.
 - Names are case-sensitive (LFN-aware FAT32 lookup).

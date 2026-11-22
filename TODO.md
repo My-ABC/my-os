@@ -10,7 +10,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Implemented kernel paging, PAE page tables, and high-memory mapping. The PMM supports physical addresses below 64 GiB, has host tests for page allocation above 4 GiB, and the optional QEMU `-m 6G` test allocates a real page at `0x100000000`, maps it, verifies writes and reads, then frees and reallocates it.
 - [x] Implemented the kernel heap allocator and a basic user heap allocation interface.
 - [x] Implemented basic Ring 3 process scheduling and process-management commands; at most two processes can run, and they share an address space.
-- [x] Added the basic `SYS_WRITE` and `SYS_GETPID` system calls.
+- [x] Added the basic `IO_WRITE` and `PROC_GETPID` system calls.
 - [x] Implemented ELF32 loadable-segment validation/loading and BSS zeroing, plus built-in and disk-based ELF program execution.
 - [x] Fixed a possible infinite reboot after PAE changes on the GRUB ISO boot path; build rules now track header dependencies to avoid reusing stale objects after ABI changes.
 
@@ -24,8 +24,8 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Implemented `rmdir -f` to recursively remove non-empty directories while protecting the current directory and its parents.
 - [x] Implemented `cp`/`cp -r`/`mv` file and directory operations with Linux-style destination semantics.
 - [x] Implemented the `run` command to load and execute an ELF32 program from a FAT32 disk.
-- [x] Added filesystem syscalls `SYS_FSOPEN`/`WRITE`/`READ`/`CLOSE`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR` (11–20), `SYS_EXIT` (10), `SYS_YIELD` (21), `SYS_TIME` (6), and signal syscalls `SYS_KILL` (22)/`SYS_SIGNAL` (23)/`SYS_SIGRETURN` (24); user pointers are validated against registered ranges and paths resolve through the shared `fat32_resolve_path`/`g_cwd`.
-- [x] Implemented signal delivery end to end: `SIGINT`/`SIGKILL` only, per-process pending/blocked/handler state, Ctrl+C `KEYBOARD_KEY_SIGINT` → foreground `SIGINT`, fatal-default termination, and user handler invocation via a per-process restorer trampoline at `0x00900000` plus `SYS_SIGRETURN` context restore.
+- [x] Added filesystem syscalls `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR` (`SYS_FS` ops 1–10), `PROC_EXIT`/`PROC_YIELD` (`SYS_PROCESS`), `TIME_GET` (`SYS_TIME`), and signal syscalls `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN` (`SYS_SIG`); user pointers are validated against registered ranges and paths resolve through the shared `fat32_resolve_path`/`g_cwd`.
+- [x] Implemented signal delivery end to end: `SIGINT`/`SIGKILL` only, per-process pending/blocked/handler state, Ctrl+C `KEYBOARD_KEY_SIGINT` → foreground `SIGINT`, fatal-default termination, and user handler invocation via a per-process restorer trampoline at `0x00900000` plus `SIG_RETURN` context restore.
 - [x] Implemented shell line editing: 16-entry history (Up/Down), cursor movement (Left/Right), insertion and Backspace editing with full-line repaint, double-quoted arguments, `\n`/`\\`/`\"` escapes with unknown-escape warnings, Ctrl+C `^C` echo + line discard + prompt redraw, and differentiated ELF/`run` error messages (bad image vs. process slots full vs. read failure).
 - [x] Made `echo` write to both the screen and COM1 serial so scripted/headless sessions keep serial visibility; removed the `secho` command.
 - [x] Added a unittest-style QEMU integration framework (`QemuTestCase` with `assert*` helpers, per-method PASS lines) alongside the existing bounded session orchestration; check results are marked with `✓ PASS`/`✗ FAIL`.
@@ -55,14 +55,14 @@ This document tracks completed work and the project roadmap. When an item is com
   - [x] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior. (QEMU covers all five via `stack.elf`/`faultu.elf`/`faultp.elf`/`oom.elf`/`kfault.elf`; the kernel-fault panic runs in a dedicated second session because it reboots the machine.)
   - Entry point: [isr14_handler](./src/arch/x86/trap.c).
 - [ ] **Complete the user-space and system-call interfaces**
-  - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes. (Call numbers 1–24 are documented in `docs/en/04-syscall-abi.md`; no versioning yet.)
-  - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers. (FS syscalls validate pointers; `SYS_WRITE`/`SYS_READ`/`SYS_MEMORY` still dereference caller pointers directly.)
-  - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces. (`SYS_EXIT`, `SYS_YIELD`, and the signal set exist; no fork/exec/wait or per-process fd table yet.)
-  - [ ] Add system calls for file, directory, console, time, and device access. (FS 11–20, `SYS_TIME`, and console read/write exist; device access is still missing.)
+  - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes. (Two-level class/sub-op numbering in `eax`/`ebx` with args in `ecx`/`edx`/`esi` is documented in `docs/en/04-syscall-abi.md`; no versioning yet.)
+  - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers. (FS syscalls validate pointers; `IO_WRITE`/`IO_READ`/`SYS_MEMORY` still dereference caller pointers directly.)
+  - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces. (`PROC_EXIT`, `PROC_YIELD`, and the signal set exist; no fork/exec/wait or per-process fd table yet.)
+  - [ ] Add system calls for file, directory, console, time, and device access. (`SYS_FS` ops 1–10, `TIME_GET`/`TIME_TO`, and console read/write exist; device access is still missing.)
   - [ ] Add host and QEMU tests for the ABI and invalid-argument handling. (QEMU covers happy paths and signal delivery; invalid-argument coverage is partial.)
 - [ ] **Implement a signal mechanism** (only `SIGINT`/`SIGKILL` so far; more numbers, `sigprocmask`-style blocking APIs, and nested delivery remain)
   - [x] Define signal numbers, delivery semantics (poll-based at IRQ0/syscall wait points, not synchronous faults), and per-process pending/blocked signal state.
-  - [x] Add system calls to send a signal to a process (`SYS_KILL`) and to register/replace a user-mode handler (`SYS_SIGNAL`); `SYS_SIGRETURN` restores the interrupted context after a handler returns.
+  - [x] Add system calls to send a signal to a process (`SIG_KILL`) and to register/replace a user-mode handler (`SIG_SIGNAL`); `SIG_RETURN` restores the interrupted context after a handler returns.
   - [x] Ensure delivery cannot corrupt the `irq_frame` contract or an in-flight syscall; terminate the process on unhandled fatal signals. (Delivery saves the whole frame and rebuilds it on the user stack; a delivered-into syscall frame is abandoned rather than restarted.)
   - [x] Cover delivery, blocking, and termination with QEMU tests. (`sigdemo.elf` verifies handler invocation, register restore, and continuation; Ctrl+C termination is covered by the Ring 3 scenario.)
 - [x] **Implement per-process page tables for memory isolation**

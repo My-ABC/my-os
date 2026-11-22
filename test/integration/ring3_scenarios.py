@@ -58,4 +58,4 @@ def check_ring3_and_builtin_elf(session):
         session.wait_for_regex(rb"\[PS\] " + expected_pid + rb" DEAD",
                                start=ps_start, timeout=8)
     session.pass_check("ELF32 load, Ring 3 execution, SIGINT handler, "
-                       "and SYS_EXIT")
+                       "and PROC_EXIT")

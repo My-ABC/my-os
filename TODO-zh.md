@@ -10,7 +10,7 @@
 - [x] 实现内核分页、PAE 页表和高端物理页映射；PMM 可管理 64 GiB 以下的物理地址，并有 4 GiB 以上页分配的宿主测试；可选的 QEMU `-m 6G` 测试会分配 `0x100000000` 高地址物理页，通过映射校验读写，然后释放并重新分配该页。
 - [x] 实现内核堆分配器及基础用户堆分配接口。
 - [x] 实现基础 Ring 3 进程调度和进程管理命令；目前最多运行两个进程，进程共享地址空间。
-- [x] 提供基础系统调用 `SYS_WRITE` 和 `SYS_GETPID`。
+- [x] 提供基础系统调用 `IO_WRITE` 和 `PROC_GETPID`。
 - [x] 实现 ELF32 可加载段校验与装载、BSS 清零，以及内置和磁盘 ELF 程序运行。
 - [x] 修复 PAE 更改后 GRUB ISO 启动时可能出现的无限重启；构建依赖自动跟踪头文件，避免 ABI 变更后复用过期对象文件。
 
@@ -24,8 +24,8 @@
 - [x] 实现 `rmdir -f` 递归删除非空目录，并限制删除当前目录及其父目录。
 - [x] 实现 `cp`/`cp -r`/`mv` 文件和目录操作，按 Linux 语义处理目标已存在的情况。
 - [x] 实现 `run` 命令，从 FAT32 磁盘装载并运行 ELF32 程序。
-- [x] 增加文件系统调用 `SYS_FSOPEN`/`WRITE`/`READ`/`CLOSE`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`（11–20）、`SYS_EXIT`（10）、`SYS_YIELD`（21）、`SYS_TIME`（6）以及信号调用 `SYS_KILL`（22）/`SYS_SIGNAL`（23）/`SYS_SIGRETURN`（24）；用户指针按登记范围校验，路径统一走 `fat32_resolve_path`/`g_cwd`。
-- [x] 端到端实现信号投递：仅 `SIGINT`/`SIGKILL`，每进程 pending/blocked/handler 状态，Ctrl+C `KEYBOARD_KEY_SIGINT` → 前台 `SIGINT`，默认致命即终止，用户 handler 经每进程私有的 `0x00900000` restorer trampoline + `SYS_SIGRETURN` 恢复上下文执行。
+- [x] 增加文件系统调用 `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`（`SYS_FS` 子操作 1–10）、`PROC_EXIT`/`PROC_YIELD`（`SYS_PROCESS`）、`TIME_GET`（`SYS_TIME`）以及信号调用 `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN`（`SYS_SIG`）；用户指针按登记范围校验，路径统一走 `fat32_resolve_path`/`g_cwd`。
+- [x] 端到端实现信号投递：仅 `SIGINT`/`SIGKILL`，每进程 pending/blocked/handler 状态，Ctrl+C `KEYBOARD_KEY_SIGINT` → 前台 `SIGINT`，默认致命即终止，用户 handler 经每进程私有的 `0x00900000` restorer trampoline + `SIG_RETURN` 恢复上下文执行。
 - [x] 实现 Shell 行编辑：16 条历史（Up/Down）、光标移动（Left/Right）、插入与退格编辑及整行重绘、双引号参数、`\n`/`\\`/`\"` 转义（未知转义告警）、Ctrl+C 回显 `^C` + 丢弃当前行 + 重绘提示符、ELF/`run` 错误信息细分（镜像错误 vs 进程槽满 vs 读文件失败）。
 - [x] `echo` 同时输出屏幕和 COM1 串口，脚本化/无头会话保留串口可见性；移除 `secho` 命令。
 - [x] 新增 unittest 风格 QEMU 集成框架（`QemuTestCase` 及 `assert*` 断言、按方法输出 PASS），与原有有界会话编排并存；检查结果以 `✓ PASS`/`✗ FAIL` 标记。
@@ -55,14 +55,14 @@
   - [x] 覆盖有效按需映射、越界访问、保护违规、内核态缺页和内存不足测试。（QEMU 通过 `stack.elf`/`faultu.elf`/`faultp.elf`/`oom.elf`/`kfault.elf` 全部覆盖；内核态缺页 panic 在独立的第二个会话中运行，因为它会重启机器。）
   - 入口：[isr14_handler](./src/arch/x86/trap.c)。
 - [ ] **完善用户态与系统调用接口**
-  - [ ] 定义稳定、版本化的系统调用 ABI、参数约定和错误码。（调用号 1–24 已记录在 `docs/zh/04-syscall-abi.md`；尚无版本机制。）
-  - [ ] 校验用户指针、长度和地址范围，提供安全的用户/内核数据复制。（FS 系列已校验指针；`SYS_WRITE`/`SYS_READ`/`SYS_MEMORY` 仍直接解引用用户指针。）
-  - [ ] 完善进程创建、退出、等待、信号/事件及资源回收接口。（已有 `SYS_EXIT`、`SYS_YIELD` 和信号集；无 fork/exec/wait 或每进程 fd 表。）
-  - [ ] 增加文件、目录、控制台、时间和设备访问所需的系统调用。（FS 11–20、`SYS_TIME`、控制台读写已有；设备访问仍缺。）
+  - [ ] 定义稳定、版本化的系统调用 ABI、参数约定和错误码。（`eax`/`ebx` 两级大类/子操作号、参数走 `ecx`/`edx`/`esi` 已记录在 `docs/zh/04-syscall-abi.md`；尚无版本机制。）
+  - [ ] 校验用户指针、长度和地址范围，提供安全的用户/内核数据复制。（FS 系列已校验指针；`IO_WRITE`/`IO_READ`/`SYS_MEMORY` 仍直接解引用用户指针。）
+  - [ ] 完善进程创建、退出、等待、信号/事件及资源回收接口。（已有 `PROC_EXIT`、`PROC_YIELD` 和信号集；无 fork/exec/wait 或每进程 fd 表。）
+  - [ ] 增加文件、目录、控制台、时间和设备访问所需的系统调用。（`SYS_FS` 子操作 1–10、`TIME_GET`/`TIME_TO`、控制台读写已有；设备访问仍缺。）
   - [ ] 为 ABI 和非法参数处理添加宿主与 QEMU 测试。（QEMU 覆盖正常路径和信号投递；非法参数覆盖不完整。）
 - [ ] **实现信号机制**（目前只有 `SIGINT`/`SIGKILL`；更多信号编号、`sigprocmask` 式屏蔽接口和嵌套投递仍待做）
   - [x] 定义信号编号、投递语义（在 IRQ0/系统调用等待点轮询，而非同步异常）以及每进程的待处理/屏蔽信号状态。
-  - [x] 增加向进程发送信号（`SYS_KILL`）和注册/替换用户态处理函数（`SYS_SIGNAL`）的系统调用；handler 返回后由 `SYS_SIGRETURN` 恢复被中断的上下文。
+  - [x] 增加向进程发送信号（`SIG_KILL`）和注册/替换用户态处理函数（`SIG_SIGNAL`）的系统调用；handler 返回后由 `SIG_RETURN` 恢复被中断的上下文。
   - [x] 确保投递不会破坏 `irq_frame` 约定或进行中的系统调用；未处理的致命信号应终止进程。（投递时保存完整帧并在用户栈上重建；投递进系统调用帧会放弃该调用而非重启。）
   - [x] 用 QEMU 测试覆盖投递、屏蔽和终止路径。（`sigdemo.elf` 验证 handler 调用、寄存器恢复与继续执行；Ctrl+C 终止由 Ring 3 场景覆盖。）
 - [x] **实现每进程页表以获得真正的内存隔离**

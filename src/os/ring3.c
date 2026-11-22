@@ -12,8 +12,9 @@
 #define USER_STACK_SIZE         0x8000U
 #define USER_STACK_TOP_0        0x00810000U
 #define USER_STACK_TOP_1        0x00820000U
-/* Fixed user page holding the signal restorer stub (mov eax,SYS_SIGRETURN;
- * int 0x80). Shared by all processes because they share one address space. */
+/* Fixed user page holding the signal restorer stub
+ * (mov eax,SYS_SIG; mov ebx,SIG_RETURN; int 0x80). Each process gets its
+ * own private trampoline page inside its own address space. */
 #define USER_SIG_TRAMPOLINE     0x00900000U
 
 struct ring3_process {
@@ -104,15 +105,20 @@ static int mm_install_sig_trampoline(struct user_mm *mm) {
         pmm_free_page(physical);
         return 0;
     }
-    /* mov eax, SYS_SIGRETURN ; int 0x80 */
+    /* mov eax, SYS_SIG ; mov ebx, SIG_RETURN ; int 0x80 */
     code[0] = 0xB8U;
-    code[1] = 24U;
+    code[1] = 7U;
     code[2] = 0U;
     code[3] = 0U;
     code[4] = 0U;
-    code[5] = 0xCDU;
-    code[6] = 0x80U;
-    for (uint32_t i = 7; i < PAGE_SIZE; ++i) code[i] = 0x90U;
+    code[5] = 0xBBU;
+    code[6] = 3U;
+    code[7] = 0U;
+    code[8] = 0U;
+    code[9] = 0U;
+    code[10] = 0xCDU;
+    code[11] = 0x80U;
+    for (uint32_t i = 12; i < PAGE_SIZE; ++i) code[i] = 0x90U;
     paging_unmap_physical();
     paging_mm_map(mm, USER_SIG_TRAMPOLINE, physical,
                   PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
@@ -474,7 +480,7 @@ static int sig_ensure_user_page(struct user_mm *mm, uint32_t addr) {
 
 /* Redirect `frame` so the process resumes inside its handler for `sig`.
  * The interrupted context is kept in sig_saved_frame and restored by
- * SYS_SIGRETURN; the handler sees a normal cdecl frame
+ * SIG_RETURN; the handler sees a normal cdecl frame
  * ([esp]=restorer, [esp+4]=sig) on the user stack. */
 static int sig_deliver(struct ring3_process *p, uint32_t sig,
                        struct irq_frame *frame) {
@@ -560,7 +566,7 @@ int ring3_signal_deliver_current(struct irq_frame *frame) {
     return sig_deliver(p, handled, frame);
 }
 
-/* SYS_SIGRETURN: restore the context saved when the running handler was
+/* SIG_RETURN: restore the context saved when the running handler was
  * delivered. Returns the restored eax so the syscall epilogue preserves
  * the interrupted context's value. */
 uint32_t ring3_signal_sigreturn(struct irq_frame *frame) {

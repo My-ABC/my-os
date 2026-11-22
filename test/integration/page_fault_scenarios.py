@@ -76,7 +76,7 @@ def check_user_oom(session):
 
 
 def check_kernel_fault_panic(session):
-    # kfault.elf passes an unregistered user pointer to SYS_WRITE; the
+    # kfault.elf passes an unregistered user pointer to IO_WRITE; the
     # syscall handler dereferences it in kernel mode, which must panic.
     # A panic reboots the machine, so this scenario needs a fresh session
     # and must run after all other checks.
