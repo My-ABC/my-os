@@ -49,6 +49,7 @@ TESTS = [
     ("os",      "time.elf",     "os/time.c",       "DONE-time"),
     ("os",      "unistd.elf",   "os/unistd.c",     "DONE-unistd"),
     ("os",      "signal.elf",   "os/signal.c",     "DONE-signal"),
+    ("os",      "process.elf", "os/process.c",   "DONE-process"),
 ]
 # negative test: must abort; checked separately
 AFail = ("negative", "afail.elf", "negative/afail.c")
@@ -118,9 +119,9 @@ def main():
     print(f"workdir: {workdir}")
     try:
         # FAT32 root dir on the 64 MiB test image holds ~16 entries;
-        # keep <=6 ELFs per disk (plus tdata.txt) and boot one QEMU
+        # keep <=7 ELFs per disk (plus tdata.txt) and boot one QEMU
         # session per chunk.
-        chunks = [TESTS[i:i + 6] for i in range(0, len(TESTS), 6)]
+        chunks = [TESTS[i:i + 7] for i in range(0, len(TESTS), 6)]
         chunks.append([AFail + (None,)])   # negative test, own session
         results = []
         for chunk in chunks:
