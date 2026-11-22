@@ -60,7 +60,7 @@ DISK_SIZE ?= 64M
 LIBMYC_CFLAGS = -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector -O2 \
 	-I mini-libc/include -MMD -MP
 LIBMYC_SRCS = mini-libc/syscall.S mini-libc/src/crt0.S \
-	mini-libc/src/string.c mini-libc/src/ctype.c
+	mini-libc/src/string.c mini-libc/src/ctype.c mini-libc/src/stdio.c
 LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$(LIBMYC_SRCS))) \
 	$(patsubst mini-libc/src/%.c,$(BUILD_DIR)/mini-libc/%.o,$(filter %.c,$(LIBMYC_SRCS)))
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)

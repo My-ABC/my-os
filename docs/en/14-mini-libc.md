@@ -13,12 +13,13 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers |
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
+| `include/stdio.h` `stdarg.h` | Minimal `printf`/`scanf` plus `va_list` builtins |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` | Freestanding implementations of `string.h`/`ctype.h` |
+| `src/string.c` `ctype.c` `stdio.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
 
-More modules (`stdlib.h`, `stdio.h`, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
+More modules (`stdlib.h`, wider `stdio.h` coverage, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
 
 ## Calling the kernel
 
@@ -40,6 +41,15 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 ```
 
 Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, which mirrors `include/os/syscall.h`; user programs include it directly instead of keeping their own copy.
+
+## stdio
+
+`stdio.h` is intentionally minimal — only `printf` and `scanf`:
+
+- `printf` supports `%d` `%i` `%u` `%x` `%X` `%s` `%c` `%p` and `%%`; output is buffered and flushed through `IO_WRITE`.
+- `scanf` supports `%d` `%i` `%u` `%x` `%s` `%c`, literal characters, and whitespace skipping; input is read line-by-line through `IO_READ` into a small static buffer with one-character pushback.
+
+`stdarg.h` provides `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy` on top of the GCC builtins.
 
 ## Build notes
 
