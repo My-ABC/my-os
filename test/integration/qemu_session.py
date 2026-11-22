@@ -205,7 +205,7 @@ class QemuSession:
 
     @staticmethod
     def pass_check(name):
-        print(f"PASS: {name}", flush=True)
+        print(f"✓ PASS: {name}", flush=True)
 
     def diagnostics(self):
         self.qemu_log.flush()
