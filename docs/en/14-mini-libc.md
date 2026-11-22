@@ -8,7 +8,7 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 
 ## API reference
 
-`mini-libc/api-docs/` contains the bilingual per-header
+`mini-libc/docs/api-docs/` contains the bilingual per-header
 API reference (`en/reference.md`, `zh/reference.md`); keep it
 in sync with header changes.
 

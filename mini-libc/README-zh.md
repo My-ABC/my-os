@@ -21,7 +21,7 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 
 ## API 参考
 
-`api-docs/` —— 按头文件组织的双语 API 参考
+`docs/api-docs/` —— 按头文件组织的双语 API 参考
 （`en/reference.md`、`zh/reference.md`）。
 
 ## 测试
