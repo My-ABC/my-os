@@ -29,10 +29,11 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | `include/time.h` | `time`/`gmtime`/`localtime`/`mktime`/`strftime`/`difftime`/`clock`/`sleep`/`usleep`（本地时间 UTC+8） |
 | `include/errno.h` | `errno` 全局量与常用 `E*` 常量（与 Linux 取值一致） |
 | `include/fs.h` | 基于 `SYS_FS` 的 FAT32 文件/目录 API：`fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir`，以及极简无缓冲 `FILE`（`fs_fopen`/`fs_fclose`/`fs_fread`/`fs_fwrite`/`fs_fgetc`/`fs_fputc`/`fs_feof`/`fs_ferror`/`fs_clearerr`） |
+| `include/unistd.h` `sys/types.h` | 进程/fd/路径 API：`_exit`/`getpid`/`getppid`/`sched_yield`/`fork`/`execve`，`read`/`write`/`close`，`unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`；内核不支持的调用返回 `ENOSYS` |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |
 | `syscall.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl 约定） |
 | `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h` 的 freestanding 实现 |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h` 的 freestanding 实现 |
 | `examples/hello.c` | 使用 syscall 封装的最小 Ring 3 hello-world |
 
 ## 调用内核
