@@ -7,14 +7,15 @@
 /* mini-libc stdlib: process exit, heap allocation over SYS_MEMORY,
  * string<->number conversion, PRNG, and sorting/searching.
  *
- * The heap is the kernel's per-process user heap (user_alloc in
- * src/os/syscall.c): allocations are page-granular, alignment is at
- * least 4 bytes, and there is no sbrk/heap introspection. */
+ * The heap sits on the kernel's per-process user heap (user_alloc in
+ * src/os/syscall.c) behind a 16-byte mini-libc header, so malloc()
+ * guarantees 8-byte alignment and aligned_alloc() honors larger
+ * power-of-two alignments. There is no sbrk/heap introspection. */
 
 /* ---- process termination ---- */
-void exit(int status) __attribute__((noreturn));   /* flushes stdio */
-void _Exit(int status) __attribute__((noreturn)); /* immediate */
-void abort(void) __attribute__((noreturn));
+void _Noreturn exit(int status);   /* runs atexit handlers, flushes stdio */
+void _Noreturn _Exit(int status);  /* immediate PROC_EXIT */
+void _Noreturn abort(void);
 
 /* ---- heap ---- */
 void *malloc(size_t size);
@@ -40,7 +41,7 @@ unsigned long strtoul(const char *s, char **endptr, int base);
 /* ---- PRNG (xorshift32) ---- */
 int  rand(void);            /* [0, RAND_MAX] */
 void srand(unsigned seed);
-#define RAND_MAX 2147483647
+#define RAND_MAX 0x7FFFFFFF
 
 /* ---- sorting / searching ---- */
 void qsort(void *base, size_t nmemb, size_t size,
