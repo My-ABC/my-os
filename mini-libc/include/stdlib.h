@@ -21,8 +21,9 @@ void *malloc(size_t size);
 void *calloc(size_t nmemb, size_t size);
 void *realloc(void *ptr, size_t size);
 void  free(void *ptr);
-/* power-of-two alignment (rounded up if needed); size need not be a
- * multiple of alignment — we honor the request leniently */
+/* C11: alignment must be a power of two and a multiple of
+ * sizeof(void*), and size must be a nonzero multiple of alignment;
+ * violations return NULL with errno = EINVAL */
 void *aligned_alloc(size_t alignment, size_t size);
 
 /* register fn to run at exit() (LIFO, max 16); -1 when the table is

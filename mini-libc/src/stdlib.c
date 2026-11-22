@@ -91,7 +91,17 @@ void *calloc(size_t nmemb, size_t size) {
 }
 
 void *aligned_alloc(size_t alignment, size_t size) {
-    if (size == 0 || alignment == 0) { errno = EINVAL; return 0; }
+    /* C11 7.22.3.1: alignment must be a power of two and a multiple of
+     * sizeof(void*); size must be a nonzero multiple of alignment.
+     * Anything else is a constraint violation — we return EINVAL
+     * instead of invoking undefined behavior. */
+    if (size == 0 || alignment == 0 ||
+        (alignment & (alignment - 1)) != 0 ||
+        alignment % sizeof(void *) != 0 ||
+        size % alignment != 0) {
+        errno = EINVAL;
+        return 0;
+    }
     return xalloc(size, alignment);
 }
 
@@ -213,13 +223,13 @@ unsigned long strtoul(const char *s, char **endptr, int base) {
         else break;
         if (d >= base) break;
         any = 1;
-        if (acc > (0xFFFFFFFFUL - (unsigned long)d) / (unsigned)base)
+        if (acc > (ULONG_MAX - (unsigned long)d) / (unsigned)base)
             of = 1;
         else
             acc = acc * (unsigned)base + (unsigned long)d;
     }
     if (!any) { if (endptr) *endptr = (char *)orig; return 0; }
-    if (of) { errno = ERANGE; return 0xFFFFFFFFUL; }
+    if (of) { errno = ERANGE; return ULONG_MAX; }
     if (endptr) *endptr = (char *)s;
     if (neg) acc = 0UL - acc;   /* wrap: strtoul accepts a leading '-' */
     return acc;
