@@ -1,0 +1,20 @@
+# mini-libc API Reference (English)
+
+- [Base headers](base.md)
+- [`string.h`](string.md)
+- [`ctype.h`](ctype.md)
+- [`stdio.h`](stdio.md)
+- [`fs.h`](fs.md)
+- [`unistd.h`](unistd.md)
+- [`stdlib.h`](stdlib.md)
+- [`errno.h`](errno.md)
+- [`time.h`](time.md)
+- [`assert.h`](assert.md)
+- [`setjmp.h`](setjmp.md)
+- [`signal.h`](signal.md)
+- [`process.h`](process.md)
+- [`console.h`](console.md)
+- [`inttypes.h`](inttypes.md)
+- [`sys/syscall.h`](syscall.md)
+
+Keep in sync with `mini-libc/include/` header changes.

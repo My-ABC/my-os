@@ -60,7 +60,13 @@ DISK_SIZE ?= 64M
 LIBMYC_CFLAGS = -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector -O2 \
 	-I mini-libc/include -MMD -MP
 LIBMYC_SRCS = mini-libc/syscall.S mini-libc/src/crt0.S \
-	mini-libc/src/string.c mini-libc/src/ctype.c mini-libc/src/stdio.c
+	mini-libc/setjmp.S \
+	mini-libc/src/string.c mini-libc/src/ctype.c mini-libc/src/stdio.c \
+	mini-libc/src/errno.c mini-libc/src/fs.c mini-libc/src/time.c \
+	mini-libc/src/unistd.c mini-libc/src/stdlib.c \
+	mini-libc/src/assert.c mini-libc/src/inttypes.c \
+	mini-libc/src/signal.c mini-libc/src/process.c \
+	mini-libc/src/console.c
 LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$(LIBMYC_SRCS))) \
 	$(patsubst mini-libc/src/%.c,$(BUILD_DIR)/mini-libc/%.o,$(filter %.c,$(LIBMYC_SRCS)))
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
@@ -104,6 +110,10 @@ test-qemu-highmem:
 	$(MAKE) HIGHMEM_QEMU_TEST=1 build
 	python3 test/integration/run_qemu_highmem.py --qemu "$(QEMU)" \
 		--kernel build/highmem-test/myos.bin
+
+# mini-libc 测试套件：编译全部测试 ELF，注入 FAT32 盘，QEMU 逐个 run
+test-libmyc: build
+	python3 test/mini-libc/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)" --cc "$(CC)"
 
 # 编译 C 文件
 $(BUILD_DIR)/%.o: src/%.c
@@ -200,4 +210,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc test test-qemu test-qemu-highmem test-libmyc disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

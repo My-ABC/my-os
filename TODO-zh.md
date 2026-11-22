@@ -213,9 +213,11 @@
   - [ ] 设计并稳定满足 libc 所需的系统调用与 ABI。
   - [ ] 建立简单的用户态编译、链接和打包工具链。
 - [ ] **实现 mini-libc（`mini-libc/`，MIT 协议）**
-  - [ ] 基于大类/子操作 ABI 的系统调用封装（`write`、`read`、`open`/`close`、`malloc` 系列、`exit`、`yield`、信号）。
-  - [ ] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装）。
-  - [ ] 精简 `stdio.h`（`printf`/`puts`/`putchar`，基于 `IO_WRITE`）。
+  - [x] 基于大类/子操作 ABI 的系统调用封装（`syscall.S` 中的 `syscall0`-`syscall3`；`write`/`read`/`open`/`close`、`malloc` 系列、`exit`、`yield`、信号均由下列模块覆盖）。
+  - [x] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装、`aligned_alloc`/`atexit`、strtol/qsort/rand、`assert.h`、`setjmp.h`、`inttypes.h`、`stdnoreturn.h`、`signal.h`、`process.h`、`console.h`；`test/mini-libc/` 下有 QEMU 测试套件（15/15））。
+  - [x] `stdio.h` 控制台/字符串覆盖：`printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`，支持标志、宽度、精度。
+  - [x] `stdio.h` `FILE*` 流：`stdin`/`stdout` 控制台流，以及 `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`（无缓冲）。
+  - [x] `errno.h`（`errno` 全局量 + `E*` 常量）、`time.h`（基于 `SYS_TIME` 的 UTC+8 日历/时钟）、`fs.h`/`unistd.h`（基于 `SYS_FS`/`SYS_PROCESS` 的 FAT32 fd 与进程/路径封装）。
   - [x] `_start` 入口（`src/crt0.S`）与 ELF32 链接方式，使用户程序可直接链接使用。
   - [x] 用 QEMU 下的 hello-world ELF32 验证（`examples/hello.c`）。
 - [ ] **移植 musl libc**

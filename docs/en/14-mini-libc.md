@@ -6,6 +6,25 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 
 中文版本: [中文版](../zh/14-mini-libc.md)
 
+## API reference
+
+`docs/en/mini-libc/` and `docs/zh/mini-libc/` contains the bilingual per-header
+API reference (one chapter per public header); keep it
+in sync with header changes.
+
+## Tests
+
+`test/mini-libc/` holds a QEMU integration suite
+(`run_tests.py`): test ELFs grouped by subsystem — `core/`
+(string, ctype, stdlib, inttypes, setjmp, assert), `stdio/`,
+`fs/`, `os/` (errno, time, unistd), and `negative/` (assert
+failure). The runner compiles each test against
+`build/libmyc.a`, injects the ELFs plus fixture files into a
+FAT32 image (max 6 ELFs per disk — the 64 MiB image root
+directory holds ~16 entries), boots one QEMU session per
+chunk, and verifies `DONE-<tag> fails=0` on serial. Run it via
+`make test-libmyc`.
+
 ## Layout
 
 | File | Contents |
@@ -13,13 +32,25 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers |
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
-| `include/stdio.h` `stdarg.h` | Minimal `printf`/`scanf` plus `va_list` builtins |
-| `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
+| `include/time.h` | `time`/`gmtime`/`localtime`/`mktime`/`strftime`/`difftime`/`clock`/`sleep`/`usleep` over `SYS_TIME` (local time fixed at UTC+8) |
+| `include/errno.h` | `errno` global plus common `E*` constants (Linux-compatible values) |
+| `include/fs.h` | FAT32 file/directory API over `SYS_FS`: `fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir`, plus a minimal unbuffered `FILE` (`fs_fopen`/`fs_fclose`/`fs_fread`/`fs_fwrite`/`fs_fgetc`/`fs_fputc`/`fs_feof`/`fs_ferror`/`fs_clearerr`) |
+| `include/unistd.h` `sys/types.h` | Process/fd/path API over `SYS_PROCESS`/`SYS_FS`: `_exit`/`getpid`/`sched_yield`/`execve`, `read`/`write`/`close`, `unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`; unsupported calls return `ENOSYS` |
+| `include/assert.h` | `assert(e)` — prints expr/file/func/line to stdout then `abort()`; compiled out under `NDEBUG` |
+| `include/signal.h` | `signal`/`kill`/`raise`, `sig_t`, `SIGINT`/`SIGKILL`, `SIG_DFL`/`SIG_IGN` over `SYS_SIG` (SIGINT catchable, SIGKILL fatal; no mask API) |
+| `include/console.h` | `con_getchar`/`con_clear`/`con_cursor_get`/`con_cursor_set` over `SYS_IO` (line-editing primitives) |
+| `include/process.h` | `proc_list`/`proc_set_foreground`/`proc_foreground` over `SYS_PROCESS` (`PROC_LIST`/`PROC_SET_FG`) |
+| `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` length macros, `imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax` (`intmax_t`=int on LP32) |
+| `include/stdnoreturn.h` | `noreturn` macro → `_Noreturn` (header-only) |
+| `include/setjmp.h` | `setjmp`/`longjmp` over callee-saved regs + esp/eip (`jmp_buf` = 6 ints); `longjmp(env,0)` returns 1 |
+| `include/stdlib.h` | `exit`/`_Exit`/`abort`/`atexit`, `malloc`/`calloc`/`realloc`/`free`/`aligned_alloc` over `SYS_MEMORY` (16-byte header, 8-byte base alignment; C11 constraint checks -> EINVAL), `atoi`/`atol`/`strtol`/`strtoul`, `rand`/`srand`, `qsort`/`bsearch`, `abs`/`labs`/`div`/`ldiv`, `getenv` |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
+| `syscall.S` `setjmp.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl); `setjmp`/`longjmp` register/stack save-restore stubs |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h` |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
 
-More modules (`stdlib.h`, wider `stdio.h` coverage, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
+More modules (`signal.h`, wide-char support, `FILE*` buffering, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
 
 ## Calling the kernel
 
@@ -44,10 +75,10 @@ Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, whi
 
 ## stdio
 
-`stdio.h` is intentionally minimal — only `printf` and `scanf`:
+`stdio.h` covers the console/string surface (no `FILE*` streams yet):
 
-- `printf` supports `%d` `%i` `%u` `%x` `%X` `%s` `%c` `%p` and `%%`; output is buffered and flushed through `IO_WRITE`.
-- `scanf` supports `%d` `%i` `%u` `%x` `%s` `%c`, literal characters, and whitespace skipping; input is read line-by-line through `IO_READ` into a small static buffer with one-character pushback.
+- Output: `printf`, `sprintf`, `snprintf`, `puts`, `putchar`. Conversions `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%` with flags `-` `0` `+` space `#`, field width and precision (`*` allowed); length modifiers are accepted and ignored. Console output is buffered and flushed through `IO_WRITE`.
+- Input: `scanf`, `sscanf`, `getchar`. Conversions `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%` with `*` suppression and field width; console input is read line-by-line through `IO_READ` into a small static buffer with one-character pushback.
 
 `stdarg.h` provides `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy` on top of the GCC builtins.
 
