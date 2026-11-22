@@ -55,6 +55,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [x] Zero user pages before mapping and correctly release resources when allocation or mapping fails.
   - [x] Test valid demand mapping, out-of-range access, protection violations, kernel faults, and out-of-memory behavior. (QEMU covers all five via `stack.elf`/`faultu.elf`/`faultp.elf`/`oom.elf`/`kfault.elf`; the kernel-fault panic runs in a dedicated second session because it reboots the machine.)
   - Entry point: [isr14_handler](./src/arch/x86/trap.c).
+- [x] **Implement high-precision timed wait**
+  - [x] Calibrate the TSC against the PIT and expose a timestamp/delay helper.
+  - [x] Add a `SYS_TIME`/`TIME_SLEEP` syscall taking a microsecond duration.
+  - [x] Verify sub-millisecond sleep precision and signal checks with QEMU tests.
 - [ ] **Complete the user-space and system-call interfaces**
   - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes. (Two-level class/sub-op numbering in `eax`/`ebx` with args in `ecx`/`edx`/`esi` is documented in `docs/en/04-syscall-abi.md`; no versioning yet.)
   - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers. (FS syscalls validate pointers; `IO_WRITE`/`IO_READ`/`SYS_MEMORY` still dereference caller pointers directly.)

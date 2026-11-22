@@ -12,6 +12,8 @@
 #include "keyboard.h"
 #include "fat32.h"
 #include "heap.h"
+#include "tsc.h"
+#include "pit.h"
 
 #define USER_BLOCK_MAGIC 0x55534552U
 #define SYSFS_MAX_FDS 8U
@@ -445,6 +447,20 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     rtc_read_time(&time);
                     rtc_convert_timezone(&time, (int)a1);
                     memcpy((void *)a2, &time, sizeof(time));
+                    return 0;
+                }
+                case TIME_SLEEP: { // a1: microseconds
+                    if (tsc_freq_hz() == 0U) return (uint32_t)-1;
+                    uint64_t deadline = tsc_read() + tsc_cycles_for_us(a1);
+                    uint32_t last_tick = pit_ticks();
+                    for (;;) {
+                        if ((int64_t)(tsc_read() - deadline) >= 0) break;
+                        if (pit_ticks() != last_tick) {
+                            last_tick = pit_ticks();
+                            if (sys_signal_check(frame)) return 0;
+                        }
+                        __asm__ volatile ("pause");
+                    }
                     return 0;
                 }
                 default:

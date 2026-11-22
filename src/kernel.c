@@ -6,6 +6,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "pit.h"
+#include "tsc.h"
 #include "keyboard.h"
 #include "serial.h"
 #include "rtc.h"
@@ -192,6 +193,10 @@ void kmain(uint32_t multiboot_info) {
     vga_print_info("Enabling interrupts...");
     __asm__ volatile ("sti");
     vga_print_success("Interrupts enabled");
+
+    vga_print_info("Calibrating TSC...");
+    tsc_init();
+    vga_print_success("TSC calibrated");
 
     vga_print_info("Initializing RTC...");
     rtc_init();

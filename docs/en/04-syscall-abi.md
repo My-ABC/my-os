@@ -25,7 +25,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | Class | Name | Sub-operations |
 |-------|------|----------------|
 | 1 | `SYS_IO` | `IO_WRITE`(1), `IO_GETCHAR`(2), `IO_READ`(3), `IO_CLEAR`(4) |
-| 2 | `SYS_TIME` | `TIME_GET`(1), `TIME_TO`(2) |
+| 2 | `SYS_TIME` | `TIME_GET`(1), `TIME_TO`(2), `TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1), `MEMORY_CALLOC`(2), `MEMORY_REALLOC`(3), `MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1), `PWR_REBOOT`(2) |
 | 5 | `SYS_PROCESS` | `PROC_GETPID`(1), `PROC_EXIT`(2), `PROC_YIELD`(3) |
@@ -47,6 +47,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 |----|------|-----------|---------|---------|
 | 1 | `TIME_GET` | none | Unix timestamp | `rtc_read_time` + `rtc_to_unix_timestamp`; returns the current UTC time as a Unix timestamp. |
 | 2 | `TIME_TO` | `ecx` = signed offset in **seconds**, `edx` = `rtc_time_t *` user buffer | 0 or -1 | Reads the RTC and applies `rtc_convert_timezone` with the given offset, then copies the resulting `rtc_time_t` (8 bytes: second, minute, hour, day, month, year) into the user buffer. The buffer must pass user-pointer validation. |
+| 3 | `TIME_SLEEP` | `ecx` = duration in **microseconds** | 0, or -1 when the TSC is uncalibrated | Busy-waits on the calibrated TSC until the deadline; signal dispositions are polled once per PIT tick (10 ms), so a delivered signal can abandon the sleep early. Sub-millisecond precision; burns CPU while sleeping. |
 
 ## `SYS_MEMORY` (3)
 
