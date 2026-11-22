@@ -49,6 +49,7 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | `include/assert.h` | `assert(e)`——失败时向 stdout 打印表达式/文件/函数/行号后 `abort()`；`NDEBUG` 下编译为空 |
 | `include/signal.h` | 基于 `SYS_SIG` 的 `signal`/`kill`/`raise`，`sig_t`、`SIGINT`/`SIGKILL`、`SIG_DFL`/`SIG_IGN`（SIGINT 可捕获、SIGKILL 必杀；无屏蔽 API） |
 | `include/console.h` | 基于 `SYS_IO` 的 `con_getchar`/`con_clear`/`con_cursor_get`/`con_cursor_set`（行编辑原语） |
+| `include/power.h` | 基于 `SYS_POWER` 的 `power_shutdown`/`power_reboot`（ACPI S5 关机/复位；成功不返回） |
 | `include/process.h` | 基于 `SYS_PROCESS` 的 `proc_list`/`proc_set_foreground`/`proc_foreground`（`PROC_LIST`/`PROC_SET_FG`） |
 | `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` 长度宏，`imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax`（LP32 下 `intmax_t`=int） |
 | `include/stdnoreturn.h` | `noreturn` 宏 → `_Noreturn`（纯头文件） |
@@ -57,7 +58,7 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |
 | `syscall.S` `setjmp.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl）；`setjmp`/`longjmp` 寄存器/栈保存恢复桩 |
 | `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` 的 freestanding 实现 |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` `power.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h`/`power.h` 的 freestanding 实现 |
 | `examples/hello.c` | 使用 syscall 封装的最小 Ring 3 hello-world |
 
 ## 调用内核

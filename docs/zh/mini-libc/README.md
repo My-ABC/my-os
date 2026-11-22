@@ -14,6 +14,7 @@
 - [`signal.h`](signal.md)
 - [`process.h`](process.md)
 - [`console.h`](console.md)
+- [`power.h`](power.md)
 - [`inttypes.h`](inttypes.md)
 - [`sys/syscall.h`](syscall.md)
 

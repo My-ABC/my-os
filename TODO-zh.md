@@ -135,6 +135,7 @@
   - [ ] 将 ACPI 表发现、映射、长度/校验和验证整理为通用且有界的接口。
   - [ ] 解析 MADT，提供处理器和中断控制器信息。
   - [ ] 评估 HPET、MCFG 等表及对应硬件功能的支持。
+  - [ ] 让 `shutdown`/`reboot` 在 QEMU 下真正关机/复位：目前 PM1a S5 写入和所有复位兜底（FADT 复位寄存器、0xCF9 端口、键盘脉冲、三重错误）都无法让 guest 停止运行——疑似 AML/DSDT 或 PM1 寄存器位宽问题；用 mini-libc 的 `power.elf` 测试验证（`make test-libmyc`）。
   - [ ] 完善电源状态、关机/重启错误处理，并评估 AML/DSDT 支持范围。
 
 ## 并发与内存
