@@ -13,6 +13,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Added the basic `IO_WRITE` and `PROC_GETPID` system calls.
 - [x] Implemented ELF32 loadable-segment validation/loading and BSS zeroing, plus built-in and disk-based ELF program execution.
 - [x] Fixed a possible infinite reboot after PAE changes on the GRUB ISO boot path; build rules now track header dependencies to avoid reusing stale objects after ABI changes.
+- [x] Reorganized the syscall ABI into two-level class/sub-operation numbering: `eax` selects one of seven classes (`SYS_IO`/`SYS_TIME`/`SYS_MEMORY`/`SYS_POWER`/`SYS_PROCESS`/`SYS_FS`/`SYS_SIG`), `ebx` the sub-operation, and arguments moved to `ecx`/`edx`/`esi`; added `TIME_TO` for UTC±offset conversion and updated the sigreturn trampoline, all asm demos, contract tests, and bilingual ABI docs.
 
 ### ATA, FAT32, and Shell
 
