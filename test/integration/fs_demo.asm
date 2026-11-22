@@ -15,9 +15,11 @@ global fs_demo_end
 %define VBASE (LOAD_ADDR - 0x100)
 
 %define SYS_IO       1
+%define SYS_TIME     2
 %define SYS_PROCESS  5
 %define SYS_FS       6
 %define IO_WRITE     1
+%define TIME_SLEEP   3
 %define PROC_EXIT    2
 %define FS_OPEN      1
 %define FS_CLOSE     2
@@ -62,6 +64,14 @@ fs_demo_code:
     mov ebx, IO_WRITE
     mov ecx, start_msg + VBASE
     int 0x80
+
+    ; TIME_SLEEP(100000) ~= 100 ms via the calibrated TSC
+    mov eax, SYS_TIME
+    mov ebx, TIME_SLEEP
+    mov ecx, 100000
+    int 0x80
+    test eax, eax
+    jnz .fail
 
     ; fd = FS_OPEN("/fsdemo.txt", O_RDWR)
     mov eax, SYS_FS

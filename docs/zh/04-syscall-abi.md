@@ -25,7 +25,7 @@ English: [English version](../en/04-syscall-abi.md)
 | 大类 | 名称 | 子操作 |
 |------|------|--------|
 | 1 | `SYS_IO` | `IO_WRITE`(1)、`IO_GETCHAR`(2)、`IO_READ`(3)、`IO_CLEAR`(4) |
-| 2 | `SYS_TIME` | `TIME_GET`(1)、`TIME_TO`(2) |
+| 2 | `SYS_TIME` | `TIME_GET`(1)、`TIME_TO`(2)、`TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1)、`MEMORY_CALLOC`(2)、`MEMORY_REALLOC`(3)、`MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1)、`PWR_REBOOT`(2) |
 | 5 | `SYS_PROCESS` | `PROC_GETPID`(1)、`PROC_EXIT`(2)、`PROC_YIELD`(3) |
@@ -47,6 +47,7 @@ English: [English version](../en/04-syscall-abi.md)
 |--------|------|------|------|------|
 | 1 | `TIME_GET` | 无 | Unix 时间戳 | `rtc_read_time` + `rtc_to_unix_timestamp`，返回当前 UTC 时间的 Unix 时间戳。 |
 | 2 | `TIME_TO` | `ecx` = 有符号偏移（**秒**），`edx` = `rtc_time_t *` 用户缓冲区 | 0 或 -1 | 读取 RTC 并按给定偏移执行 `rtc_convert_timezone`，把结果 `rtc_time_t`（8 字节：秒、分、时、日、月、年）拷贝到用户缓冲区。缓冲区必须通过用户指针校验。 |
+| 3 | `TIME_SLEEP` | `ecx` = 时长（**微秒**） | 0；TSC 未校准时返回 -1 | 基于已校准 TSC 忙等至截止时刻；信号处置按 PIT tick（10ms）粒度轮询，已投递信号可提前中断睡眠。支持亚毫秒精度；睡眠期间占用 CPU。 |
 
 ## `SYS_MEMORY`（3）
 

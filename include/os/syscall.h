@@ -24,6 +24,7 @@
 // SYS_TIME 子操作
 #define TIME_GET    1   // 返回 Unix 时间戳（UTC）
 #define TIME_TO     2   // ecx: int32 偏移秒数, edx: rtc_time_t *buf —— 换算到 UTC±n
+#define TIME_SLEEP  3   // ecx: uint32 微秒数 —— 高精度定时等待（忙等 TSC）
 
 // SYS_MEMORY 子操作
 #define MEMORY_MALLOC  1   // ecx: size
