@@ -13,10 +13,11 @@ English: [English version](../en/14-mini-libc.md)
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | freestanding 基础头文件 |
 | `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
+| `include/errno.h` | `errno` 全局量与常用 `E*` 常量（与 Linux 取值一致） |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` 与 `va_list` 内建封装 |
 | `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
-| `src/string.c` `ctype.c` `stdio.c` | `string.h`/`ctype.h`/`stdio.h` 的 freestanding 实现 |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
 更多模块（`stdlib.h`、基于 `SYS_FS` fd 的 `FILE*` 流、高层封装）计划中——见 TODO "实现 mini-libc" 条目。

@@ -22,10 +22,11 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` open modes, `PROC_STATE_*` values, and `syscall0`–`syscall3` declarations. Mirrors `include/os/syscall.h`. |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers: fixed-width types, `size_t`/`ptrdiff_t`/`NULL`/`offsetof`, `bool`, integer and float limits |
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
+| `include/errno.h` | `errno` global plus common `E*` constants (Linux-compatible values) |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` plus `va_list` builtins |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h` functions |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h` facilities |
 | `examples/hello.c` | Minimal Ring 3 hello-world using the syscall wrappers |
 
 ## Calling the kernel
