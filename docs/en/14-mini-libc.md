@@ -6,6 +6,18 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 
 中文版本: [中文版](../zh/14-mini-libc.md)
 
+## Tests
+
+`mini-libc/test/` holds a QEMU integration suite
+(`run_tests.py`): test ELFs grouped by subsystem — `core/`
+(string, ctype, stdlib, inttypes, setjmp, assert), `stdio/`,
+`fs/`, `os/` (errno, time, unistd), and `negative/` (assert
+failure). The runner compiles each test against
+`build/libmyc.a`, injects the ELFs plus fixture files into a
+FAT32 image (max 6 ELFs per disk — the 64 MiB image root
+directory holds ~16 entries), boots one QEMU session per
+chunk, and verifies `DONE-<tag> fails=0` on serial.
+
 ## Layout
 
 | File | Contents |

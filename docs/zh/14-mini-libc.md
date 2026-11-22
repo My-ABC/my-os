@@ -6,6 +6,17 @@ mini-libc 面向 **C11**，使用 freestanding 编译器构建（`i686-elf-gcc -
 
 English: [English version](../en/14-mini-libc.md)
 
+## 测试
+
+`mini-libc/test/` 是 QEMU 集成测试套件（`run_tests.py`）：
+按子系统分目录的测试 ELF——`core/`（string、ctype、
+stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
+`os/`（errno、time、unistd）、`negative/`（assert 失败）。
+运行器将每个测试编译链接 `build/libmyc.a`，连同 fixture
+文件注入 FAT32 镜像（每盘最多 6 个 ELF——64 MiB 镜像
+根目录约 16 个目录项），每组启动一次 QEMU，验证串口
+输出 `DONE-<tag> fails=0`。
+
 ## 目录结构
 
 | 文件 | 内容 |

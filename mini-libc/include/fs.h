@@ -38,8 +38,9 @@ int fs_stat(const char *path);
 int fs_getcwd(char *buf, unsigned size);
 int fs_chdir(const char *path);
 int fs_rename(const char *old_path, const char *new_path);
-/* directory listing into buf: newline-separated records, first byte
- * of each record is 'f' or 'd'; returns byte count or <0 */
+/* directory listing into buf: one record per line, each record is
+ * kind byte ('-' file / 'd' dir) + ' ' + name + '\n';
+ * returns byte count or <0 */
 int fs_readdir(const char *path, void *buf, unsigned size);
 
 /* ---- FILE: buffered-unaware stream over an fs fd ----

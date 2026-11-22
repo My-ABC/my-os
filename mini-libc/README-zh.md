@@ -19,6 +19,17 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 需要支持 C11 的 freestanding 编译器（如 `i686-elf-gcc`，配合
 `-m32 -ffreestanding -nostdlib`）。
 
+## 测试
+
+`test/` 是 QEMU 集成测试套件（`run_tests.py`）：按模块分目录——
+`core/`（string、ctype、stdlib、inttypes、setjmp、assert）、
+`stdio/`、`fs/`、`os/`（errno、time、unistd）、`negative/`
+（assert 失败 abort）。运行器把每个测试编译成 ELF 链接
+`build/libmyc.a`，连同 fixture 文件注入 FAT32 镜像（每盘
+<=6 个 ELF——64 MiB 镜像根目录只有约 16 个目录项），每组
+启动一次 QEMU，检查串口输出 `DONE-<tag> fails=0`。
+运行：`python3 mini-libc/test/run_tests.py`。
+
 ## 目录结构
 
 | 路径 | 内容 |

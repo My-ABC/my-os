@@ -19,6 +19,18 @@ user programs can be written in C instead of raw assembly. See
 Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 `-m32 -ffreestanding -nostdlib`).
 
+## Tests
+
+`test/` contains a QEMU integration suite (`run_tests.py`):
+per-module test ELFs under `core/` (string, ctype, stdlib,
+inttypes, setjmp, assert), `stdio/`, `fs/`, `os/` (errno, time,
+unistd), and `negative/` (assert-failure abort). The runner compiles
+each test against `build/libmyc.a`, injects them plus fixture files
+into a FAT32 image (<=6 ELFs per disk — the 64 MiB image's root
+directory holds ~16 entries), boots QEMU once per chunk, and checks
+serial output for `DONE-<tag> fails=0`. Run: `python3
+mini-libc/test/run_tests.py`.
+
 ## Layout
 
 | Path | Contents |
