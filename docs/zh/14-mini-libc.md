@@ -18,9 +18,10 @@ English: [English version](../en/14-mini-libc.md)
 | `include/fs.h` | 基于 `SYS_FS` 的 FAT32 文件/目录 API：`fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir`，以及极简无缓冲 `FILE`（`fs_fopen`/`fs_fclose`/`fs_fread`/`fs_fwrite`/`fs_fgetc`/`fs_fputc`/`fs_feof`/`fs_ferror`/`fs_clearerr`） |
 | `include/unistd.h` `sys/types.h` | 基于 `SYS_PROCESS`/`SYS_FS` 的进程/fd/路径 API：`_exit`/`getpid`/`sched_yield`/`execve`，`read`/`write`/`close`，`unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`；内核不支持的调用返回 `ENOSYS` |
 | `include/assert.h` | `assert(e)`——失败时向 stdout 打印表达式/文件/函数/行号后 `abort()`；`NDEBUG` 下编译为空 |
+| `include/setjmp.h` | 基于 callee-saved 寄存器 + esp/eip 的 `setjmp`/`longjmp`（`jmp_buf` = 6 个 int）；`longjmp(env,0)` 返回 1 |
 | `include/stdlib.h` | `exit`/`_Exit`/`abort`/`atexit`，基于 `SYS_MEMORY` 的 `malloc`/`calloc`/`realloc`/`free`/`aligned_alloc`（16 字节头，8 字节基础对齐；C11 约束校验，违例 EINVAL），`atoi`/`atol`/`strtol`/`strtoul`，`rand`/`srand`，`qsort`/`bsearch`，`abs`/`labs`/`div`/`ldiv`，`getenv` |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |
-| `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
+| `syscall.S` `setjmp.S` | `int 0x80` 原始包装 `syscall0`–`syscall3`（cdecl）；`setjmp`/`longjmp` 寄存器/栈保存恢复桩 |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
 | `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
