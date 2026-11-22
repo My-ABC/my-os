@@ -16,7 +16,7 @@ __attribute__((weak)) int ring3_signal_send(uint32_t pid, uint32_t sig) {
     return -1;
 }
 
-#define BUFFER_SIZE 32
+#define BUFFER_SIZE 256
 
 // 当前使用的扫描码集 (1 或 2)
 static int current_scancode_set = 1;

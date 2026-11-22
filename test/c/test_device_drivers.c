@@ -11,7 +11,7 @@ static unsigned int write_count;
 static uint8_t pic_master;
 static uint8_t pic_slave;
 static uint8_t lsr = 0x20;
-static uint8_t input[128];
+static uint8_t input[512];
 static unsigned int input_length;
 static unsigned int input_position;
 static char serial_output[512];
@@ -67,13 +67,14 @@ static void test_keyboard_scancodes(void) {
 static void test_keyboard_queue_bound(void) {
     unsigned int i;
     unsigned int count = 0;
-    uint8_t scans[40];
-    for (i = 0; i < 40; i++) scans[i] = 0x1E;
+    /* keyboard.c BUFFER_SIZE is 256, so the ring holds 255 bytes. */
+    uint8_t scans[300];
+    for (i = 0; i < 300; i++) scans[i] = 0x1E;
     keyboard_init();
-    reset_input(scans, 40);
-    for (i = 0; i < 40; i++) keyboard_irq();
+    reset_input(scans, 300);
+    for (i = 0; i < 300; i++) keyboard_irq();
     while (keyboard_getchar() != 0) count++;
-    check(count == 31U, "keyboard: ring buffer drops input instead of overwriting unread data");
+    check(count == 255U, "keyboard: ring buffer drops input instead of overwriting unread data");
 }
 
 static void test_pic_masking_and_eoi(void) {

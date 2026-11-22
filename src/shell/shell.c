@@ -1069,8 +1069,16 @@ static void shell_read_line(char *line, int size) {
                 --length;
                 --cursor;
                 line[length] = '\0';
-                shell_paint_line(line, length, cursor, length + 1,
-                                 origin_row, origin_col);
+                if (cursor == length) {
+                    /* erasing the last char: cheap backspace sequence,
+                     * avoids a full-line repaint (slow under VBE) */
+                    putchar('\b');
+                    putchar(' ');
+                    putchar('\b');
+                } else {
+                    shell_paint_line(line, length, cursor, length + 1,
+                                     origin_row, origin_col);
+                }
             }
             continue;
         }
@@ -1081,8 +1089,16 @@ static void shell_read_line(char *line, int size) {
             ++length;
             ++cursor;
             line[length] = '\0';
-            shell_paint_line(line, length, cursor, length - 1,
-                             origin_row, origin_col);
+            if (cursor == length) {
+                /* appended at end of line: the console cursor is already
+                 * in place; echo one char instead of repainting the
+                 * whole line (O(n) putchars per key overflows the
+                 * keyboard buffer under VBE) */
+                putchar(c);
+            } else {
+                shell_paint_line(line, length, cursor, length - 1,
+                                 origin_row, origin_col);
+            }
         }
     }
 }
