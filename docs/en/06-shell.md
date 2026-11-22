@@ -24,6 +24,11 @@ via `start_shell()`.
   `vga_set_cursor`/`vga_columns`, so wrapped lines are handled; editing
   keys are ignored while no prompt origin exists (foreground Ring 3
   task running).
+- Ctrl+C: the keyboard driver reports `KEYBOARD_KEY_SIGINT` (0x05). The
+  shell echoes `^C`, discards the line being edited, sends `SIGINT` to the
+  foreground Ring 3 process when one exists, and redraws the prompt on the
+  next loop iteration — no Enter is needed. See
+  [12-signals.md](12-signals.md).
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped), but only when the
@@ -63,3 +68,12 @@ the destination is an existing directory, the effective target becomes
 Every command, its arguments, and semantics are documented in
 [07-shell-commands.md](07-shell-commands.md). The `cmd_table` in
 `shell.c` is the authoritative list — update both together.
+
+## Status: kernel-mode shell
+
+The shell currently runs in kernel mode and calls kernel subsystems
+directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`). Migrating it to Ring 3
+is planned work tracked in `TODO.md` ("Complete the Shell and migrate it
+to Ring 3"); it requires new syscalls for process control, console cursor
+positioning, directory listing, and richer time/RTC data, plus a larger
+`RING3_PROCESS_COUNT` and per-process page tables for isolation.

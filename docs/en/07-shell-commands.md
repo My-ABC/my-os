@@ -2,7 +2,7 @@
 
 English | [中文](../zh/07-shell-commands.md)
 
-This document describes the interactive shell provided by `src/os/shell.c`.
+This document describes the interactive shell provided by `src/shell/shell.c`.
 The shell reads lines of up to 128 characters, splits them into at most 16
 whitespace-separated arguments, and dispatches to the command table. Commands
 are matched by exact name; there are no flags other than those documented
@@ -26,12 +26,9 @@ below.
 | Command | Arguments | Description |
 |---|---|---|
 | `time` | `[12\|24]` | Print the current time (RTC, Beijing time) as `YYYY-MM-DD HH:MM:SS`. Defaults to 24-hour format; `time 12` appends `AM`/`PM` and uses 12-hour format, `time 24` is explicit 24-hour. |
-| `panic` | — | Trigger a debug break (`int3`) to demonstrate the blue-screen panic path. |
-| `svga_blue` | — | Fill the screen blue via VBE; falls back to a blue VGA text screen. |
 | `echo` | `<text>...` | Print the arguments separated by single spaces to the screen and the COM1 serial port. |
 | `reboot` | — | Reboot the machine through ACPI. |
 | `shutdown` | — | Power off the machine through ACPI. |
-| `tick` | — | Print the PIT tick counter. |
 | `help` | — | List all commands with a one-line description. |
 | `clear` | — | Clear the VGA text screen. |
 | `hello` | `[name...]` | Print `Hello, my-os!`, or `Hello, <name>!` when arguments are given. |
@@ -40,7 +37,7 @@ below.
 | `fg` | `<pid>` | Make a process's output visible again (foreground). |
 | `bg` | `<pid>` | Hide a process's output (background). |
 | `kill` | `<pid>` | Terminate a process by PID. |
-| `elf` | — | Load and run the ELF32 demo program built into the kernel image. |
+| `elf` | — | Load and run the ELF32 demo program built into the kernel image. The demo installs a `SIGINT` handler, prints `Hello from ELF32`, and waits; Ctrl+C delivers the signal, the handler prints `Bye` and exits via `SYS_EXIT`. |
 | `disk` | — | Probe the ATA primary master and mount the FAT32 filesystem. |
 | `ls` | `[dir]` | List a directory (default: current directory). Directories are shown with a trailing `/` and `<DIR>`; files show their size in bytes. |
 | `cat` | `<file>` | Print a file's contents to the screen and serial port. Reads at most 64 KiB. |
@@ -62,4 +59,4 @@ below.
 - Command output goes to both the VGA screen and the serial port for disk and
   process commands, which makes sessions scriptable over the serial socket.
 - Typing `help` inside the shell is the authoritative list; this document
-  mirrors `cmd_table` in `src/os/shell.c`.
+  mirrors `cmd_table` in `src/shell/shell.c`.

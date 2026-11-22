@@ -2,7 +2,7 @@
 
 [English](../en/07-shell-commands.md) | 中文
 
-本文档描述 `src/os/shell.c` 提供的交互式 Shell。Shell 每次读取最多 128 个
+本文档描述 `src/shell/shell.c` 提供的交互式 Shell。Shell 每次读取最多 128 个
 字符的行，按空白拆分为最多 16 个参数，然后在命令表中精确匹配分发。除下文
 注明外没有其他选项开关。
 
@@ -21,12 +21,9 @@
 | 命令 | 参数 | 说明 |
 |---|---|---|
 | `time` | `[12\|24]` | 打印当前时间（RTC，北京时间），格式 `YYYY-MM-DD HH:MM:SS`。默认 24 小时制；`time 12` 使用 12 小时制并附加 `AM`/`PM`，`time 24` 显式指定 24 小时制。 |
-| `panic` | — | 触发调试断点（`int3`），演示蓝屏 panic 路径。 |
-| `svga_blue` | — | 通过 VBE 把屏幕填成蓝色；失败时回退到蓝色 VGA 文本屏。 |
 | `echo` | `<text>...` | 把参数以单个空格连接后同时打印到屏幕和 COM1 串口。 |
 | `reboot` | — | 通过 ACPI 重启机器。 |
 | `shutdown` | — | 通过 ACPI 关机。 |
-| `tick` | — | 打印 PIT tick 计数。 |
 | `help` | — | 列出全部命令及一行说明。 |
 | `clear` | — | 清空 VGA 文本屏幕。 |
 | `hello` | `[name...]` | 无参数打印 `Hello, my-os!`；有参数打印 `Hello, <name>!`。 |
@@ -35,7 +32,7 @@
 | `fg` | `<pid>` | 恢复某进程的输出显示（转前台）。 |
 | `bg` | `<pid>` | 隐藏某进程的输出（转后台）。 |
 | `kill` | `<pid>` | 按 PID 终止进程。 |
-| `elf` | — | 加载并运行内嵌在内核镜像里的 ELF32 演示程序。 |
+| `elf` | — | 加载并运行内嵌在内核镜像里的 ELF32 演示程序。该程序先注册 `SIGINT` 处理函数并打印 `Hello from ELF32` 等待；Ctrl+C 投递信号后，处理函数打印 `Bye` 并通过 `SYS_EXIT` 退出。 |
 | `disk` | — | 探测 ATA 主盘并挂载 FAT32 文件系统。 |
 | `ls` | `[dir]` | 列出目录（默认当前目录）。目录名带 `/` 后缀和 `<DIR>` 标记；文件显示字节数。 |
 | `cat` | `<file>` | 把文件内容打印到屏幕和串口，最多读取 64 KiB。 |
@@ -56,5 +53,5 @@
   `fat32_list_directory` 遍历的是共享的静态缓冲区。
 - 磁盘和进程类命令的输出同时写到 VGA 屏幕和串口，串口 socket 会话因此可以
   被脚本化驱动。
-- Shell 内输入 `help` 是权威命令清单；本文档对应 `src/os/shell.c` 中的
+- Shell 内输入 `help` 是权威命令清单；本文档对应 `src/shell/shell.c` 中的
   `cmd_table`。
