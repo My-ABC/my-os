@@ -23,7 +23,7 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **Ring 3 processes** — software context switching preempted by PIT IRQ0; up to four user processes, each with a private page table (see `06-memory-isolation.md`)
 - **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
 - **System calls** — `int 0x80` with a two-level class/sub-operation ABI covering console I/O and cursor control, time (`TIME_GET`/`TIME_TO`/`TIME_SLEEP` on a calibrated TSC), user heap, power, process management (`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC`), FAT32 file/directory operations, and signals
-- **mini-libc** — MIT-licensed freestanding user-space C library in `mini-libc/` with raw `int 0x80` wrappers
+- **mini-libc** — MIT-licensed freestanding user-space C library in `mini-libc/`: syscall ABI constants, raw `int 0x80` wrappers, a `_start` entry point (`crt0.S`), and a hello-world example verified under QEMU
 - **Signals** — `SIGINT`/`SIGKILL` with per-process pending state; Ctrl+C delivers `SIGINT` to the foreground process, and user-registered handlers run via a restorer trampoline and `SIG_RETURN`
 - **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; foreground output hides the Shell prompt until the process exits or is backgrounded, while Shell input remains available
 - **Page-fault handling** — ISR14 demand-maps only registered user ranges (ELF image, 32 KiB user stack, user heap) with zeroed pages, kills processes on illegal user access or protection violations, and panics on illegal kernel faults
