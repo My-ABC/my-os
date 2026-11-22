@@ -22,7 +22,7 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` open modes, `PROC_STATE_*` values, and `syscall0`–`syscall3` declarations. Mirrors `include/os/syscall.h`. |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers: fixed-width types, `size_t`/`ptrdiff_t`/`NULL`/`offsetof`, `bool`, integer and float limits |
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
-| `include/stdio.h` `stdarg.h` | Minimal `printf`/`scanf` plus `va_list` builtins |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` plus `va_list` builtins |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
 | `src/string.c` `ctype.c` `stdio.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h` functions |
@@ -52,7 +52,7 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 See the "Implement mini-libc" entry in `TODO.md`:
 
 - `stdlib.h` — heap helpers over `SYS_MEMORY` (`malloc`/`free`/`calloc`/`realloc`)
-- Wider `stdio.h` coverage (`puts`/`putchar`/`fgets`, field widths) if needed
+- `FILE*` streams (`fopen`/`fread`/`fwrite`/`fgets`) over `SYS_FS` fds, if needed
 - High-level wrappers (`open`/`read`/`write`/`exit` style APIs)
 
 ## Build notes

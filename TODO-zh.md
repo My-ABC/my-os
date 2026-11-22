@@ -215,7 +215,7 @@
 - [ ] **实现 mini-libc（`mini-libc/`，MIT 协议）**
   - [ ] 基于大类/子操作 ABI 的系统调用封装（`write`、`read`、`open`/`close`、`malloc` 系列、`exit`、`yield`、信号）。
   - [ ] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装）。
-  - [ ] 精简 `stdio.h`（`printf`/`puts`/`putchar`，基于 `IO_WRITE`）。
+  - [x] `stdio.h` 控制台/字符串覆盖：`printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`，支持标志、宽度、精度。
   - [x] `_start` 入口（`src/crt0.S`）与 ELF32 链接方式，使用户程序可直接链接使用。
   - [x] 用 QEMU 下的 hello-world ELF32 验证（`examples/hello.c`）。
 - [ ] **移植 musl libc**

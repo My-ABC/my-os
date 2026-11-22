@@ -13,13 +13,13 @@ English: [English version](../en/14-mini-libc.md)
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
 | `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | freestanding 基础头文件 |
 | `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
-| `include/stdio.h` `stdarg.h` | 精简 `printf`/`scanf` 与 `va_list` 内建封装 |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` 与 `va_list` 内建封装 |
 | `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
 | `src/string.c` `ctype.c` `stdio.c` | `string.h`/`ctype.h`/`stdio.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
-更多模块（`stdlib.h`、更宽的 `stdio.h` 覆盖、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
+更多模块（`stdlib.h`、基于 `SYS_FS` fd 的 `FILE*` 流、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
 
 ## 调用内核
 
@@ -44,10 +44,10 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 ## stdio
 
-`stdio.h` 刻意保持精简——只有 `printf` 和 `scanf`：
+`stdio.h` 覆盖控制台/字符串接口（暂无 `FILE*` 流）：
 
-- `printf` 支持 `%d` `%i` `%u` `%x` `%X` `%s` `%c` `%p` 和 `%%`；输出先缓冲再经 `IO_WRITE` 冲刷。
-- `scanf` 支持 `%d` `%i` `%u` `%x` `%s` `%c`、字面字符和空白跳过；输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。
+- 输出：`printf`、`sprintf`、`snprintf`、`puts`、`putchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `-` `0` `+` 空格 `#` 标志、字段宽度和精度（可用 `*`）；长度修饰符接受但忽略。控制台输出先缓冲再经 `IO_WRITE` 冲刷。
+- 输入：`scanf`、`sscanf`、`getchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `*` 抑制赋值和字段宽度；控制台输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。
 
 `stdarg.h` 基于 GCC 内建实现 `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy`。
 

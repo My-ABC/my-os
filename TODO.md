@@ -215,7 +215,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Implement mini-libc (`mini-libc/`, MIT licensed)**
   - [ ] Syscall wrappers over the class/sub-op ABI (`write`, `read`, `open`/`close`, `malloc` family, `exit`, `yield`, signals).
   - [ ] `string.h`/`stdlib.h` freestanding implementations (memcpy/memset/strlen/strcmp/malloc wrappers).
-  - [ ] Minimal `stdio.h` (`printf`/`puts`/`putchar` over `IO_WRITE`).
+  - [x] `stdio.h` console/string coverage: `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` with flags, width, precision.
   - [x] `_start` entry (`src/crt0.S`) and ELF32 link recipe so user programs compile against it.
   - [x] Validate with a hello-world ELF32 under QEMU (`examples/hello.c`).
 - [ ] **Port musl libc**
