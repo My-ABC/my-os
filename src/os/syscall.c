@@ -42,25 +42,55 @@ static int sys_signal_check(struct irq_frame *frame) {
     return 0;
 }
 
-/* gets() variant that stops when a signal is delivered or fatal. */
-static void sys_gets(char *buf, int size, struct irq_frame *frame) {
+extern uint32_t syscall_switch_frame;
+
+/* Yield the CPU while waiting for keyboard input. The saved user frame's
+ * EIP is rewound past `int 0x80` (CD 80) so the syscall restarts from
+ * scratch when the process is rescheduled. Only yields when another
+ * Ring 3 process is runnable; otherwise keeps sleeping so the kernel
+ * shell cannot steal the keystroke. Returns nonzero when yielded. */
+static int sys_keyboard_wait_yield(struct irq_frame *frame) {
+    if (ring3_current_pid() == 0U) return 0;
+    uint32_t pids[RING3_PROCESS_COUNT];
+    uint32_t states[RING3_PROCESS_COUNT];
+    uint32_t me = ring3_current_pid();
+    uint32_t n = ring3_process_list(pids, states, RING3_PROCESS_COUNT);
+    int other = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (pids[i] != me &&
+            (states[i] == RING3_PROCESS_READY ||
+             states[i] == RING3_PROCESS_RUNNING)) {
+            other = 1;
+            break;
+        }
+    }
+    if (!other) return 0;
+    frame->eip -= 2;
+    syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
+    return syscall_switch_frame != 0;
+}
+
+/* gets() variant that stops when a signal is delivered, fatal, or the
+ * CPU is yielded to another process (syscall restarts on resume). */
+static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
     while (i < size - 1) {
         char c = keyboard_getchar();
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
-            if (sys_signal_check(frame)) return;
+            if (sys_signal_check(frame)) return 1;
             continue;
         }
         if (c == 0) {
-            if (sys_signal_check(frame)) return;
+            if (sys_signal_check(frame)) return 1;
+            if (sys_keyboard_wait_yield(frame)) return 1;
             __asm__ volatile ("hlt" ::: "memory");
             continue;
         }
         if (c == '\n' || c == '\r') {
             buf[i] = '\0';
             putchar('\n');
-            return;
+            return 0;
         } else if (c == '\b') {
             if (i > 0) {
                 i--;
@@ -74,6 +104,7 @@ static void sys_gets(char *buf, int size, struct irq_frame *frame) {
         }
     }
     buf[i] = '\0';
+    return 0;
 }
 uint32_t syscall_switch_frame;
 
@@ -452,6 +483,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         }
                         if (c != 0) return (uint8_t)c;
                         if (sys_signal_check(frame)) return 0;
+                        if (sys_keyboard_wait_yield(frame)) return 0;
                         __asm__ volatile ("hlt" ::: "memory");
                     }
                 case IO_CLEAR:
