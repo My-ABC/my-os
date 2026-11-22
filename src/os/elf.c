@@ -9,18 +9,12 @@ static int elf32_range_valid(uint32_t start, uint32_t length, uint32_t limit) {
     return start <= limit && length <= limit - start;
 }
 
-static void elf32_release_pages(uint32_t start, uint32_t end) {
-    uint32_t address;
-    for (address = start; address < end; address += PAGE_SIZE) {
-        uint64_t physical = paging_get_page_physical(address);
-        if (physical != 0U) {
-            paging_unmap_page(address);
-            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
-        }
-    }
+static void elf32_release_mm(struct user_mm *mm) {
+    if (mm != 0) paging_mm_release(mm);
 }
 
 int elf32_load(const void *image, uint32_t image_size,
+               struct user_mm *mm,
                struct elf32_loaded_image *loaded) {
     const struct elf32_header *header = (const struct elf32_header *)image;
     uint32_t image_start = 0xFFFFFFFFU;
@@ -28,7 +22,8 @@ int elf32_load(const void *image, uint32_t image_size,
     uint32_t entry_ok = 0U;
     uint32_t index;
 
-    if (image == 0 || loaded == 0 || image_size < sizeof(struct elf32_header)) return -1;
+    if (image == 0 || loaded == 0 || mm == 0 ||
+        image_size < sizeof(struct elf32_header)) return -1;
     if (*(const uint32_t *)header->ident != ELF32_MAGIC ||
         header->ident[4] != ELF32_CLASS || header->ident[5] != ELF32_DATA_LSB ||
         header->ident[6] != ELF32_VERSION_CURRENT || header->type != ELF32_TYPE_EXEC ||
@@ -61,7 +56,7 @@ int elf32_load(const void *image, uint32_t image_size,
     for (uint32_t address = image_start; address < image_end; address += PAGE_SIZE) {
         uint64_t physical;
         uint32_t flags = PAGE_PRESENT | PAGE_USER;
-        if (paging_get_page_physical(address) != 0U) return -6;
+        if (paging_mm_get_phys(mm, address) != 0U) return -6;
         for (index = 0U; index < header->phnum; ++index) {
             const struct elf32_program_header *program =
                 (const struct elf32_program_header *)((const uint8_t *)image +
@@ -76,13 +71,18 @@ int elf32_load(const void *image, uint32_t image_size,
         }
         physical = pmm_alloc_page();
         if (physical == 0U) {
-            elf32_release_pages(image_start, address);
             return -7;
         }
-        paging_map_page(address, physical, flags);
-        memset((void *)address, 0, PAGE_SIZE);
+        paging_mm_map(mm, address, physical, flags);
     }
 
+    /* User pages are only reachable through the process CR3; switch to
+     * the target address space for zeroing and segment copies. */
+    uint32_t saved_cr3 = paging_switch_cr3(mm->pdpt_phys);
+    for (uint32_t address = image_start; address < image_end;
+         address += PAGE_SIZE) {
+        memset((void *)address, 0, PAGE_SIZE);
+    }
     for (index = 0U; index < header->phnum; ++index) {
         const struct elf32_program_header *program =
             (const struct elf32_program_header *)((const uint8_t *)image +
@@ -90,6 +90,7 @@ int elf32_load(const void *image, uint32_t image_size,
         if (program->type == ELF32_PT_LOAD && program->filesz != 0U)
             memcpy((void *)program->vaddr, (const uint8_t *)image + program->offset, program->filesz);
     }
+    paging_switch_cr3(saved_cr3);
 
     loaded->entry = header->entry;
     loaded->image_start = image_start;
@@ -106,19 +107,25 @@ int elf32_load(const void *image, uint32_t image_size,
 
 int elf_run(const void *image, uint32_t image_size) {
     struct elf32_loaded_image loaded;
-    int result = elf32_load(image, image_size, &loaded);
+    struct user_mm *mm = paging_mm_create();
+    int result;
 
+    if (mm == 0) {
+        return -7;
+    }
+    result = elf32_load(image, image_size, mm, &loaded);
     if (result != 0) {
+        elf32_release_mm(mm);
         return result;
     }
 
     serial_print("[ELF] Scheduling Ring 3 entry=");
     serial_print_hex(loaded.entry);
     serial_print("\n");
-    result = ring3_schedule_foreground((void (*)(void))loaded.entry,
-                                       loaded.image_start, loaded.image_end);
+    result = ring3_schedule_mm((void (*)(void))loaded.entry, mm,
+                               loaded.image_start, loaded.image_end, 1);
     if (result != 0) {
-        elf32_release_pages(loaded.image_start, loaded.image_end);
+        elf32_release_mm(mm);
         serial_print("[ELF] Unable to schedule loaded image\n");
         return -8;
     }

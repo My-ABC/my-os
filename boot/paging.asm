@@ -13,3 +13,11 @@ paging_enable:
     or eax, 0x80000000
     mov cr0, eax
     ret
+
+global paging_load_cr3
+
+; 只切换 CR3（PAE 已启用时用于进程地址空间切换）
+paging_load_cr3:
+    mov eax, [esp + 4]
+    mov cr3, eax
+    ret

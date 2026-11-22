@@ -22,6 +22,7 @@ struct ring3_process {
     uint32_t user_stack_top;
     uint32_t image_start;
     uint32_t image_end;
+    struct user_mm *mm;
     uint32_t sig_pending;
     uint32_t sig_blocked;
     uint32_t sig_handler[NSIG];
@@ -69,26 +70,12 @@ static void irq_restore(uint32_t flags) {
     }
 }
 
-static void release_user_stack(uint32_t stack_top) {
-    for (uint32_t address = stack_top - USER_STACK_SIZE;
-         address < stack_top; address += PAGE_SIZE) {
-        uint64_t physical = paging_get_page_physical(address);
-        if (physical != 0U) {
-            paging_unmap_page(address);
-            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
-        }
-    }
-}
-
 static void release_process_resources(struct ring3_process *process) {
-    release_user_stack(process->user_stack_top);
-    for (uint32_t address = process->image_start;
-         address < process->image_end; address += PAGE_SIZE) {
-        uint64_t physical = paging_get_page_physical(address);
-        if (physical != 0U) {
-            paging_unmap_page(address);
-            pmm_free_page(physical & ~(uint64_t)(PAGE_SIZE - 1U));
-        }
+    /* The mm owns every user page (stack, image, heap, signal pages);
+     * releasing it frees them all plus the private page tables. */
+    if (process->mm != 0) {
+        paging_mm_release(process->mm);
+        process->mm = 0;
     }
     process->image_start = 0U;
     process->image_end = 0U;
@@ -105,7 +92,39 @@ static int find_runnable_process(void) {
     return -1;
 }
 
+/* Write the sigreturn restorer stub into a freshly allocated physical
+ * page through the KMAP window, then map it into the process address
+ * space. Runs at schedule time so every process owns its trampoline. */
+static int mm_install_sig_trampoline(struct user_mm *mm) {
+    uint64_t physical = pmm_alloc_page();
+    if (physical == 0U) return 0;
+    volatile uint8_t *code =
+        (volatile uint8_t *)paging_map_physical(physical);
+    if (code == 0) {
+        pmm_free_page(physical);
+        return 0;
+    }
+    /* mov eax, SYS_SIGRETURN ; int 0x80 */
+    code[0] = 0xB8U;
+    code[1] = 24U;
+    code[2] = 0U;
+    code[3] = 0U;
+    code[4] = 0U;
+    code[5] = 0xCDU;
+    code[6] = 0x80U;
+    for (uint32_t i = 7; i < PAGE_SIZE; ++i) code[i] = 0x90U;
+    paging_unmap_physical();
+    paging_mm_map(mm, USER_SIG_TRAMPOLINE, physical,
+                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_mm_get_phys(mm, USER_SIG_TRAMPOLINE) == 0U) {
+        pmm_free_page(physical);
+        return 0;
+    }
+    return 1;
+}
+
 static int ring3_schedule_internal(void (*func)(void),
+                                  struct user_mm *mm,
                                   uint32_t image_start, uint32_t image_end,
                                   int foreground) {
     uint32_t flags = irq_save();
@@ -136,16 +155,31 @@ static int ring3_schedule_internal(void (*func)(void),
         return -1;
     }
 
+    if (mm == 0) {
+        mm = paging_mm_create();
+        if (mm == 0) {
+            irq_restore(flags);
+            return -1;
+        }
+    }
+
     uint32_t stack_top = (i == 0U) ? USER_STACK_TOP_0 : USER_STACK_TOP_1;
     uint64_t physical = pmm_alloc_page();
     if (physical == 0U) {
+        if (mm != 0) paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }
-    paging_map_page(stack_top - PAGE_SIZE, physical,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    if (paging_get_page_physical(stack_top - PAGE_SIZE) == 0U) {
+    paging_mm_map(mm, stack_top - PAGE_SIZE, physical,
+                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_mm_get_phys(mm, stack_top - PAGE_SIZE) == 0U) {
         pmm_free_page(physical);
+        if (mm != 0) paging_mm_release(mm);
+        irq_restore(flags);
+        return -1;
+    }
+    if (!mm_install_sig_trampoline(mm)) {
+        paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }
@@ -180,6 +214,7 @@ static int ring3_schedule_internal(void (*func)(void),
     processes[i].user_stack_top = stack_top;
     processes[i].image_start = image_start;
     processes[i].image_end = image_end;
+    processes[i].mm = mm;
     processes[i].sig_pending = 0U;
     processes[i].sig_blocked = 0U;
     for (uint32_t s = 0; s < NSIG; ++s) {
@@ -195,12 +230,14 @@ static int ring3_schedule_internal(void (*func)(void),
 }
 
 int ring3_schedule(void (*func)(void)) {
-    return ring3_schedule_internal(func, 0U, 0U, 0);
+    return ring3_schedule_mm(func, 0, 0U, 0U, 0);
 }
 
-int ring3_schedule_foreground(void (*func)(void),
-                             uint32_t image_start, uint32_t image_end) {
-    return ring3_schedule_internal(func, image_start, image_end, 1);
+int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
+                      uint32_t image_start, uint32_t image_end,
+                      int foreground) {
+    return ring3_schedule_internal(func, mm, image_start, image_end,
+                                   foreground);
 }
 
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
@@ -217,10 +254,14 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
             process->frame = frame;
             process->state = RING3_PROCESS_READY;
         } else {
+            /* Release on the kernel page directory: the dying process's
+             * CR3 may lack mappings the teardown path needs. */
+            paging_switch_cr3(paging_kernel_cr3());
             release_process_resources(process);
         }
         current_process = -1;
         tss_set_kernel_stack((uint32_t)stack_top);
+        paging_switch_cr3(paging_kernel_cr3());
         return kernel_frame;
     }
 
@@ -235,6 +276,9 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     processes[next].state = RING3_PROCESS_RUNNING;
     tss_set_kernel_stack((uint32_t)user_kernel_stacks[next]
                          + RING3_KERNEL_STACK_SIZE);
+    if (processes[next].mm != 0) {
+        paging_switch_cr3(processes[next].mm->pdpt_phys);
+    }
     return processes[next].frame;
 }
 
@@ -251,8 +295,14 @@ struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
     process->state = RING3_PROCESS_READY;
     current_process = -1;
     tss_set_kernel_stack((uint32_t)stack_top);
+    paging_switch_cr3(paging_kernel_cr3());
     /* Keep IRQs disabled until the assembly stub switches back to the shell. */
     return kernel_frame;
+}
+
+struct user_mm *ring3_current_mm(void) {
+    if (current_process < 0) return 0;
+    return processes[(uint32_t)current_process].mm;
 }
 
 uint32_t ring3_current_pid(void) {
@@ -308,20 +358,21 @@ int ring3_set_background(uint32_t pid) {
 }
 
 int ring3_user_range_permitted(uint32_t addr) {
-    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
-        struct ring3_process *process = &processes[i];
-        if (process->state != RING3_PROCESS_READY &&
-            process->state != RING3_PROCESS_RUNNING) {
-            continue;
-        }
-        if (process->image_start != 0U &&
-            addr >= process->image_start && addr < process->image_end) {
-            return 1;
-        }
-        if (addr >= process->user_stack_top - USER_STACK_SIZE &&
-            addr < process->user_stack_top) {
-            return 1;
-        }
+    /* A page fault can only belong to the currently running process now
+     * that each process owns a private address space. */
+    if (current_process < 0) return 0;
+    struct ring3_process *process = &processes[(uint32_t)current_process];
+    if (process->state != RING3_PROCESS_READY &&
+        process->state != RING3_PROCESS_RUNNING) {
+        return 0;
+    }
+    if (process->image_start != 0U &&
+        addr >= process->image_start && addr < process->image_end) {
+        return 1;
+    }
+    if (addr >= process->user_stack_top - USER_STACK_SIZE &&
+        addr < process->user_stack_top) {
+        return 1;
     }
     return 0;
 }
@@ -336,6 +387,8 @@ struct irq_frame *ring3_terminate_current(void) {
     uint32_t pid = process->pid;
     process->state = RING3_PROCESS_DEAD;
     if (foreground_pid == pid) foreground_pid = 0U;
+    /* Tear down on the kernel page directory before releasing the mm. */
+    paging_switch_cr3(paging_kernel_cr3());
     release_process_resources(process);
     current_process = -1;
     tss_set_kernel_stack((uint32_t)stack_top);
@@ -395,48 +448,27 @@ static uint32_t sig_actionable(struct ring3_process *p, uint32_t *handled) {
     return fatal;
 }
 
-static int sig_trampoline_ready;
-
-/* The restorer is a fixed user page shared by all processes: it invokes
- * SYS_SIGRETURN, which restores the frame saved at delivery time. Bytes
- * after int 0x80 are NOPs; falling through hits an unmapped page and the
- * fault path kills the process. */
-static int sig_ensure_trampoline(void) {
-    if (sig_trampoline_ready) return 1;
-    uint64_t physical = pmm_alloc_page();
-    if (physical == 0U) return 0;
-    paging_map_page(USER_SIG_TRAMPOLINE, physical,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    if (paging_get_page_physical(USER_SIG_TRAMPOLINE) == 0U) {
-        pmm_free_page(physical);
-        return 0;
-    }
-    volatile uint8_t *code = (volatile uint8_t *)USER_SIG_TRAMPOLINE;
-    /* mov eax, SYS_SIGRETURN ; int 0x80 */
-    code[0] = 0xB8U;
-    code[1] = 24U;
-    code[2] = 0U;
-    code[3] = 0U;
-    code[4] = 0U;
-    code[5] = 0xCDU;
-    code[6] = 0x80U;
-    for (uint32_t i = 7; i < PAGE_SIZE; ++i) code[i] = 0x90U;
-    sig_trampoline_ready = 1;
-    return 1;
-}
-
-static int sig_ensure_user_page(uint32_t addr) {
+/* Map a fresh zeroed user page into `mm`. The page is cleared through
+ * the KMAP window so this works for processes that are not running. */
+static int sig_ensure_user_page(struct user_mm *mm, uint32_t addr) {
     uint32_t page = addr & ~(PAGE_SIZE - 1U);
-    if (paging_get_page_physical(page) != 0U) return 1;
+    if (paging_mm_get_phys(mm, page) != 0U) return 1;
     uint64_t physical = pmm_alloc_page();
     if (physical == 0U) return 0;
-    paging_map_page(page, physical,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    if (paging_get_page_physical(page) == 0U) {
+    volatile uint8_t *zero =
+        (volatile uint8_t *)paging_map_physical(physical);
+    if (zero == 0) {
         pmm_free_page(physical);
         return 0;
     }
-    memset((void *)(uintptr_t)page, 0, PAGE_SIZE);
+    memset((void *)zero, 0, PAGE_SIZE);
+    paging_unmap_physical();
+    paging_mm_map(mm, page, physical,
+                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_mm_get_phys(mm, page) == 0U) {
+        pmm_free_page(physical);
+        return 0;
+    }
     return 1;
 }
 
@@ -447,11 +479,12 @@ static int sig_ensure_user_page(uint32_t addr) {
 static int sig_deliver(struct ring3_process *p, uint32_t sig,
                        struct irq_frame *frame) {
     if ((frame->cs & 3U) != 3U || p->sig_active != 0U ||
-        !sig_ensure_trampoline()) {
+        p->mm == 0) {
         return 0;
     }
     uint32_t sp = (frame->useresp - 16U) & ~0xFU;
-    if (!sig_ensure_user_page(sp) || !sig_ensure_user_page(sp + 4U)) {
+    if (!sig_ensure_user_page(p->mm, sp) ||
+        !sig_ensure_user_page(p->mm, sp + 4U)) {
         return 0;
     }
 
@@ -460,9 +493,13 @@ static int sig_deliver(struct ring3_process *p, uint32_t sig,
     p->sig_blocked |= 1U << sig;
     p->sig_pending &= ~(1U << sig);
 
+    /* The user stack lives in the target process's private address
+     * space; switch CR3 briefly to write the call frame. */
+    uint32_t saved_cr3 = paging_switch_cr3(p->mm->pdpt_phys);
     volatile uint32_t *stack = (volatile uint32_t *)sp;
     stack[0] = USER_SIG_TRAMPOLINE;
     stack[1] = sig;
+    paging_switch_cr3(saved_cr3);
 
     frame->eip = p->sig_handler[sig];
     frame->useresp = sp;

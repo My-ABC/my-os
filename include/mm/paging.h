@@ -57,6 +57,7 @@ struct page_table {
 #define PAGE_WRITABLE   0x02    // 页可写
 #define PAGE_USER       0x04    // 用户态可访问
 #define PAGE_GLOBAL     0x100   // 全局页
+#define PAGE_BORROWED   0x200   // 内核借出的页：mm_release 不回收物理页
 
 // 对齐到页边界
 #define PAGE_ALIGN(addr) (((addr) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1))
@@ -88,5 +89,31 @@ void paging_flush_tlb(uint32_t virtual_addr);
 
 // 判断虚拟地址是否属于用户空间
 uint32_t paging_is_user_address(uint32_t virtual_addr);
+
+/* ---- per-process user address spaces ----
+ * Each user_mm owns a private PDPT[0]->PD chain covering the low 1 GiB of
+ * user space; PDPT[3] is shared with the kernel page directory so the
+ * kernel half (including the KMAP window) is identical in every space.
+ * Table edits go through the KMAP window and do not depend on the
+ * currently loaded CR3. */
+#define USER_MM_MAX          8U
+#define USER_MM_SPACE_LIMIT  0x40000000U  /* PDPT[0] covers 0..1 GiB */
+
+struct user_mm {
+    uint32_t slot;
+    uint32_t pdpt_phys;   /* value to load into CR3 */
+};
+
+struct user_mm *paging_mm_create(void);
+void paging_mm_release(struct user_mm *mm);
+void paging_mm_map(struct user_mm *mm, uint32_t virtual_addr,
+                   uint64_t physical_addr, uint32_t flags);
+void paging_mm_unmap(struct user_mm *mm, uint32_t virtual_addr);
+uint64_t paging_mm_get_phys(struct user_mm *mm, uint32_t virtual_addr);
+
+/* Load a new CR3 and return the previously active one. Loading CR3
+ * flushes non-global TLB entries. */
+uint32_t paging_switch_cr3(uint32_t phys);
+uint32_t paging_kernel_cr3(void);
 
 #endif

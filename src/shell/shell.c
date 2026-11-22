@@ -238,16 +238,23 @@ int cmd_hello(int argc, char *argv[]) {
 int cmd_ring3(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
-    paging_map_page((uint32_t)user_entry, (uint32_t)user_entry,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    if (paging_get_page_physical((uint32_t)user_entry) == 0U) {
+    struct user_mm *mm = paging_mm_create();
+    if (mm == 0) {
+        printf("Unable to start a Ring 3 process (out of memory)\n");
+        return -1;
+    }
+    paging_mm_map(mm, (uint32_t)user_entry, (uint32_t)user_entry,
+                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER | PAGE_BORROWED);
+    if (paging_mm_get_phys(mm, (uint32_t)user_entry) == 0U) {
+        paging_mm_release(mm);
         printf("Unable to map Ring 3 code\n");
         return -1;
     }
     serial_print("[RING3] Scheduling user function at ");
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
-    if (ring3_schedule(user_entry) != 0) {
+    if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 0) != 0) {
+        paging_mm_release(mm);
         printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
         return -1;
     }
