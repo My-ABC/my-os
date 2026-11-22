@@ -20,6 +20,9 @@
 #define SYSFS_MAX_FDS 8U
 #define SYSFS_PATH_MAX 128U
 
+extern const uint8_t elf_demo_start[];
+extern const uint8_t elf_demo_end[];
+
 /* Set by PROC_EXIT; the syscall stub switches to this kernel frame instead
  * of returning to the exiting process. */
 uint32_t syscall_exit_frame;
@@ -497,6 +500,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case IO_CURSOR_SET:
                     vga_set_cursor((uint16_t)a1, (uint16_t)a2);
                     return 0;
+                case IO_CONSOLE_INFO:
+                    return ((uint32_t)vga_rows() << 16) | vga_columns();
                 default:
                     return 0;
             }
@@ -574,6 +579,11 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return 0;
                 }
                 case PROC_YIELD:
+                    /* A process spinning in a yield loop (e.g. a shell
+                     * waiting for a foreground child) never enters a
+                     * blocking wait, so this is the only place a
+                     * pending fatal/handled signal can be noticed. */
+                    if (sys_signal_check(frame)) return 0;
                     syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
                     return 0;
                 case PROC_LIST: {
@@ -588,7 +598,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         uint32_t *rec = (uint32_t *)(a1 + i * 12U);
                         rec[0] = pids[i];
                         rec[1] = states[i];
-                        rec[2] = pids[i] == fg ? 1U : 0U;
+                        rec[2] = (fg != 0U && pids[i] == fg) ? 1U : 0U;
                     }
                     return count;
                 }
@@ -612,6 +622,26 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     if (rc == 0) rc = elf_run(image, size);
                     kfree(image);
                     return rc == 0 ? 0U : (uint32_t)-1;
+                }
+                case PROC_RUN_DEMO: {
+                    uint32_t size =
+                        (uint32_t)(elf_demo_end - elf_demo_start);
+                    return elf_run(elf_demo_start, size) == 0
+                           ? 0U : (uint32_t)-1;
+                }
+                case PROC_RUN_USERCODE: {
+                    struct user_mm *mm = paging_mm_create();
+                    if (mm == 0) return (uint32_t)-1;
+                    paging_mm_map(mm, (uint32_t)user_entry,
+                                  (uint32_t)user_entry,
+                                  PAGE_PRESENT | PAGE_WRITABLE |
+                                  PAGE_USER | PAGE_BORROWED);
+                    if (paging_mm_get_phys(mm, (uint32_t)user_entry) == 0U) {
+                        paging_mm_release(mm);
+                        return (uint32_t)-1;
+                    }
+                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) == 0
+                           ? 0U : (uint32_t)-1;
                 }
                 default:
                     return 0;
@@ -706,10 +736,13 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     sysfs_readdir_ctx.len = 0;
                     sysfs_readdir_ctx.cap = 4096;
                     int rc = fat32_list_directory(path, sysfs_readdir_cb);
-                    if (rc == 0 && sysfs_readdir_ctx.len > 0) {
+                    if (rc == 0) {
                         uint32_t copy = sysfs_readdir_ctx.len < a3
                                         ? sysfs_readdir_ctx.len : a3;
-                        memcpy((void *)a2, sysfs_readdir_ctx.buf, copy);
+                        if (copy > 0) {
+                            memcpy((void *)a2, sysfs_readdir_ctx.buf,
+                                   copy);
+                        }
                         rc = (int)copy;
                     } else {
                         rc = -1;
@@ -723,7 +756,19 @@ uint32_t syscall_handler(struct irq_frame *frame) {
         case SYS_SIG:
             switch (op) {
                 case SIG_KILL:
-                    return ring3_signal_send(a1, a2) == 0 ? 0 : (uint32_t)-1;
+                    if (ring3_signal_send(a1, a2) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    /* A self-directed signal must take effect inside this
+                     * syscall: otherwise `kill <self>` returns to user mode
+                     * and the caller keeps running (printing a stray prompt)
+                     * until its next blocking wait notices the pending
+                     * fatal signal. */
+                    if (a1 == ring3_current_pid() &&
+                        sys_signal_check(frame)) {
+                        return 0;
+                    }
+                    return 0;
                 case SIG_SIGNAL:
                     return ring3_signal_set_handler(a1, a2) == 0 ? 0 : (uint32_t)-1;
                 case SIG_RETURN:

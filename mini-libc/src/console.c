@@ -22,3 +22,11 @@ int con_cursor_get(uint16_t *row, uint16_t *col) {
 int con_cursor_set(uint16_t row, uint16_t col) {
     return syscall2(SYS_IO, IO_CURSOR_SET, row, col) == 0 ? 0 : -1;
 }
+
+int con_size(uint16_t *rows, uint16_t *cols) {
+    if (rows == 0 || cols == 0) return -1;
+    uint32_t rc = syscall0(SYS_IO, IO_CONSOLE_INFO);
+    *rows = (uint16_t)(rc >> 16);
+    *cols = (uint16_t)(rc & 0xFFFF);
+    return 0;
+}

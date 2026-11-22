@@ -80,9 +80,9 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Route kernel diagnostics through the log and add a `dmesg`-style shell command to dump or review it.
   - [ ] Define wraparound behavior, SMP-ready locking, and log-level filtering.
 - [ ] **Complete the Shell and migrate it to Ring 3**
-  - [ ] Gradually move command parsing, interaction, and built-ins out of the kernel.
-  - [ ] Use system calls to access the console, filesystem, processes, and devices.
-  - [ ] Provide basic command-line editing, history, error codes, and executable search. (Editing, 16-entry history, `\n`/`\\`/`\"` escapes, and differentiated ELF errors are done; executable search/PATH lookup is not.)
+  - [x] Gradually move command parsing, interaction, and built-ins out of the kernel. (`src/shell/shell_ring3.c` + `include/shell/shell_ring3.h`, built as `build/shell3.elf` via `make shell3`.)
+  - [x] Use system calls to access the console, filesystem, processes, and devices.
+  - [ ] Provide basic command-line editing, history, error codes, and executable search. (Kernel shell: editing, 16-entry history, `\n`/`\\`/`\"` escapes, and differentiated ELF errors are done; executable search/PATH lookup is not.)
   - [ ] Ensure the kernel can recover control if the user Shell crashes or exits.
 
 ## Inter-Process Communication
@@ -135,6 +135,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
   - [ ] Parse MADT to provide processor and interrupt-controller information.
   - [ ] Evaluate HPET, MCFG, and related hardware support.
+  - [ ] Make `shutdown`/`reboot` actually power off/reset under QEMU: the PM1a S5 write and all reset fallbacks (FADT reset register, port 0xCF9, keyboard pulse, triple fault) currently leave the guest running — likely an AML/DSDT or PM1 register-width issue; verify with the `power.elf` mini-libc test (`make test-libmyc`).
   - [ ] Improve power-state and shutdown/reboot error handling, and evaluate AML/DSDT support.
 
 ## Concurrency and Memory

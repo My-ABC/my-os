@@ -8,13 +8,13 @@ English: [English version](../en/14-mini-libc.md)
 
 ## API 参考
 
-`docs/en/mini-libc/` and `docs/zh/mini-libc/` 是按头文件组织的双语 API
-参考（每个公开头文件一章）；头文件
+`docs/en/mini-libc/` 和 `docs/zh/mini-libc/` 是按头文件
+组织的双语 API 参考（每个公开头文件一章）；头文件
 变更时需同步更新。
 
 ## 测试
 
-`test/mini-libc/` 是 QEMU 集成测试套件（`run_tests.py`）：
+`mini-libc/test/` 是 QEMU 集成测试套件（`run_tests.py`）：
 按子系统分目录的测试 ELF——`core/`（string、ctype、
 stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
 `os/`（errno、time、unistd）、`negative/`（assert 失败）。
@@ -36,7 +36,6 @@ stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
 | `include/unistd.h` `sys/types.h` | 基于 `SYS_PROCESS`/`SYS_FS` 的进程/fd/路径 API：`_exit`/`getpid`/`sched_yield`/`execve`，`read`/`write`/`close`，`unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`；内核不支持的调用返回 `ENOSYS` |
 | `include/assert.h` | `assert(e)`——失败时向 stdout 打印表达式/文件/函数/行号后 `abort()`；`NDEBUG` 下编译为空 |
 | `include/signal.h` | 基于 `SYS_SIG` 的 `signal`/`kill`/`raise`，`sig_t`、`SIGINT`/`SIGKILL`、`SIG_DFL`/`SIG_IGN`（SIGINT 可捕获、SIGKILL 必杀；无屏蔽 API） |
-| `include/console.h` | 基于 `SYS_IO` 的 `con_getchar`/`con_clear`/`con_cursor_get`/`con_cursor_set`（行编辑原语） |
 | `include/process.h` | 基于 `SYS_PROCESS` 的 `proc_list`/`proc_set_foreground`/`proc_foreground`（`PROC_LIST`/`PROC_SET_FG`） |
 | `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` 长度宏，`imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax`（LP32 下 `intmax_t`=int） |
 | `include/stdnoreturn.h` | `noreturn` 宏 → `_Noreturn`（纯头文件） |
@@ -45,7 +44,7 @@ stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |
 | `syscall.S` `setjmp.S` | `int 0x80` 原始包装 `syscall0`–`syscall3`（cdecl）；`setjmp`/`longjmp` 寄存器/栈保存恢复桩 |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` 的 freestanding 实现 |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
 更多模块（`signal.h`、宽字符支持、`FILE*` 缓冲、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
@@ -76,7 +75,7 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 `stdio.h` 覆盖控制台/字符串接口（暂无 `FILE*` 流）：
 
 - 输出：`printf`、`sprintf`、`snprintf`、`puts`、`putchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `-` `0` `+` 空格 `#` 标志、字段宽度和精度（可用 `*`）；长度修饰符接受但忽略。控制台输出先缓冲再经 `IO_WRITE` 冲刷。
-- 输入：`scanf`、`sscanf`、`getchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `*` 抑制赋值和字段宽度；控制台输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。
+- 输入：`scanf`、`sscanf`、`getchar`、`getline`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `*` 抑制赋值和字段宽度；控制台输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。`getline(buf, size)` 直接经 `IO_READ` 读取整行（内核负责回显与退格）并返回行长；它绕过 scanf 的 pushback 缓冲区，不要与 `getchar`/`scanf` 混用。
 
 `stdarg.h` 基于 GCC 内建实现 `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy`。
 

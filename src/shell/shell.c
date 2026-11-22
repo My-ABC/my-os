@@ -253,13 +253,13 @@ int cmd_ring3(int argc, char *argv[]) {
     serial_print("[RING3] Scheduling user function at ");
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
-    if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 0) != 0) {
+    if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) != 0) {
         paging_mm_release(mm);
         printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
         return -1;
     }
-    printf("Started a Ring 3 process in background; use ps then fg <pid>\n");
-    serial_print("[RING3] Started one background process\n");
+    printf("Started a Ring 3 process in foreground; use bg <pid> to hide it\n");
+    serial_print("[RING3] Started one foreground process\n");
     return 0;
 }
 
@@ -941,6 +941,16 @@ static void shell_read_line(char *line, int size) {
             prompt_visible = 0;
         }
 
+        /* A foreground Ring 3 process owns the console AND the keyboard:
+         * leave keys buffered for it (or for us after it exits) instead
+         * of consuming them here. bg/kill while a task is foreground is
+         * handled by the Ring 3 shell; Ctrl+C still reaches the child
+         * through its own IO_GETCHAR/IO_READ waits. */
+        if (ring3_foreground_pid() != 0U) {
+            __asm__ volatile ("sti; hlt" : : : "memory");
+            continue;
+        }
+
         if (!keyboard_hit()) {
             __asm__ volatile ("sti; hlt" : : : "memory");
             continue;
@@ -1059,8 +1069,16 @@ static void shell_read_line(char *line, int size) {
                 --length;
                 --cursor;
                 line[length] = '\0';
-                shell_paint_line(line, length, cursor, length + 1,
-                                 origin_row, origin_col);
+                if (cursor == length) {
+                    /* erasing the last char: cheap backspace sequence,
+                     * avoids a full-line repaint (slow under VBE) */
+                    putchar('\b');
+                    putchar(' ');
+                    putchar('\b');
+                } else {
+                    shell_paint_line(line, length, cursor, length + 1,
+                                     origin_row, origin_col);
+                }
             }
             continue;
         }
@@ -1071,10 +1089,38 @@ static void shell_read_line(char *line, int size) {
             ++length;
             ++cursor;
             line[length] = '\0';
-            shell_paint_line(line, length, cursor, length - 1,
-                             origin_row, origin_col);
+            if (cursor == length) {
+                /* appended at end of line: the console cursor is already
+                 * in place; echo one char instead of repainting the
+                 * whole line (O(n) putchars per key overflows the
+                 * keyboard buffer under VBE) */
+                putchar(c);
+            } else {
+                shell_paint_line(line, length, cursor, length - 1,
+                                 origin_row, origin_col);
+            }
         }
     }
+}
+
+/* Boot straight into the Ring 3 user shell when the mounted disk
+ * carries shell3.elf at its root (the disk-shell.img built by
+ * `make disk-shell`). elf_run takes the foreground slot, so the
+ * kernel shell loop below stays silent until the process exits. */
+static int shell_autostart_ring3(void) {
+    if (!fat32_mounted()) return 0;
+    uint8_t *image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+    if (image == 0) return 0;
+    uint32_t size = 0U;
+    int launched = 0;
+    if (fat32_read_file("/shell3.elf", image, FAT32_MAX_FILE_SIZE,
+                        &size) == 0 &&
+        elf_run(image, size) == 0) {
+        launched = 1;
+        serial_print("[SHELL] Auto-started /shell3.elf (Ring 3 shell)\n");
+    }
+    kfree(image);
+    return launched;
 }
 
 void start_shell(void) {
@@ -1083,8 +1129,10 @@ void start_shell(void) {
     int argc;
 
     vga_clear();
-    printf("MyOS Shell\n");
-    printf("Type 'help' for available commands.\n");
+    if (!shell_autostart_ring3()) {
+        printf("MyOS Shell\n");
+        printf("Type 'help' for available commands.\n");
+    }
 
     while (1) {
         shell_read_line(line, sizeof(line));
