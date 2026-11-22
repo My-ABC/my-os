@@ -11,8 +11,10 @@ It wraps the `int 0x80` class/sub-operation syscall ABI so user programs can be 
 |------|----------|
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
+| `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
+| `examples/hello.c` | Minimal Ring 3 hello-world |
 
-More modules (`string.h`, `stdlib.h`, `stdio.h`, `_start`) are planned — see the TODO entry "Implement mini-libc".
+More modules (`string.h`, `stdlib.h`, `stdio.h`, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
 
 ## Calling the kernel
 
@@ -37,11 +39,16 @@ Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, whi
 
 ## Build notes
 
-Compile with the same freestanding toolchain used for the kernel, e.g.:
+Compile `crt0.S`, `syscall.S`, and the program sources together into a
+static ELF32 with entry point `_start`, e.g.:
 
 ```sh
 i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -c mini-libc/syscall.S -o syscall.o
+    -nostdlib -I mini-libc/include \
+    mini-libc/src/crt0.S mini-libc/syscall.S program.c -o program.elf
 ```
 
-Link the result into a static ELF32 whose entry point is `_start`; load it with the shell `run` command or `PROC_EXEC`.
+`crt0` hands `main` a fabricated `argc`/`argv`/`envp` frame (the kernel
+starts user processes with an empty stack), forwards `main`'s return value
+to `PROC_EXIT`, and never returns. Load the resulting ELF with the shell
+`run` command or `PROC_EXEC`.

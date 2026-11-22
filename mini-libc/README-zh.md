@@ -18,6 +18,8 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 |------|------|
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 打开模式、`PROC_STATE_*` 状态值，以及 `syscall0`–`syscall3` 声明。与 `include/os/syscall.h` 对齐。 |
 | `syscall.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl 约定） |
+| `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
+| `examples/hello.c` | 使用 syscall 封装的最小 Ring 3 hello-world |
 
 ## 调用内核
 
@@ -44,20 +46,24 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 - `string.h` / `stdlib.h` — 纯函数与基于 `SYS_MEMORY` 的堆辅助
 - `stdio.h` — 基于 `IO_WRITE` 的精简 `printf`/`puts`
-- `_start` — ELF 入口点、栈初始化、`main` 分发
 - 高层封装（`open`/`read`/`write`/`malloc` 风格 API）
 
 ## 构建说明
 
-使用与内核相同的 freestanding 工具链：
+使用与内核相同的 freestanding 工具链。把 `crt0.S`、`syscall.S` 和
+程序源码一起编译链接：
 
 ```sh
 i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -c mini-libc/syscall.S -o syscall.o
+    -nostdlib -I mini-libc/include \
+    mini-libc/src/crt0.S mini-libc/syscall.S mini-libc/examples/hello.c \
+    -o hello.elf
 ```
 
-用户程序用 `-I mini-libc/include` 编译，链接为入口点为 `_start` 的
-静态 ELF32。可通过 shell 的 `run` 命令或 `PROC_EXEC` syscall 加载。
+产物是入口点为 `_start` 的静态 ELF32；`crt0` 调用 `main`，把返回值
+作为 `PROC_EXIT` 参数传出，随后不再返回。用户程序用
+`-I mini-libc/include` 编译。可通过 shell 的 `run` 命令或
+`PROC_EXEC` syscall 加载。
 
 ## 开发分支
 

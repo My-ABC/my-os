@@ -11,8 +11,10 @@ English: [English version](../en/14-mini-libc.md)
 |------|------|
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
 | `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
+| `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
+| `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
-更多模块（`string.h`、`stdlib.h`、`stdio.h`、`_start`）计划中——见 TODO "实现 mini-libc" 条目。
+更多模块（`string.h`、`stdlib.h`、`stdio.h`、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
 
 ## 调用内核
 
@@ -37,11 +39,15 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 ## 构建说明
 
-使用与内核相同的 freestanding 工具链，例如：
+把 `crt0.S`、`syscall.S` 和程序源码一起编译链接为入口点为
+`_start` 的静态 ELF32，例如：
 
 ```sh
 i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -c mini-libc/syscall.S -o syscall.o
+    -nostdlib -I mini-libc/include \
+    mini-libc/src/crt0.S mini-libc/syscall.S program.c -o program.elf
 ```
 
-将产物链接进入口为 `_start` 的静态 ELF32，用 Shell 的 `run` 命令或 `PROC_EXEC` 装载运行。
+内核启动用户进程时栈为空，`crt0` 为 `main` 构造 `argc`/`argv`/`envp`
+调用帧，把 `main` 返回值作为 `PROC_EXIT` 参数传出，随后不再返回。
+用 Shell 的 `run` 命令或 `PROC_EXEC` 装载生成的 ELF 运行。
