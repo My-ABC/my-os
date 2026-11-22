@@ -1,6 +1,6 @@
 # 08 — 文件系统（ATA 上的 FAT32）
 
-[English](../en/08-filesystem.md) | 中文
+[English](../en/09-filesystem.md) | 中文
 
 ## ATA 层（`src/drivers/ata.c`）
 

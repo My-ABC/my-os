@@ -1,6 +1,6 @@
 # 10 — 构建与测试
 
-[English](../en/10-build-and-test.md) | 中文
+[English](../en/11-build-and-test.md) | 中文
 
 ## 构建
 

@@ -103,7 +103,7 @@
 ## 硬件、设备与 ACPI
 
 - [ ] **梳理并枚举驱动生态缺口**
-  - [x] 盘点现有 ATA、键盘、PIC/PIT、RTC、VGA/VBE、ACPI 驱动的能力和限制。（见 `docs/en/11-driver-gaps.md` / `docs/zh/11-driver-gaps.md`。）
+  - [x] 盘点现有 ATA、键盘、PIC/PIT、RTC、VGA/VBE、ACPI 驱动的能力和限制。（见 `docs/en/12-driver-gaps.md` / `docs/zh/12-driver-gaps.md`。）
   - [x] 按总线和设备类别列出缺失驱动、优先级及对应测试设备。（同一文档，含建议引入顺序。）
   - [ ] 基于实际需求逐项选择和实现驱动，不预先承诺完整兼容性。
 - [ ] **建立设备子系统**
@@ -115,7 +115,7 @@
   - [ ] 枚举总线/设备/功能，读取厂商/设备 ID 和类代码；通过串口输出总线映射。
   - [ ] 发现并分配 BAR（内存和 I/O 窗口），不与现有 ISA 设备冲突。
   - [ ] 提供基础的 INTx 中断路由，让 PCI 设备能向 PIC/APIC 发信号。
-  - [ ] 按 `docs/zh/11-driver-gaps.md` 用 QEMU `-device` 设备（e1000、ich9-ahci、qemu-xhci、bochs-display）验证。
+  - [ ] 按 `docs/zh/12-driver-gaps.md` 用 QEMU `-device` 设备（e1000、ich9-ahci、qemu-xhci、bochs-display）验证。
 - [ ] **增加 GPU 支持**
   - [ ] 枚举显示类 PCI 设备并识别 GPU 候选（bochs-display、virtio-gpu、VMware SVGA、QXL）。
   - [ ] 扩展 framebuffer 抽象以覆盖 GPU 提供的扫描输出表面。

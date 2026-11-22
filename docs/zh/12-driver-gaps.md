@@ -1,6 +1,6 @@
 # 11 — 驱动生态盘点与缺口
 
-[English](../en/11-driver-gaps.md) | 中文
+[English](../en/12-driver-gaps.md) | 中文
 
 本文盘点 `src/drivers/` 中现有驱动的能力与限制，按总线/设备类别列出
 缺失驱动、优先级和对应的 QEMU 测试设备。它对应 `TODO.md` 中"梳理并

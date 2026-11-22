@@ -1,4 +1,4 @@
-# 12 — 信号
+# 13 — 信号
 
 MyOS 为 Ring 3 进程实现了基础的信号机制。信号编号定义于
 `include/os/signal.h`。

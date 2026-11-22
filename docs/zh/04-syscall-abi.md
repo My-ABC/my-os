@@ -81,7 +81,7 @@ English: [English version](../en/04-syscall-abi.md)
 
 ## 信号
 
-信号机制详见 [12-signals.md](12-signals.md)：信号编号、每进程
+信号机制详见 [13-signals.md](13-signals.md)：信号编号、每进程
 pending/blocked/handler 状态、Ctrl+C `SIGINT` 投递、经
 `SYS_SIGRETURN` 的用户态 handler 调用、`SYS_KILL`/`SYS_SIGNAL`，
 以及当前限制。

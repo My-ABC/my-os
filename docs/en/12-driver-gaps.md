@@ -1,6 +1,6 @@
-# 11 — Driver Ecosystem Inventory and Gaps
+# 12 — Driver Ecosystem Inventory and Gaps
 
-English | [中文](../zh/11-driver-gaps.md)
+English | [中文](../zh/12-driver-gaps.md)
 
 This document inventories the drivers in `src/drivers/`, records their
 capability limits, and lists the missing drivers by bus/device category

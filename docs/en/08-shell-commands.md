@@ -1,6 +1,6 @@
 # MyOS Shell Command Reference
 
-English | [中文](../zh/07-shell-commands.md)
+English | [中文](../zh/08-shell-commands.md)
 
 This document describes the interactive shell provided by `src/shell/shell.c`.
 The shell reads lines of up to 128 characters, splits them into at most 16

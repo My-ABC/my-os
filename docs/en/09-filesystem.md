@@ -1,6 +1,6 @@
-# 08 — Filesystem (FAT32 on ATA)
+# 09 — Filesystem (FAT32 on ATA)
 
-English | [中文](../zh/08-filesystem.md)
+English | [中文](../zh/09-filesystem.md)
 
 ## ATA layer (`src/drivers/ata.c`)
 

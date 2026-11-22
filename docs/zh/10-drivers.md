@@ -1,13 +1,13 @@
 # 09 — 驱动
 
-[English](../en/09-drivers.md) | 中文
+[English](../en/10-drivers.md) | 中文
 
 所有驱动位于 `src/drivers/`，头文件在 `include/drivers/`。驱动或轮询
 或走 IRQ，取决于硬件能力；目前还没有设备注册总线层。
 
 | 驱动 | 文件 | 说明 |
 |---|---|---|
-| ATA PIO | `ata.c` | 主盘、LBA28、512 字节扇区；见 [08-filesystem.md](08-filesystem.md) |
+| ATA PIO | `ata.c` | 主盘、LBA28、512 字节扇区；见 [09-filesystem.md](09-filesystem.md) |
 | 键盘 | `keyboard.c` | PS/2 scancode→ASCII，IRQ1，可配置 scancode set（`SCANCODE_SET`）；方向键输出 `KEYBOARD_KEY_*` 控制字节（0x01–0x04） |
 | PIC | `pic.c` | 8259 主/从重映射与逐线屏蔽辅助函数 |
 | PIT | `pit.c` | 8253 通道 0，`PIT_FREQUENCY` = 100 Hz，tick 计数 |
@@ -27,4 +27,4 @@
 - ACPI 表解析目前只覆盖 PM 电源寄存器（MADT、HPET、AML 未实现）——
   见 `TODO.md` 跟踪。
 - 能力盘点、缺失驱动清单、优先级和 QEMU 测试设备见
-  [11-driver-gaps.md](11-driver-gaps.md)。
+  [12-driver-gaps.md](12-driver-gaps.md)。

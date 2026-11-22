@@ -1,4 +1,4 @@
-# 12 — Signals
+# 13 — Signals
 
 MyOS implements a basic signal mechanism for Ring 3 processes.
 Signal numbers are defined in `include/os/signal.h`.

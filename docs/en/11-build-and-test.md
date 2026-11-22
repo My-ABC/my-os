@@ -1,6 +1,6 @@
-# 10 — Build and Test
+# 11 — Build and Test
 
-English | [中文](../zh/10-build-and-test.md)
+English | [中文](../zh/11-build-and-test.md)
 
 ## Build
 

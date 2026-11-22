@@ -81,7 +81,7 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 
 ## Signals
 
-See [12-signals.md](12-signals.md) for the signal mechanism: numbers,
+See [13-signals.md](13-signals.md) for the signal mechanism: numbers,
 per-process pending/blocked/handler state, Ctrl+C `SIGINT` delivery,
 user-mode handler invocation via `SYS_SIGRETURN`, `SYS_KILL`/`SYS_SIGNAL`,
 and current limitations.
