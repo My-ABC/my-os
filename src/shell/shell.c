@@ -23,21 +23,18 @@ extern const uint8_t elf_demo_end[];
 // 命令表
 static cmd_t cmd_table[] = {
     {"time",     cmd_time,     "Show current time"},
-    {"panic",    cmd_panic,    "Trigger blue screen"},
-    {"svga_blue", cmd_svga_blue, "Show a blue screen"},
     {"echo",     cmd_echo,     "Print text"},
     {"reboot",   cmd_reboot,   "Reboot system"},
     {"shutdown", cmd_shutdown, "Shutdown system"},
-    {"tick",     cmd_tick,     "Show PIT tick count"},
     {"help",     cmd_help,     "Show this help"},
     {"clear",    cmd_clear,    "Clear screen"},
     {"hello",    cmd_hello,    "Print hello message"},
-    {"ring3",    cmd_ring3,    "Start one Ring 3 process in background"},
+    {"ring3",    cmd_ring3,    "Start one Ring 3 process in background"}, // 目前这个，需要实现fork syscall才能一只
     {"ps",       cmd_ps,       "List Ring 3 processes"},
     {"fg",       cmd_fg,       "Show a Ring 3 process in foreground"},
     {"bg",       cmd_bg,       "Hide a Ring 3 process output"},
     {"kill",     cmd_kill,     "Terminate a process by PID"},
-    {"elf",      cmd_elf,      "Load the built-in ELF32 program"},
+    {"elf",      cmd_elf,      "Load the built-in ELF32 program"}, // 同
     {"disk",     cmd_disk,     "Initialize ATA/FAT32 disk"},
     {"ls",       cmd_ls,       "List a FAT32 directory"},
     {"cat",      cmd_cat,      "Print a FAT32 file"},
@@ -179,22 +176,6 @@ int cmd_time(int argc, char *argv[]) {
     return 0;
 }
 
-int cmd_panic(int argc, char *argv[]) {
-    printf("Triggering panic...\n");
-    __asm__ volatile ("int $0x03");
-    return 0;
-}
-
-int cmd_svga_blue(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-    if (vbe_blue_screen() != 0) {
-        vga_set_color(VGA_COLOR_BLUE, VGA_COLOR_BLUE);
-        vga_clear();
-    }
-    return 0;
-}
-
 int cmd_echo(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         printf("%s", argv[i]);
@@ -218,11 +199,6 @@ int cmd_reboot(int argc, char *argv[]) {
 int cmd_shutdown(int argc, char *argv[]) {
     printf("Shutting down...\n");
     acpi_shutdown();
-    return 0;
-}
-
-int cmd_tick(int argc, char *argv[]) {
-    printf("Tick count: %d\n", pit_ticks());
     return 0;
 }
 

@@ -12,7 +12,7 @@ def fat32_source():
 class StorageAndShellContractTests(unittest.TestCase):
     def test_shell_commands_and_argument_count_sentinel(self):
         text = source("src/shell/shell.c")
-        for command in ('{"time"', '{"panic"', '{"ring3"', '{"kill"', '{"elf"',
+        for command in ('{"time"', '{"echo"', '{"ring3"', '{"kill"', '{"elf"',
                         '{"disk"', '{"ls"', '{"cat"', '{"write"', '{"cp"',
                         '{"mv"', '{"rm"', '{"cd"', '{"mkdir"', '{"rmdir"',
                         '{"run"'):
