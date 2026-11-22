@@ -191,6 +191,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Security-test system calls, path resolution, shared memory, and inter-process interfaces.
 - [ ] **Implement an entropy pool and kernel PRNG**
   - [ ] Collect entropy from available sources (RDTSC jitter, RTC/interrupt timing, device timing).
+  - [ ] Probe RDRAND/RDSEED via CPUID and prefer hardware randomness when available, falling back to the entropy pool otherwise.
   - [ ] Maintain a kernel entropy pool feeding a CSPRNG (e.g. ChaCha20-based) for random bytes and integers.
   - [ ] Expose randomness through a syscall or device node for user programs; document seeding and pool-health rules.
 - [ ] **Evaluate VT-x virtualization**
