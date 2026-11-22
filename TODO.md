@@ -64,6 +64,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Classify mappings as per-process (user heap, stacks, ELF segments) vs. shared (kernel half, syscall/signal trampoline pages).
   - [ ] Handle TLB invalidation on CR3 switches, page-fault ownership, and releasing per-process mappings on exit.
   - [ ] Verify with QEMU tests that one process cannot observe or corrupt another's memory and that kernel mappings stay inaccessible.
+- [ ] **Implement a kernel diagnostics and logging subsystem (dmesg / ring buffer)**
+  - [ ] Add a fixed-size kernel log ring buffer with severity levels and timestamps.
+  - [ ] Route kernel diagnostics through the log and add a `dmesg`-style shell command to dump or review it.
+  - [ ] Define wraparound behavior, SMP-ready locking, and log-level filtering.
 - [ ] **Complete the Shell and migrate it to Ring 3**
   - [ ] Gradually move command parsing, interaction, and built-ins out of the kernel.
   - [ ] Use system calls to access the console, filesystem, processes, and devices.
