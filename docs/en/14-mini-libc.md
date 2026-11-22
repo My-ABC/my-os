@@ -17,13 +17,14 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 | `include/errno.h` | `errno` global plus common `E*` constants (Linux-compatible values) |
 | `include/fs.h` | FAT32 file/directory API over `SYS_FS`: `fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir`, plus a minimal unbuffered `FILE` (`fs_fopen`/`fs_fclose`/`fs_fread`/`fs_fwrite`/`fs_fgetc`/`fs_fputc`/`fs_feof`/`fs_ferror`/`fs_clearerr`) |
 | `include/unistd.h` `sys/types.h` | Process/fd/path API over `SYS_PROCESS`/`SYS_FS`: `_exit`/`getpid`/`sched_yield`/`execve`, `read`/`write`/`close`, `unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`; unsupported calls return `ENOSYS` |
+| `include/stdlib.h` | `exit`/`_Exit`/`abort`, `malloc`/`calloc`/`realloc`/`free` over `SYS_MEMORY`, `atoi`/`atol`/`strtol`/`strtoul`, `rand`/`srand`, `qsort`/`bsearch`, `abs`/`labs`/`div`/`ldiv`, `getenv` |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h` |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
 
-More modules (`stdlib.h`, `signal.h`, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
+More modules (`signal.h`, wide-char support, `FILE*` buffering, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
 
 ## Calling the kernel
 
