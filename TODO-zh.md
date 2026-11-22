@@ -214,7 +214,7 @@
   - [ ] 建立简单的用户态编译、链接和打包工具链。
 - [ ] **实现 mini-libc（`mini-libc/`，MIT 协议）**
   - [ ] 基于大类/子操作 ABI 的系统调用封装（`write`、`read`、`open`/`close`、`malloc` 系列、`exit`、`yield`、信号）。
-  - [x] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装、`aligned_alloc`/`atexit`、strtol/qsort/rand、`assert.h`、`setjmp.h`）。
+  - [x] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装、`aligned_alloc`/`atexit`、strtol/qsort/rand、`assert.h`、`setjmp.h`、`inttypes.h`）。
   - [x] `stdio.h` 控制台/字符串覆盖：`printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`，支持标志、宽度、精度。
   - [x] `stdio.h` `FILE*` 流：`stdin`/`stdout` 控制台流，以及 `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`（无缓冲）。
   - [x] `errno.h`（`errno` 全局量 + `E*` 常量）、`time.h`（基于 `SYS_TIME` 的 UTC+8 日历/时钟）、`fs.h`/`unistd.h`（基于 `SYS_FS`/`SYS_PROCESS` 的 FAT32 fd 与进程/路径封装）。
