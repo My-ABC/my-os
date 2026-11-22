@@ -13,6 +13,7 @@
 - [x] 提供基础系统调用 `IO_WRITE` 和 `PROC_GETPID`。
 - [x] 实现 ELF32 可加载段校验与装载、BSS 清零，以及内置和磁盘 ELF 程序运行。
 - [x] 修复 PAE 更改后 GRUB ISO 启动时可能出现的无限重启；构建依赖自动跟踪头文件，避免 ABI 变更后复用过期对象文件。
+- [x] 将系统调用 ABI 重构为两级大类/子操作号：`eax` 选择七个大类之一（`SYS_IO`/`SYS_TIME`/`SYS_MEMORY`/`SYS_POWER`/`SYS_PROCESS`/`SYS_FS`/`SYS_SIG`），`ebx` 为子操作号，参数移至 `ecx`/`edx`/`esi`；新增 `TIME_TO` 支持 UTC±n 偏移换算，并同步更新 sigreturn trampoline、全部汇编演示、契约测试和双语 ABI 文档。
 
 ### ATA、FAT32 与 Shell
 
