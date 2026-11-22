@@ -59,6 +59,11 @@ This document tracks completed work and the project roadmap. When an item is com
   - [x] Add system calls to send a signal to a process (`SYS_KILL`) and to register/replace a user-mode handler (`SYS_SIGNAL`); `SYS_SIGRETURN` restores the interrupted context after a handler returns.
   - [x] Ensure delivery cannot corrupt the `irq_frame` contract or an in-flight syscall; terminate the process on unhandled fatal signals. (Delivery saves the whole frame and rebuilds it on the user stack; a delivered-into syscall frame is abandoned rather than restarted.)
   - [x] Cover delivery, blocking, and termination with QEMU tests. (`sigdemo.elf` verifies handler invocation, register restore, and continuation; Ctrl+C termination is covered by the Ring 3 scenario.)
+- [ ] **Implement per-process page tables for memory isolation**
+  - [ ] Give each Ring 3 process its own user address space (per-process CR3 on context switch) instead of sharing one page table.
+  - [ ] Classify mappings as per-process (user heap, stacks, ELF segments) vs. shared (kernel half, syscall/signal trampoline pages).
+  - [ ] Handle TLB invalidation on CR3 switches, page-fault ownership, and releasing per-process mappings on exit.
+  - [ ] Verify with QEMU tests that one process cannot observe or corrupt another's memory and that kernel mappings stay inaccessible.
 - [ ] **Complete the Shell and migrate it to Ring 3**
   - [ ] Gradually move command parsing, interaction, and built-ins out of the kernel.
   - [ ] Use system calls to access the console, filesystem, processes, and devices.
