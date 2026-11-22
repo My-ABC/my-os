@@ -19,6 +19,11 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 需要支持 C11 的 freestanding 编译器（如 `i686-elf-gcc`，配合
 `-m32 -ffreestanding -nostdlib`）。
 
+## API 参考
+
+`api-docs/` —— 按头文件组织的双语 API 参考
+（`en/reference.md`、`zh/reference.md`）。
+
 ## 测试
 
 `test/` 是 QEMU 集成测试套件（`run_tests.py`）：按模块分目录——

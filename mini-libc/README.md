@@ -19,6 +19,11 @@ user programs can be written in C instead of raw assembly. See
 Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 `-m32 -ffreestanding -nostdlib`).
 
+## API reference
+
+`api-docs/` — bilingual per-header API reference
+(`en/reference.md`, `zh/reference.md`).
+
 ## Tests
 
 `test/` contains a QEMU integration suite (`run_tests.py`):
