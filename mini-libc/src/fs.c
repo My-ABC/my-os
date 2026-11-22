@@ -2,6 +2,7 @@
 #include <fs.h>
 #include <stdio.h>
 #include <errno.h>
+#include <stdlib.h>
 #include "sys/syscall.h"
 
 int fs_open(const char *path, int mode) {
@@ -57,11 +58,9 @@ int fs_readdir(const char *path, void *buf, unsigned size) {
 /* ---- FILE over fs fds ---- */
 
 static FILE *file_alloc(void) {
-    FILE *f = (FILE *)syscall1(SYS_MEMORY, MEMORY_MALLOC, sizeof(FILE));
-    if (f == 0) {
-        errno = ENOMEM;
-        return 0;
-    }
+    FILE *f = (FILE *)malloc(sizeof(FILE));
+    if (f == 0)
+        return 0;   /* malloc already set errno = ENOMEM */
     f->fd = -1;
     f->eof = 0;
     f->err = 0;
@@ -102,7 +101,7 @@ int fs_fclose(FILE *f) {
     int rc = 0;
     if (f->fd >= 0) rc = fs_close(f->fd);
     f->fd = -1;
-    syscall1(SYS_MEMORY, MEMORY_FREE, (unsigned)f);
+    free(f);
     return rc;
 }
 

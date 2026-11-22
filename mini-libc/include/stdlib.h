@@ -21,6 +21,13 @@ void *malloc(size_t size);
 void *calloc(size_t nmemb, size_t size);
 void *realloc(void *ptr, size_t size);
 void  free(void *ptr);
+/* power-of-two alignment (rounded up if needed); size need not be a
+ * multiple of alignment — we honor the request leniently */
+void *aligned_alloc(size_t alignment, size_t size);
+
+/* register fn to run at exit() (LIFO, max 16); -1 when the table is
+ * full. Handlers do not run on _Exit()/abort() or abnormal termination */
+int atexit(void (*fn)(void));
 
 /* ---- string -> number ---- */
 int           atoi(const char *s);
