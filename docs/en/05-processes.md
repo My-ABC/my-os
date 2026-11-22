@@ -18,9 +18,12 @@ and recorded ELF image ranges used by the page-fault handler.
   `ring3_set_background`, `ring3_kill`.
 - Foreground/background only suppresses a process's console output; both
   keep running.
-- While a foreground process runs, the shell hides its prompt but continues
-  polling the keyboard so `bg` or `kill` can still be entered. The prompt
-  reappears when the process exits or is moved to the background.
+- While a foreground process runs, the shell hides its prompt and stops
+  consuming the keyboard (`sti; hlt`), so typed keys stay buffered for
+  the child or for the shell after the child exits. Ctrl+C is handled
+  earlier, inside the keyboard ISR, which delivers `SIGINT` to the
+  foreground process directly — the shell never needs to read the
+  control byte for that to work.
 - The Ring 3 demo calls `PROC_YIELD` while waiting for the RTC second to change,
   avoiding a tight syscall-polling loop that would slow shell input.
 - `ring3_terminate_current()` is called from `isr14_handler` when a user

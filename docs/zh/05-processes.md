@@ -17,8 +17,10 @@
   装 `ring3_process_list`、`ring3_set_foreground`、
   `ring3_set_background`、`ring3_kill`。
 - 前台/后台只抑制进程的控制台输出，两者都继续运行。
-- 前台进程运行时 Shell 隐藏提示符，但仍轮询键盘，因此可以输入 `bg`
-  或 `kill`；进程退出或切到后台后，提示符会重新显示。
+- 前台进程运行时 Shell 隐藏提示符并停止消费键盘（`sti; hlt`），按键
+  留在缓冲区里等子进程或子进程退出后的 Shell 读取。Ctrl+C 在更早的
+  键盘 ISR 中处理——ISR 直接向前台进程投递 `SIGINT`，Shell 无需读到
+  控制字节即可生效。
 - Ring 3 演示程序在等待 RTC 秒数变化时调用 `PROC_YIELD`，避免紧密轮询系统调用而拖慢 Shell 输入。
 - `ring3_terminate_current()` 由 `isr14_handler` 在用户进程非法 fault
   时调用：标记 `DEAD`、释放资源（栈页、堆、镜像映射）、恢复 `esp0`，

@@ -9,8 +9,9 @@ via `start_shell()`.
 
 - Line buffer: 128 bytes; `shell_read_line()` polls the PS/2 keyboard
   driver with `keyboard_hit()` and sleeps via `sti; hlt` while waiting.
-  While a foreground Ring 3 process exists the prompt is hidden but input
-  is still accepted so `bg`/`kill` keep working.
+  While a foreground Ring 3 process exists the prompt is hidden and the
+  shell stops consuming keys entirely (`sti; hlt` loop) — input stays
+  buffered for the child or for the shell once it exits.
 - Command history: the last 16 non-blank lines are kept in a static
   table; consecutive duplicates are skipped. `Up`/`Down` recall entries
   (the in-progress line is preserved as a draft and restored when
@@ -25,10 +26,13 @@ via `start_shell()`.
   keys are ignored while no prompt origin exists (foreground Ring 3
   task running).
 - Ctrl+C: the keyboard driver reports `KEYBOARD_KEY_SIGINT` (0x05). The
-  shell echoes `^C`, discards the line being edited, sends `SIGINT` to the
-  foreground Ring 3 process when one exists, and redraws the prompt on the
-  next loop iteration — no Enter is needed. See
-  [13-signals.md](13-signals.md).
+  keyboard ISR itself calls `ring3_signal_send()` for the foreground
+  Ring 3 process, so the signal lands even while the shell is halted
+  and nobody reads the buffered byte. When the shell does consume the
+  byte it echoes `^C`, discards the line being edited, forwards
+  `SIGINT` to the foreground process if one is still alive, and
+  redraws the prompt on the next loop iteration — no Enter is needed.
+  See [13-signals.md](13-signals.md).
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped), but only when the
@@ -69,11 +73,32 @@ Every command, its arguments, and semantics are documented in
 [08-shell-commands.md](08-shell-commands.md). The `cmd_table` in
 `shell.c` is the authoritative list — update both together.
 
-## Status: kernel-mode shell
+## Status: kernel-mode shell + experimental Ring 3 shell
 
-The shell currently runs in kernel mode and calls kernel subsystems
-directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`). Migrating it to Ring 3
-is planned work tracked in `TODO.md` ("Complete the Shell and migrate it
-to Ring 3"); it requires new syscalls for process control, console cursor
-positioning, directory listing, and richer time/RTC data, plus a larger
-`RING3_PROCESS_COUNT` and per-process page tables for isolation.
+The primary shell runs in kernel mode and calls kernel subsystems
+directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
+
+An experimental user-mode port lives in `src/shell/shell_ring3.c`
+(header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
+by `make shell3` and started with `run shell3.elf`. When the mounted
+disk carries `shell3.elf` at its root — e.g. the `disk-shell.img`
+produced by `make disk-shell` — `start_shell()` auto-starts it in the
+foreground before printing the kernel banner, so `make run-disk-shell`
+lands directly in the Ring 3 shell (`exit` returns to the kernel
+shell). The final
+version implements the full kernel command set through the
+mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
+`write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),
+process control (`ps`, `fg`, `bg`, `kill`, `run`, `elf`, `ring3`
+via `proc_run_demo`/`proc_run_usercode`), `reboot`/`shutdown`
+(`power.h`), `clear`, `time [12|24]`, `echo`, `hello`, `help`,
+`exit` — `disk` stays kernel-only. Line editing (arrow keys,
+16-entry history recall, mid-line cursor) is done in user space on
+`console.h` primitives; Ctrl+C arrives as a delivered `SIGINT`.
+While another process is foreground the editor stops reading keys
+entirely and yields the CPU (`sched_yield`) until the foreground slot
+changes — every Ring 3 process shares the kernel key buffer, so reading
+would split the child's keystrokes with this shell. Buffered keys stay
+for the foreground owner and become the shell's type-ahead once it
+exits, matching the kernel shell which halts without consuming keys. Verified under QEMU (`make test-qemu` unaffected;
+manual `run shell3.elf` session exercised every command).

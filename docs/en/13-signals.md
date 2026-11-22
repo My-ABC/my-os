@@ -87,15 +87,15 @@ syscall frame abandons that syscall — there is no restart or
 ## Sources of signals
 
 - **Ctrl+C**: the keyboard driver tracks the Ctrl modifier and emits a
-  `KEYBOARD_KEY_SIGINT` (0x05) control byte instead of `'c'`. The
-  shell input loop consumes it and calls `ring3_signal_send()` with
-  `SIGINT` for the foreground process; with no foreground process the
-  byte is ignored. The shell echoes `^C` whenever it consumes the
-  byte, discards the line being edited, and redraws the prompt once
-  no foreground process remains. If a `IO_READ`/`IO_GETCHAR` wait loop reads the
-  byte first, it delivers `SIGINT` to itself instead, so a process
-  blocked on keyboard input is still interrupted (subject to its
-  disposition).
+  `KEYBOARD_KEY_SIGINT` (0x05) control byte instead of `'c'`. When a
+  Ring 3 foreground process exists, the keyboard ISR itself calls
+  `ring3_signal_send()` for it — the signal lands even though the
+  halted shell never reads the buffered byte. The byte stays buffered;
+  whichever reader consumes it next (shell input loop or an
+  `IO_READ`/`IO_GETCHAR` wait) may deliver `SIGINT` again, which is
+  harmless because the signal is already pending or being handled.
+  With no foreground process the byte is consumed by the shell, which
+  echoes `^C` and discards the line being edited.
 - **`SIG_KILL` (`SYS_SIG`/1)**: `ecx` = pid, `edx` = signal number; marks the
   signal pending on the target process. Only `SIGINT`/`SIGKILL` are
   accepted; reserved numbers return -1. Returns 0 or -1.

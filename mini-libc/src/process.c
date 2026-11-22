@@ -17,6 +17,15 @@ pid_t proc_foreground(void) {
     proc_info_t buf[16];
     int n = proc_list(buf, 16);
     for (int i = 0; i < n; ++i)
-        if (buf[i].foreground) return buf[i].pid;
+        if (buf[i].foreground && buf[i].state != PROC_ST_UNUSED)
+            return buf[i].pid;
     return -1;
+}
+
+int proc_run_demo(void) {
+    return syscall0(SYS_PROCESS, PROC_RUN_DEMO) == 0 ? 0 : -1;
+}
+
+int proc_run_usercode(void) {
+    return syscall0(SYS_PROCESS, PROC_RUN_USERCODE) == 0 ? 0 : -1;
 }

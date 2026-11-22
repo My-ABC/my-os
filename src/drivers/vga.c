@@ -231,6 +231,17 @@ uint16_t vga_columns(void) {
     return VGA_WIDTH;
 }
 
+// 当前控制台的行数 (VBE 按字符单元格, 文本模式为 25)
+uint16_t vga_rows(void) {
+    if (vbe_available()) {
+        uint32_t rows = vbe_rows();
+        if (rows != 0 && rows <= 0xFFFFU) {
+            return (uint16_t)rows;
+        }
+    }
+    return VGA_HEIGHT;
+}
+
 // 获取当前光标位置 (VBE 模式下返回字符单元格坐标)
 void vga_get_cursor(uint16_t* row, uint16_t* col) {
     if (vbe_available()) {

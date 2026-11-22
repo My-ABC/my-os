@@ -39,7 +39,7 @@ ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
 # 自动查找所有 .c 和 .asm 文件
-C_SRCS = $(shell find src -type f -name '*.c' -print)
+C_SRCS = $(filter-out src/shell/shell_ring3.c,$(shell find src -type f -name '*.c' -print))
 ASM_SRCS = $(filter-out boot/gdt.asm boot/paging.asm,$(wildcard boot/*.asm))
 
 # 自动生成目标文件列表
@@ -72,6 +72,10 @@ LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
 LIBMYC_A = $(BUILD_DIR)/libmyc.a
 
+# Ring 3 用户态 shell：独立 ELF32，链接 libmyc.a，经 run 启动
+SHELL3_ELF = $(BUILD_DIR)/shell3.elf
+SHELL3_OBJ = $(BUILD_DIR)/shell_ring3_user.o
+
 ifdef HIGHMEM_QEMU_TEST
 CFLAGS += -DPMM_QEMU_HIGHMEM_TEST
 BUILD_DIR := build/highmem-test
@@ -88,6 +92,15 @@ build: $(OBJS)
 
 # 编译 mini-libc 为静态库 build/libmyc.a
 libmyc: $(LIBMYC_A)
+
+shell3: libmyc $(SHELL3_ELF)
+
+$(SHELL3_ELF): $(SHELL3_OBJ) $(LIBMYC_A)
+	$(CC) -m32 -nostdlib -static -no-pie -Wl,-e,_start -o $@ $^
+
+$(SHELL3_OBJ): src/shell/shell_ring3.c
+	mkdir -p $(dir $@)
+	$(CC) $(LIBMYC_CFLAGS) -Iinclude/shell -c $< -o $@
 
 $(LIBMYC_A): $(LIBMYC_OBJS)
 	$(AR) rcs $@ $^
@@ -169,6 +182,26 @@ disk:
 run-disk: build disk
 	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
 
+# 带用户态 shell 的 FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录
+DISK_SHELL ?= disk-shell.img
+
+disk-shell: build shell3
+	@command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }
+	@rm -f "$(DISK_SHELL)"
+	truncate -s $(DISK_SIZE) "$(DISK_SHELL)"
+	mkfs.fat -F 32 -n MYOS "$(DISK_SHELL)"
+	python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
+		from fat32_image import add_root_file; \
+		from pathlib import Path; \
+		add_root_file("$(DISK_SHELL)", "shell3.elf", \
+			Path("$(SHELL3_ELF)").read_bytes())'
+	@echo "Created shell disk image: $(DISK_SHELL) (contains shell3.elf)"
+
+# 经 GRUB ISO 启动（带 VBE framebuffer），同时挂载带 shell 的磁盘镜像
+run-disk-shell: iso disk-shell
+	qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) \
+		-drive file=$(DISK_SHELL),format=raw,if=ide -serial stdio
+
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
 	qemu-system-i386 -rtc base=utc -machine q35 -kernel $(KERNEL) -serial stdio
@@ -210,4 +243,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc test test-qemu test-qemu-highmem test-libmyc disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem test-libmyc disk disk-shell run run-kernel run-nographic run-serial run-disk run-disk-shell run-q35 run-q35-nographic iso run-iso debug clean

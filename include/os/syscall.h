@@ -22,6 +22,7 @@
 #define IO_CLEAR    4   // 清屏
 #define IO_CURSOR_GET 5 // 返回 (row<<16)|col
 #define IO_CURSOR_SET 6 // ecx: row, edx: col —— 设置光标位置
+#define IO_CONSOLE_INFO 7 // 返回 (rows<<16)|cols —— 控制台字符单元格尺寸
 
 // SYS_TIME 子操作
 #define TIME_GET    1   // 返回 Unix 时间戳（UTC）
@@ -45,6 +46,8 @@
 #define PROC_LIST    4   // ecx: buf, edx: size —— 枚举进程（每项 12 字节: pid/state/fg）
 #define PROC_SET_FG  5   // ecx: pid（0=取消前台）—— 设置前台进程
 #define PROC_EXEC    6   // ecx: path —— 从 FAT32 加载 ELF32 并以前台运行
+#define PROC_RUN_DEMO 7  // 运行内核内置 ELF32 演示镜像（elf_demo）
+#define PROC_RUN_USERCODE 8 // 后台启动内核 user_entry Ring 3 演示代码
 
 // SYS_FS 子操作
 #define FS_OPEN    1   // ecx: path, edx: mode —— 返回 fd

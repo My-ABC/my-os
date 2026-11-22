@@ -32,7 +32,7 @@ below.
 | `help` | — | List all commands with a one-line description. |
 | `clear` | — | Clear the VGA text screen. |
 | `hello` | `[name...]` | Print `Hello, my-os!`, or `Hello, <name>!` when arguments are given. |
-| `ring3` | — | Map and schedule one built-in Ring 3 process in the background. |
+| `ring3` | — | Map and schedule one built-in Ring 3 process in the foreground. |
 | `ps` | — | List Ring 3 processes with PID, state (`READY`/`RUNNING`/`DEAD`) and the foreground marker. |
 | `fg` | `<pid>` | Make a process's output visible again (foreground). |
 | `bg` | `<pid>` | Hide a process's output (background). |

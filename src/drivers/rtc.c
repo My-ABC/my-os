@@ -40,8 +40,8 @@ void rtc_read_time(rtc_time_t *time) {
     // 检查是否使用BCD格式（位2=0表示BCD格式）
     int is_bcd = !(status_b & 0x04);
     
-    // 检查是否使用24小时制（位1=0表示24小时制）
-    int is_24h = !(status_b & 0x02);
+    // 检查是否使用24小时制（位1=1表示24小时制，MC146818/QEMU REG_B_24H）
+    int is_24h = (status_b & 0x02) != 0;
     
     // 尝试读取世纪寄存器（如果存在）
     century = rtc_read_register(RTC_CENTURY);

@@ -36,4 +36,13 @@ int proc_set_foreground(pid_t pid);
 /* pid of the current foreground process, or -1 if none/unknown */
 pid_t proc_foreground(void);
 
+/* run the kernel's built-in ELF32 demo image in the foreground
+ * (equivalent of the shell `elf` command). Returns 0 or <0. */
+int proc_run_demo(void);
+
+/* start the kernel's built-in Ring 3 user-code demo in the
+ * foreground (equivalent of the shell `ring3` command).
+ * Returns 0 or <0. */
+int proc_run_usercode(void);
+
 #endif /* _MINI_LIBC_PROCESS_H */

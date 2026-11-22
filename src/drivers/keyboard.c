@@ -1,8 +1,22 @@
 #include "keyboard.h"
 #include "io.h"
 #include "stddef.h"
+#include "ring3.h"
+#include "signal.h"
 
-#define BUFFER_SIZE 32
+/* Host-side driver tests link keyboard.c without the process/signal
+ * objects; weak stubs keep Ctrl+C a plain buffered byte there. The
+ * kernel's strong definitions in ring3.c override these. */
+__attribute__((weak)) uint32_t ring3_foreground_pid(void) {
+    return 0U;
+}
+__attribute__((weak)) int ring3_signal_send(uint32_t pid, uint32_t sig) {
+    (void)pid;
+    (void)sig;
+    return -1;
+}
+
+#define BUFFER_SIZE 256
 
 // 当前使用的扫描码集 (1 或 2)
 static int current_scancode_set = 1;
@@ -269,6 +283,15 @@ void keyboard_irq(void) {
     // Ctrl+C 产生 SIGINT 控制字节而不是字符 'c'
     if (ctrl_pressed && (c == 'c' || c == 'C')) {
         c = KEYBOARD_KEY_SIGINT;
+        /* A foreground Ring 3 process owns the console, so the kernel
+         * shell is halted and may never read this byte (the child is
+         * not required to read keys). Deliver SIGINT to the console
+         * owner immediately; the byte stays buffered for whichever
+         * reader consumes it next. */
+        uint32_t fg = ring3_foreground_pid();
+        if (fg != 0U) {
+            ring3_signal_send(fg, SIGINT);
+        }
     }
 
     uint32_t next = (head + 1) % BUFFER_SIZE;

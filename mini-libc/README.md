@@ -21,8 +21,8 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 
 ## API reference
 
-`docs/en/mini-libc/` and `docs/zh/mini-libc/` — bilingual per-header API reference
-(one chapter per public header).
+`../docs/en/mini-libc/` and `../docs/zh/mini-libc/` — bilingual
+per-header API reference (one chapter per public header).
 
 ## Tests
 
@@ -56,7 +56,7 @@ test/mini-libc/run_tests.py`).
 | `include/stdnoreturn.h` | `noreturn` macro → `_Noreturn` (header-only) |
 | `include/setjmp.h` | `setjmp`/`longjmp` over callee-saved regs + esp/eip (`jmp_buf` = 6 ints); `longjmp(env,0)` returns 1 |
 | `include/stdlib.h` | `exit`/`_Exit`/`abort`/`atexit`, `malloc`/`calloc`/`realloc`/`free`/`aligned_alloc` over `SYS_MEMORY` (16-byte header, 8-byte base alignment; C11 constraint checks -> EINVAL), `atoi`/`atol`/`strtol`/`strtoul`, `rand`/`srand`, `qsort`/`bsearch`, `abs`/`labs`/`div`/`ldiv`, `getenv` |
-| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`/`getline`, `FILE*` streams (`stdin`/`stdout`, `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`), plus `va_list` builtins |
 | `syscall.S` `setjmp.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl); `setjmp`/`longjmp` register/stack save-restore stubs |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
 | `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` `unistd.c` `stdlib.c` `assert.c` `inttypes.c` `signal.c` `process.c` `console.c` `power.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h`/`unistd.h`/`stdlib.h`/`power.h` facilities |
