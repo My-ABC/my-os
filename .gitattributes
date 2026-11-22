@@ -1,0 +1,23 @@
+# Normalize line endings for text files; let Git handle CRLF/LF per platform.
+* text=auto
+
+# Shell scripts must keep LF endings.
+*.sh text eol=lf
+Makefile text eol=lf
+
+# Disk images, ISOs, and other binary artifacts must never be diffed or converted.
+*.img binary
+*.iso binary
+*.bin binary
+*.elf binary
+*.o binary
+*.a binary
+
+# Documentation is prose for GitHub's language stats.
+docs/** linguist-documentation
+architecture.md linguist-documentation
+README.md linguist-documentation
+README-zh.md linguist-documentation
+TODO.md linguist-documentation
+TODO-zh.md linguist-documentation
+.github/agents/** linguist-documentation
