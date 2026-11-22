@@ -65,12 +65,10 @@
 
 实验性用户态移植位于 `src/shell/shell_ring3.c`（头文件
 `include/shell/shell_ring3.h`），由 `make shell3` 构建为
-`build/shell3.elf`，用 `run sh3.elf` 启动（需 8.3 短名）。它在
-`SYS_IO`/`SYS_TIME`/`SYS_PROCESS`/`SYS_FS`/`SYS_SIG`/`SYS_POWER`
-与 mini-libc 之上重新实现了所有可由 syscall 覆盖的命令——`time`、
-`echo`、`reboot`、`shutdown`、`help`、`clear`、`hello`、`ps`、
-`fg`、`bg`、`kill`、`ls`、`cat`、`write`、`cp [-r]`、`mv`、`rm`、
-`cd`、`mkdir`、`rmdir [-f]`、`run`；仅内核可用的命令（`ring3`、
-`elf`、`disk`）未移植。已知缺口：行输入走 `IO_READ`（无历史/方向
-键编辑）、`bg` 只能隐藏前台进程、控制台输出要求 shell 处于前台。
-完整迁移仍在 `TODO.md` 跟踪。
+`build/shell3.elf`，用 `run shell3.elf` 启动。目前该文件只包含
+经 mini-libc 公开 API 实现的代码——不直接使用 syscall：纯计算
+辅助（参数分割、转义处理、路径工具、命令历史）加上基于
+stdio/time 的命令 `time`、`echo`、`hello`、`help`、`exit`。
+文件系统、进程、电源、信号、原始按键编辑和前台仲裁类命令
+暂缓，等待 mini-libc 提供对应封装（早期基于 syscall 的 v1
+命令集保留在 git 历史中）。完整迁移仍在 `TODO.md` 跟踪。

@@ -49,7 +49,7 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 `stdio.h` 覆盖控制台/字符串接口（暂无 `FILE*` 流）：
 
 - 输出：`printf`、`sprintf`、`snprintf`、`puts`、`putchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `-` `0` `+` 空格 `#` 标志、字段宽度和精度（可用 `*`）；长度修饰符接受但忽略。控制台输出先缓冲再经 `IO_WRITE` 冲刷。
-- 输入：`scanf`、`sscanf`、`getchar`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `*` 抑制赋值和字段宽度；控制台输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。
+- 输入：`scanf`、`sscanf`、`getchar`、`getline`。支持 `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%`，以及 `*` 抑制赋值和字段宽度；控制台输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。`getline(buf, size)` 直接经 `IO_READ` 读取整行（内核负责回显与退格）并返回行长；它绕过 scanf 的 pushback 缓冲区，不要与 `getchar`/`scanf` 混用。
 
 `stdarg.h` 基于 GCC 内建实现 `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy`。
 

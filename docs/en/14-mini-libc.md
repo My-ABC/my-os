@@ -49,7 +49,7 @@ Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, whi
 `stdio.h` covers the console/string surface (no `FILE*` streams yet):
 
 - Output: `printf`, `sprintf`, `snprintf`, `puts`, `putchar`. Conversions `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%` with flags `-` `0` `+` space `#`, field width and precision (`*` allowed); length modifiers are accepted and ignored. Console output is buffered and flushed through `IO_WRITE`.
-- Input: `scanf`, `sscanf`, `getchar`. Conversions `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%` with `*` suppression and field width; console input is read line-by-line through `IO_READ` into a small static buffer with one-character pushback.
+- Input: `scanf`, `sscanf`, `getchar`, `getline`. Conversions `%d` `%i` `%u` `%o` `%x` `%X` `%c` `%s` `%p` `%%` with `*` suppression and field width; console input is read line-by-line through `IO_READ` into a small static buffer with one-character pushback. `getline(buf, size)` reads one whole line directly via `IO_READ` (echo + backspace handled by the kernel) and returns its length; it bypasses the scanf pushback buffer, so do not mix it with `getchar`/`scanf`.
 
 `stdarg.h` provides `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy` on top of the GCC builtins.
 

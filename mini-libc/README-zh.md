@@ -24,7 +24,7 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
 | `include/time.h` | `time`/`gmtime`/`localtime`/`mktime`/`strftime`/`difftime`/`clock`/`sleep`/`usleep`（本地时间 UTC+8） |
 | `include/errno.h` | `errno` 全局量与常用 `E*` 常量（与 Linux 取值一致） |
-| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` 与 `va_list` 内建封装 |
+| `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`/`getline` 与 `va_list` 内建封装 |
 | `syscall.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl 约定）；trap 前后保留 callee-saved 寄存器 |
 | `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
 | `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` | `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h` 的 freestanding 实现 |

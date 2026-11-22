@@ -471,6 +471,13 @@ int getchar(void) {
     return in_getch();
 }
 
+int getline(char *buf, int size) {
+    if (size <= 1) return -1;
+    int rc = syscall2(SYS_IO, IO_READ, (unsigned)buf, (unsigned)(size - 1));
+    if (rc != 0) return -1;
+    return (int)strlen(buf);
+}
+
 int scanf(const char *fmt, ...) {
     struct in_src src = { 0, 0, -1 };
     va_list ap;

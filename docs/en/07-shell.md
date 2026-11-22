@@ -76,13 +76,12 @@ directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
 
 An experimental user-mode port lives in `src/shell/shell_ring3.c`
 (header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
-by `make shell3` and started with `run sh3.elf` (rename for 8.3). It
-reimplements the syscall-coverable commands — `time`, `echo`,
-`reboot`, `shutdown`, `help`, `clear`, `hello`, `ps`, `fg`, `bg`,
-`kill`, `ls`, `cat`, `write`, `cp [-r]`, `mv`, `rm`, `cd`, `mkdir`,
-`rmdir [-f]`, `run` — on top of `SYS_IO`/`SYS_TIME`/`SYS_PROCESS`/
-`SYS_FS`/`SYS_SIG`/`SYS_POWER` and mini-libc. Kernel-only commands
-(`ring3`, `elf`, `disk`) are omitted. Known gaps: line input uses
-`IO_READ` (no history/arrow editing), `bg` only hides the foreground
-process, and console output requires the shell to be foreground.
-Full migration remains tracked in `TODO.md`.
+by `make shell3` and started with `run shell3.elf`. It currently
+contains only code that goes through the mini-libc public API — no
+direct syscall usage: pure helpers (argument splitting, escape
+handling, path utilities, command history) plus stdio/time-backed
+commands `time`, `echo`, `hello`, `help`, `exit`. Filesystem,
+process, power, signal, raw-key editing, and foreground-arbitration
+commands are deferred until mini-libc grows the matching wrappers
+(the earlier syscall-based v1 command set is preserved in git
+history). Full migration remains tracked in `TODO.md`.

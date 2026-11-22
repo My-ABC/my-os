@@ -25,6 +25,10 @@ int putchar(int c);
 int scanf(const char *fmt, ...);
 int sscanf(const char *s, const char *fmt, ...);
 int getchar(void);
+/* Read one console line into buf (size includes NUL); returns the
+ * line length or -1. Uses SYS_IO/IO_READ directly, so it must not be
+ * mixed with getchar/scanf on the same stream. */
+int getline(char *buf, int size);
 
 #ifndef EOF
 #define EOF (-1)
