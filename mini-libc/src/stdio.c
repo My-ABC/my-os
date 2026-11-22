@@ -296,6 +296,22 @@ struct ispec {
 static int scan_uint(struct in_src *src, int base, struct ispec *sp,
                      unsigned *out) {
     int c = isrc_skip_ws(src);
+    /* base 0 (%i): auto-detect 0x→16, leading 0→8, else 10.
+     * base 16 (%x/%p): accept an optional 0x prefix. */
+    if (c == '0' && (base == 0 || base == 16)) {
+        int c2 = isrc_getc(src);
+        if (c2 == 'x' || c2 == 'X') {
+            base = 16;
+            c = isrc_getc(src);
+        } else {
+            isrc_ungetc(src, c2);
+            if (base == 0) {
+                base = (c2 >= '0' && c2 <= '7') ? 8 : 10;
+            }
+        }
+    } else if (base == 0) {
+        base = 10;
+    }
     unsigned v = 0;
     int any = 0, digits = 0;
     while (c >= 0) {
@@ -351,15 +367,17 @@ static int vfscanf(struct in_src *src, const char *fmt, va_list ap) {
         while (*p == 'h' || *p == 'l') ++p;
         switch (*p) {
             case 'd': case 'i': {
-                int c = isrc_skip_ws(src);
                 int neg = 0;
-                if (c == '+' || c == '-') {
-                    neg = (c == '-');
-                    c = isrc_getc(src);
+                {
+                    int c = isrc_skip_ws(src);
+                    if (c == '+' || c == '-') {
+                        neg = (c == '-');
+                        c = isrc_getc(src);
+                    }
+                    isrc_ungetc(src, c);
                 }
-                isrc_ungetc(src, c);
                 unsigned v;
-                if (!scan_uint(src, 10, &sp, &v)) goto done;
+                if (!scan_uint(src, *p == 'i' ? 0 : 10, &sp, &v)) goto done;
                 if (!sp.suppress) {
                     int *dst = va_arg(ap, int *);
                     *dst = neg ? -(int)v : (int)v;
