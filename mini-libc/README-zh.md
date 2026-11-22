@@ -32,6 +32,7 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | `include/unistd.h` `sys/types.h` | 进程/fd/路径 API：`_exit`/`getpid`/`getppid`/`sched_yield`/`fork`/`execve`，`read`/`write`/`close`，`unlink`/`rmdir`/`chdir`/`getcwd`/`access`/`lseek`；内核不支持的调用返回 `ENOSYS` |
 | `include/assert.h` | `assert(e)`——失败时向 stdout 打印表达式/文件/函数/行号后 `abort()`；`NDEBUG` 下编译为空 |
 | `include/inttypes.h` | `PRId*`/`PRIi*`/`PRIo*`/`PRIu*`/`PRIx*`/`PRIX*` + `SCN*` 长度宏，`imaxabs`/`imaxdiv`/`strtoimax`/`strtoumax`（LP32 下 `intmax_t`=int） |
+| `include/stdnoreturn.h` | `noreturn` 宏 → `_Noreturn`（纯头文件） |
 | `include/setjmp.h` | 基于 callee-saved 寄存器 + esp/eip 的 `setjmp`/`longjmp`（`jmp_buf` = 6 个 int）；`longjmp(env,0)` 返回 1 |
 | `include/stdlib.h` | `exit`/`_Exit`/`abort`/`atexit`，基于 `SYS_MEMORY` 的 `malloc`/`calloc`/`realloc`/`free`/`aligned_alloc`（16 字节头，8 字节基础对齐；C11 约束校验，违例 EINVAL），`atoi`/`atol`/`strtol`/`strtoul`，`rand`/`srand`，`qsort`/`bsearch`，`abs`/`labs`/`div`/`ldiv`，`getenv` |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar`、`FILE*` 流（`stdin`/`stdout`，`fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/`fputs`/`fgets`/`fprintf`/`fscanf`/`feof`/`ferror`/`clearerr`/`fflush`）与 `va_list` 内建封装 |

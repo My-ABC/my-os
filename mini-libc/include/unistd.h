@@ -12,7 +12,7 @@
  * with no backing syscall (fork, getppid, lseek, ...) return -1 with
  * errno = ENOSYS. sleep()/usleep() live in <time.h>. */
 
-void _exit(int status) __attribute__((noreturn));
+_Noreturn void _exit(int status);
 
 pid_t getpid(void);
 /* always fails: the kernel tracks no parent pid */

@@ -13,9 +13,9 @@
  * power-of-two alignments. There is no sbrk/heap introspection. */
 
 /* ---- process termination ---- */
-void _Noreturn exit(int status);   /* runs atexit handlers, flushes stdio */
-void _Noreturn _Exit(int status);  /* immediate PROC_EXIT */
-void _Noreturn abort(void);
+_Noreturn void exit(int status);   /* runs atexit handlers, flushes stdio */
+_Noreturn void _Exit(int status);  /* immediate PROC_EXIT */
+_Noreturn void abort(void);
 
 /* ---- heap ---- */
 void *malloc(size_t size);

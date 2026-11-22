@@ -12,6 +12,6 @@
 typedef int jmp_buf[6];
 
 int setjmp(jmp_buf env);
-void _Noreturn longjmp(jmp_buf env, int val);
+_Noreturn void longjmp(jmp_buf env, int val);
 
 #endif /* _MINI_LIBC_SETJMP_H */
