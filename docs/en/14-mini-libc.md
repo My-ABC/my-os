@@ -10,11 +10,14 @@ It wraps the `int 0x80` class/sub-operation syscall ABI so user programs can be 
 | File | Contents |
 |------|----------|
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
+| `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers |
+| `include/string.h` `ctype.h` | String/memory and character-classification declarations |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
+| `src/string.c` `ctype.c` | Freestanding implementations of `string.h`/`ctype.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
 
-More modules (`string.h`, `stdlib.h`, `stdio.h`, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
+More modules (`stdlib.h`, `stdio.h`, high-level wrappers) are planned — see the TODO entry "Implement mini-libc".
 
 ## Calling the kernel
 

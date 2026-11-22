@@ -17,8 +17,11 @@ user programs can be written in C instead of raw assembly. See
 | Path | Contents |
 |------|----------|
 | `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` open modes, `PROC_STATE_*` values, and `syscall0`–`syscall3` declarations. Mirrors `include/os/syscall.h`. |
+| `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | Freestanding base headers: fixed-width types, `size_t`/`ptrdiff_t`/`NULL`/`offsetof`, `bool`, integer and float limits |
+| `include/string.h` `ctype.h` | String/memory and character-classification declarations |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
+| `src/string.c` `ctype.c` | Freestanding implementations of the `string.h`/`ctype.h` functions |
 | `examples/hello.c` | Minimal Ring 3 hello-world using the syscall wrappers |
 
 ## Calling the kernel
@@ -44,9 +47,9 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 See the "Implement mini-libc" entry in `TODO.md`:
 
-- `string.h` / `stdlib.h` — pure functions and heap helpers over `SYS_MEMORY`
+- `stdlib.h` — heap helpers over `SYS_MEMORY` (`malloc`/`free`/`calloc`/`realloc`)
 - `stdio.h` — minimal `printf`/`puts` over `IO_WRITE`
-- High-level wrappers (`open`/`read`/`write`/`malloc` style APIs)
+- High-level wrappers (`open`/`read`/`write`/`exit` style APIs)
 
 ## Build notes
 

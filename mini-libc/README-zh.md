@@ -17,8 +17,11 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 | 路径 | 内容 |
 |------|------|
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 打开模式、`PROC_STATE_*` 状态值，以及 `syscall0`–`syscall3` 声明。与 `include/os/syscall.h` 对齐。 |
+| `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | freestanding 基础头文件：定宽整数类型、`size_t`/`ptrdiff_t`/`NULL`/`offsetof`、`bool`、整数与浮点极限值 |
+| `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
 | `syscall.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl 约定） |
 | `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
+| `src/string.c` `ctype.c` | `string.h`/`ctype.h` 函数的 freestanding 实现 |
 | `examples/hello.c` | 使用 syscall 封装的最小 Ring 3 hello-world |
 
 ## 调用内核
@@ -44,9 +47,9 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 见 `TODO-zh.md` 中 "Implement mini-libc / 实现 mini-libc" 条目：
 
-- `string.h` / `stdlib.h` — 纯函数与基于 `SYS_MEMORY` 的堆辅助
+- `stdlib.h` — 基于 `SYS_MEMORY` 的堆辅助（`malloc`/`free`/`calloc`/`realloc`）
 - `stdio.h` — 基于 `IO_WRITE` 的精简 `printf`/`puts`
-- 高层封装（`open`/`read`/`write`/`malloc` 风格 API）
+- 高层封装（`open`/`read`/`write`/`exit` 风格 API）
 
 ## 构建说明
 
