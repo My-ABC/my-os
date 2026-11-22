@@ -135,6 +135,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
   - [ ] Parse MADT to provide processor and interrupt-controller information.
   - [ ] Evaluate HPET, MCFG, and related hardware support.
+  - [ ] Make `shutdown`/`reboot` actually power off/reset under QEMU: the PM1a S5 write and all reset fallbacks (FADT reset register, port 0xCF9, keyboard pulse, triple fault) currently leave the guest running — likely an AML/DSDT or PM1 register-width issue; verify with the `power.elf` mini-libc test (`make test-libmyc`).
   - [ ] Improve power-state and shutdown/reboot error handling, and evaluate AML/DSDT support.
 
 ## Concurrency and Memory
