@@ -65,6 +65,13 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Provide basic command-line editing, history, error codes, and executable search. (Editing, 16-entry history, `\n`/`\\`/`\"` escapes, and differentiated ELF errors are done; executable search/PATH lookup is not.)
   - [ ] Ensure the kernel can recover control if the user Shell crashes or exits.
 
+## Inter-Process Communication
+
+- [ ] **Implement pipes and IPC primitives**
+  - [ ] Add anonymous pipes (`SYS_PIPE`) backed by bounded kernel buffers with blocking read/write semantics.
+  - [ ] Support fd redirection so pipelines like `cmd1 | cmd2` work between user processes (requires per-process fd tables, which do not exist yet).
+  - [ ] Extend toward named pipes or additional IPC primitives (shared memory, message queues) as needed.
+
 ## Filesystem, Storage, and Caches
 
 - [ ] **Complete filesystem and Shell storage workflows**
