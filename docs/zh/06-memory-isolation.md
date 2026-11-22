@@ -19,7 +19,7 @@
 ## 规则
 
 - 每次上下文切换都更换 CR3：`ring3_timer_switch`（双向抢占）、
-  `SYS_YIELD` 以及两条终止路径（`SYS_EXIT`、致命信号、`ring3_kill`）。
+  `PROC_YIELD` 以及两条终止路径（`PROC_EXIT`、致命信号、`ring3_kill`）。
   CR3 重载会冲刷所有非全局 TLB 项。
 - ISR14 按需分页只向*正在运行*的进程的 mm 映射
   （`ring3_current_mm()`）；`ring3_user_range_permitted()` 因此只查询
@@ -38,6 +38,6 @@
 ## 验证
 
 `make test-qemu` 全套通过：Ring 3 调度与前后台切换、SIGINT handler
-投递与 `SYS_SIGRETURN`、ELF 加载执行、栈按需映射、非法访问终止与
+投递与 `SIG_RETURN`、ELF 加载执行、栈按需映射、非法访问终止与
 OOM 回收。隔离是结构性的——进程无法观察另一进程的页，因为这些页
 根本不在它的页表中。

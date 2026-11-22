@@ -7,19 +7,22 @@ global sig_demo_end
 
 ; User-space demo for signal handler delivery. Assembled once and loaded
 ; from the FAT32 test image as sigdemo.elf; run with `run sigdemo.elf`.
-; Installs a SIGINT handler via SYS_SIGNAL, prints SIGDEMO-ARMED, then
+; Installs a SIGINT handler via SIG_SIGNAL, prints SIGDEMO-ARMED, then
 ; yields until Ctrl+C delivers SIGINT. The handler prints
 ; SIGDEMO-HANDLED, clobbers ecx, and returns through the kernel restorer
-; (SYS_SIGRETURN), which must restore the interrupted context: the main
+; (SIG_RETURN), which must restore the interrupted context: the main
 ; loop then verifies ecx and prints SIGDEMO-AFTER/SIGDEMO-DONE.
 
 %define LOAD_ADDR 0x00700000
 %define VBASE (LOAD_ADDR - 0x100)
 
-%define SYS_WRITE    1
-%define SYS_EXIT     10
-%define SYS_YIELD    21
-%define SYS_SIGNAL   23
+%define SYS_IO       1
+%define SYS_PROCESS  5
+%define SYS_SIG      7
+%define IO_WRITE     1
+%define PROC_EXIT    2
+%define PROC_YIELD   3
+%define SIG_SIGNAL   2
 %define SIGINT       2
 %define SENTINEL     0x12345678
 
@@ -51,27 +54,31 @@ sig_demo_start:
 
     times 0x100 - ($ - sig_demo_start) db 0
 sig_demo_code:
-    ; SYS_WRITE "SIGDEMO-START"
-    mov eax, SYS_WRITE
-    mov ebx, start_msg + VBASE
+    ; IO_WRITE "SIGDEMO-START"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, start_msg + VBASE
     int 0x80
 
-    ; SYS_SIGNAL(SIGINT, sig_handler)
-    mov eax, SYS_SIGNAL
-    mov ebx, SIGINT
-    mov ecx, sig_handler + VBASE
+    ; SIG_SIGNAL(SIGINT, sig_handler)
+    mov eax, SYS_SIG
+    mov ebx, SIG_SIGNAL
+    mov ecx, SIGINT
+    mov edx, sig_handler + VBASE
     int 0x80
     cmp eax, -1
     je .fail
 
-    ; SYS_WRITE "SIGDEMO-ARMED"
-    mov eax, SYS_WRITE
-    mov ebx, armed_msg + VBASE
+    ; IO_WRITE "SIGDEMO-ARMED"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, armed_msg + VBASE
     int 0x80
 
     mov ecx, SENTINEL
 .wait_loop:
-    mov eax, SYS_YIELD
+    mov eax, SYS_PROCESS
+    mov ebx, PROC_YIELD
     int 0x80
     cmp byte [handled_flag + VBASE], 0
     je .wait_loop
@@ -80,37 +87,45 @@ sig_demo_code:
     cmp ecx, SENTINEL
     jne .fail
 
-    ; SYS_WRITE "SIGDEMO-AFTER"
-    mov eax, SYS_WRITE
-    mov ebx, after_msg + VBASE
+    ; IO_WRITE "SIGDEMO-AFTER"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, after_msg + VBASE
     int 0x80
 
-    ; SYS_WRITE "SIGDEMO-DONE"
-    mov eax, SYS_WRITE
-    mov ebx, done_msg + VBASE
+    ; IO_WRITE "SIGDEMO-DONE"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, done_msg + VBASE
     int 0x80
 
-    ; SYS_EXIT
-    mov eax, SYS_EXIT
+    ; PROC_EXIT
+    mov eax, SYS_PROCESS
+    mov ebx, PROC_EXIT
+    xor ecx, ecx
     int 0x80
 
 .fail:
-    mov eax, SYS_WRITE
-    mov ebx, fail_msg + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, fail_msg + VBASE
     int 0x80
-    mov eax, SYS_EXIT
+    mov eax, SYS_PROCESS
+    mov ebx, PROC_EXIT
+    xor ecx, ecx
     int 0x80
 .halt:
     jmp .halt
 
 ; Entered via iret with [esp]=restorer, [esp+4]=sig. `ret` jumps to the
-; kernel-placed restorer which issues SYS_SIGRETURN.
+; kernel-placed restorer which issues SIG_RETURN.
 sig_handler:
     mov byte [handled_flag + VBASE], 1
-    mov ecx, 0xDEADBEEF        ; clobber a caller-saved register
-    mov eax, SYS_WRITE
-    mov ebx, handled_msg + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, handled_msg + VBASE
     int 0x80
+    mov ecx, 0xDEADBEEF        ; clobber a caller-saved register
     ret
 
 start_msg:    db "SIGDEMO-START", 10, 0

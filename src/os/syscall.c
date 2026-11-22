@@ -17,12 +17,12 @@
 #define SYSFS_MAX_FDS 8U
 #define SYSFS_PATH_MAX 128U
 
-/* Set by SYS_EXIT; the syscall stub switches to this kernel frame instead
+/* Set by PROC_EXIT; the syscall stub switches to this kernel frame instead
  * of returning to the exiting process. */
 uint32_t syscall_exit_frame;
 
 /* Returns 1 after marking the current process for termination via the
- * saved kernel frame (same mechanism as SYS_EXIT). */
+ * saved kernel frame (same mechanism as PROC_EXIT). */
 static int sys_signal_fatal_abort(void) {
     if (!ring3_signal_pending_fatal()) return 0;
     struct irq_frame *frame = ring3_terminate_current();
@@ -390,179 +390,208 @@ static int sysfs_fwrite(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
 uint32_t syscall_handler(struct irq_frame *frame) {
     syscall_exit_frame = 0U;
     syscall_switch_frame = 0U;
-    uint32_t eax = frame->eax;
-    uint32_t ebx = frame->ebx;
-    uint32_t ecx = frame->ecx;
-    uint32_t edx = frame->edx;
+    uint32_t klass = frame->eax;
+    uint32_t op = frame->ebx;
+    uint32_t a1 = frame->ecx;
+    uint32_t a2 = frame->edx;
+    uint32_t a3 = frame->esi;
 
-    switch (eax) {
-        case SYS_WRITE: { // 参数: ebx: const char *str
-            uint32_t pid = ring3_current_pid();
-            if (pid != 0U && pid == ring3_foreground_pid()) {
-                vga_print((const char *)ebx);
-                serial_print((const char *)ebx);
-            }
-            return 0;
-        }
-        case SYS_READ: { // 参数: ebx: char *str, ecx: size_t size
-            sys_gets((char*)ebx, ecx, frame);
-            return 0;
-        }
-        case SYS_GETCHAR: {
-            for (;;) {
-                char c = keyboard_getchar();
-                if (c == KEYBOARD_KEY_SIGINT) {
-                    /* Ctrl+C read by the syscall itself: deliver SIGINT
-                     * to ourselves, then honor the disposition. */
-                    ring3_signal_send(ring3_current_pid(), SIGINT);
-                    if (sys_signal_check(frame)) return 0;
-                    continue;
-                }
-                if (c != 0) return (uint8_t)c;
-                if (sys_signal_check(frame)) return 0;
-                __asm__ volatile ("hlt" ::: "memory");
-            }
-        }
-        case SYS_CLEAR: {
-            vga_clear();
-            return 0;
-        }
-        case SYS_REBOOT: {
-            acpi_reboot();
-            return 0;
-        }
-        case SYS_TIME: {
-            rtc_time_t time;
-            rtc_read_time(&time);
-            uint32_t t = rtc_to_unix_timestamp(&time);
-            return t;
-        }
-        case SYS_MEMORY:
-            if (ebx == MEMORY_MALLOC) {
-                return (uint32_t)user_alloc(ecx);
-            }
-            if (ebx == MEMORY_CALLOC) {
-                if (ecx != 0U && edx > 0xFFFFFFFFU / ecx) {
+    switch (klass) {
+        case SYS_IO:
+            switch (op) {
+                case IO_WRITE: { // a1: const char *str
+                    uint32_t pid = ring3_current_pid();
+                    if (pid != 0U && pid == ring3_foreground_pid()) {
+                        vga_print((const char *)a1);
+                        serial_print((const char *)a1);
+                    }
                     return 0;
                 }
-                void *calloc_ptr = user_alloc(ecx * edx);
-                if (calloc_ptr != 0) {
-                    memset(calloc_ptr, 0, ecx * edx);
+                case IO_READ: // a1: char *buf, a2: size
+                    sys_gets((char *)a1, a2, frame);
+                    return 0;
+                case IO_GETCHAR:
+                    for (;;) {
+                        char c = keyboard_getchar();
+                        if (c == KEYBOARD_KEY_SIGINT) {
+                            /* Ctrl+C read by the syscall itself: deliver SIGINT
+                             * to ourselves, then honor the disposition. */
+                            ring3_signal_send(ring3_current_pid(), SIGINT);
+                            if (sys_signal_check(frame)) return 0;
+                            continue;
+                        }
+                        if (c != 0) return (uint8_t)c;
+                        if (sys_signal_check(frame)) return 0;
+                        __asm__ volatile ("hlt" ::: "memory");
+                    }
+                case IO_CLEAR:
+                    vga_clear();
+                    return 0;
+                default:
+                    return 0;
+            }
+        case SYS_TIME:
+            switch (op) {
+                case TIME_GET: {
+                    rtc_time_t time;
+                    rtc_read_time(&time);
+                    return rtc_to_unix_timestamp(&time);
                 }
-                return (uint32_t)calloc_ptr;
+                case TIME_TO: { // a1: offset seconds, a2: rtc_time_t *buf
+                    if (!sys_user_buffer_ok(a2, sizeof(rtc_time_t))) {
+                        return (uint32_t)-1;
+                    }
+                    rtc_time_t time;
+                    rtc_read_time(&time);
+                    rtc_convert_timezone(&time, (int)a1);
+                    memcpy((void *)a2, &time, sizeof(time));
+                    return 0;
+                }
+                default:
+                    return 0;
             }
-            if (ebx == MEMORY_REALLOC) {
-                return (uint32_t)user_realloc((void *)ecx, edx);
+        case SYS_MEMORY:
+            switch (op) {
+                case MEMORY_MALLOC:
+                    return (uint32_t)user_alloc(a1);
+                case MEMORY_CALLOC:
+                    if (a1 != 0U && a2 > 0xFFFFFFFFU / a1) {
+                        return 0;
+                    }
+                    {
+                        void *calloc_ptr = user_alloc(a1 * a2);
+                        if (calloc_ptr != 0) {
+                            memset(calloc_ptr, 0, a1 * a2);
+                        }
+                        return (uint32_t)calloc_ptr;
+                    }
+                case MEMORY_REALLOC:
+                    return (uint32_t)user_realloc((void *)a1, a2);
+                case MEMORY_FREE:
+                    user_free((void *)a1);
+                    return 0;
+                default:
+                    return 0;
             }
-            if (ebx == MEMORY_FREE) {
-                user_free((void *)ecx);
-                return 0;
-            }
-            return 0;
         case SYS_POWER:
-            if (ebx == POWER_SHUTDOWN) {
+            if (op == PWR_SHUTDOWN) {
                 acpi_shutdown();
-            } else if (ebx == POWER_REBOOT) {
+            } else if (op == PWR_REBOOT) {
                 acpi_reboot();
             }
             return 0;
-        case SYS_GETPID:
-            return ring3_current_pid();
-        case SYS_EXIT: {
-            struct irq_frame *frame = ring3_terminate_current();
-            if (frame != 0) syscall_exit_frame = (uint32_t)frame;
-            return 0;
-        }
-        case SYS_YIELD:
-            syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
-            return 0;
-        case SYS_KILL:
-            return ring3_signal_send(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
-        case SYS_SIGNAL:
-            return ring3_signal_set_handler(ebx, ecx) == 0 ? 0 : (uint32_t)-1;
-        case SYS_SIGRETURN:
-            return ring3_signal_sigreturn(frame);
-        case SYS_FOPEN:
-            return (uint32_t)sysfs_fopen(ebx, ecx);
-        case SYS_FCLOSE: {
-            int index = sysfs_fd_index(ebx);
-            if (index < 0) return (uint32_t)-1;
-            memset(&sysfs_fds[index], 0, sizeof(sysfs_fds[index]));
-            return 0;
-        }
-        case SYS_FREAD: {
-            int index = sysfs_fd_index(ebx);
-            if (index < 0) return (uint32_t)-1;
-            return (uint32_t)sysfs_fread(&sysfs_fds[index], ecx, edx);
-        }
-        case SYS_FWRITE: {
-            int index = sysfs_fd_index(ebx);
-            if (index < 0) return (uint32_t)-1;
-            return (uint32_t)sysfs_fwrite(&sysfs_fds[index], ecx, edx);
-        }
-        case SYS_FUNLINK: {
-            char path[SYSFS_PATH_MAX];
-            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
-                return (uint32_t)-1;
+        case SYS_PROCESS:
+            switch (op) {
+                case PROC_GETPID:
+                    return ring3_current_pid();
+                case PROC_EXIT: {
+                    struct irq_frame *exit_frame = ring3_terminate_current();
+                    if (exit_frame != 0) syscall_exit_frame = (uint32_t)exit_frame;
+                    return 0;
+                }
+                case PROC_YIELD:
+                    syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
+                    return 0;
+                default:
+                    return 0;
             }
-            return fat32_delete_file(path) == 0 ? 0U : (uint32_t)-1;
-        }
-        case SYS_FMKDIR: {
-            char path[SYSFS_PATH_MAX];
-            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
-                return (uint32_t)-1;
+        case SYS_FS:
+            switch (op) {
+                case FS_OPEN:
+                    return (uint32_t)sysfs_fopen(a1, a2);
+                case FS_CLOSE: {
+                    int index = sysfs_fd_index(a1);
+                    if (index < 0) return (uint32_t)-1;
+                    memset(&sysfs_fds[index], 0, sizeof(sysfs_fds[index]));
+                    return 0;
+                }
+                case FS_READ: {
+                    int index = sysfs_fd_index(a1);
+                    if (index < 0) return (uint32_t)-1;
+                    return (uint32_t)sysfs_fread(&sysfs_fds[index], a2, a3);
+                }
+                case FS_WRITE: {
+                    int index = sysfs_fd_index(a1);
+                    if (index < 0) return (uint32_t)-1;
+                    return (uint32_t)sysfs_fwrite(&sysfs_fds[index], a2, a3);
+                }
+                case FS_UNLINK: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    return fat32_delete_file(path) == 0 ? 0U : (uint32_t)-1;
+                }
+                case FS_MKDIR: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    return fat32_make_directory(path) == 0 ? 0U : (uint32_t)-1;
+                }
+                case FS_RMDIR: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    return fat32_remove_directory(path) == 0 ? 0U : (uint32_t)-1;
+                }
+                case FS_STAT: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    uint32_t size = 0U;
+                    int is_dir = 0;
+                    if (fat32_stat(path, &size, &is_dir) != 0) return (uint32_t)-1;
+                    return is_dir != 0 ? (uint32_t)-2 : size;
+                }
+                case FS_GETCWD: {
+                    if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
+                    char cwd[SYSFS_PATH_MAX];
+                    int length = fat32_get_cwd(cwd, sizeof(cwd));
+                    if (length < 0 || (uint32_t)length + 1U > a2) {
+                        return (uint32_t)-1;
+                    }
+                    memcpy((void *)a1, cwd, (uint32_t)length + 1U);
+                    return (uint32_t)length;
+                }
+                case FS_CHDIR: {
+                    char path[SYSFS_PATH_MAX];
+                    if (sysfs_resolve_path(a1, path, sizeof(path)) != 0 ||
+                        fat32_list_directory(path, 0) != 0 ||
+                        fat32_set_cwd(path) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    return 0;
+                }
+                default:
+                    return 0;
             }
-            return fat32_make_directory(path) == 0 ? 0U : (uint32_t)-1;
-        }
-        case SYS_FRMDIR: {
-            char path[SYSFS_PATH_MAX];
-            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
-                return (uint32_t)-1;
+        case SYS_SIG:
+            switch (op) {
+                case SIG_KILL:
+                    return ring3_signal_send(a1, a2) == 0 ? 0 : (uint32_t)-1;
+                case SIG_SIGNAL:
+                    return ring3_signal_set_handler(a1, a2) == 0 ? 0 : (uint32_t)-1;
+                case SIG_RETURN:
+                    return ring3_signal_sigreturn(frame);
+                default:
+                    return 0;
             }
-            return fat32_remove_directory(path) == 0 ? 0U : (uint32_t)-1;
-        }
-        case SYS_FSTAT: {
-            char path[SYSFS_PATH_MAX];
-            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0) {
-                return (uint32_t)-1;
-            }
-            uint32_t size = 0U;
-            int is_dir = 0;
-            if (fat32_stat(path, &size, &is_dir) != 0) return (uint32_t)-1;
-            return is_dir != 0 ? (uint32_t)-2 : size;
-        }
-        case SYS_GETCWD: {
-            if (!sys_user_buffer_ok(ebx, ecx)) return (uint32_t)-1;
-            char cwd[SYSFS_PATH_MAX];
-            int length = fat32_get_cwd(cwd, sizeof(cwd));
-            if (length < 0 || (uint32_t)length + 1U > ecx) {
-                return (uint32_t)-1;
-            }
-            memcpy((void *)ebx, cwd, (uint32_t)length + 1U);
-            return (uint32_t)length;
-        }
-        case SYS_CHDIR: {
-            char path[SYSFS_PATH_MAX];
-            if (sysfs_resolve_path(ebx, path, sizeof(path)) != 0 ||
-                fat32_list_directory(path, 0) != 0 ||
-                fat32_set_cwd(path) != 0) {
-                return (uint32_t)-1;
-            }
-            return 0;
-        }
-
         default:
             return -1;
     }
 }
 
-uint32_t sys_call(int call_number, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+uint32_t sys_call(uint32_t klass, uint32_t op,
+                  uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     uint32_t res = 0;
-    
+
     __asm__ volatile (
         "int $0x80"
         : "=a"(res)
-        : "a"(call_number), "b"(arg1), "c"(arg2), "d"(arg3)
+        : "a"(klass), "b"(op), "c"(arg1), "d"(arg2), "S"(arg3)
         : "memory"
     );
 
@@ -570,29 +599,29 @@ uint32_t sys_call(int call_number, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
 }
 
 void *sys_malloc(uint32_t size) {
-    return (void *)sys_call(SYS_MEMORY, MEMORY_MALLOC, size, 0);
+    return (void *)sys_call(SYS_MEMORY, MEMORY_MALLOC, size, 0, 0);
 }
 
 void *sys_calloc(uint32_t nmemb, uint32_t size) {
-    return (void *)sys_call(SYS_MEMORY, MEMORY_CALLOC, nmemb, size);
+    return (void *)sys_call(SYS_MEMORY, MEMORY_CALLOC, nmemb, size, 0);
 }
 
 void *sys_realloc(void *ptr, uint32_t size) {
-    return (void *)sys_call(SYS_MEMORY, MEMORY_REALLOC, (uint32_t)ptr, size);
+    return (void *)sys_call(SYS_MEMORY, MEMORY_REALLOC, (uint32_t)ptr, size, 0);
 }
 
 void sys_free(void *ptr) {
-    sys_call(SYS_MEMORY, MEMORY_FREE, (uint32_t)ptr, 0);
+    sys_call(SYS_MEMORY, MEMORY_FREE, (uint32_t)ptr, 0, 0);
 }
 
 void sys_shutdown(void) {
-    sys_call(SYS_POWER, POWER_SHUTDOWN, 0, 0);
+    sys_call(SYS_POWER, PWR_SHUTDOWN, 0, 0, 0);
 }
 
 void sys_reboot(void) {
-    sys_call(SYS_POWER, POWER_REBOOT, 0, 0);
+    sys_call(SYS_POWER, PWR_REBOOT, 0, 0, 0);
 }
 
 uint32_t sys_getpid(void) {
-    return sys_call(SYS_GETPID, 0, 0, 0);
+    return sys_call(SYS_PROCESS, PROC_GETPID, 0, 0, 0);
 }

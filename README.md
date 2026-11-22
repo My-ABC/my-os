@@ -22,8 +22,8 @@ A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided frameb
 - **ACPI shutdown** — shuts down via ACPI S5 state, with fallback to common ACPI I/O ports
 - **Ring 3 processes** — software context switching preempted by PIT IRQ0; run up to two user processes with separate kernel and user stacks
 - **Process control** — `ps`, `fg <pid>`, `bg <pid>`, and `kill <pid>` shell commands; Ring 3 tasks run in the background by default
-- **System calls** — Ring 3 can write output, query its process ID with `SYS_GETPID`, and cooperatively yield with `SYS_YIELD`
-- **Signals** — `SIGINT`/`SIGKILL` with per-process pending state; Ctrl+C delivers `SIGINT` to the foreground process, and user-registered handlers run via a restorer trampoline and `SYS_SIGRETURN`
+- **System calls** — Ring 3 can write output, query its process ID with `PROC_GETPID`, and cooperatively yield with `PROC_YIELD`
+- **Signals** — `SIGINT`/`SIGKILL` with per-process pending state; Ctrl+C delivers `SIGINT` to the foreground process, and user-registered handlers run via a restorer trampoline and `SIG_RETURN`
 - **ELF32** — validates and loads in-memory i386 ELF loadable segments with user permissions and BSS zeroing; foreground output hides the Shell prompt until the process exits or is backgrounded, while Shell input remains available
 - **Page-fault handling** — ISR14 demand-maps only registered user ranges (ELF image, 32 KiB user stack, user heap) with zeroed pages, kills processes on illegal user access or protection violations, and panics on illegal kernel faults
 - **shell(kernel)** — impl a shell on kernel mode 
@@ -193,7 +193,7 @@ process exits or is backgrounded.
 The `elf` command starts the built-in ELF32 demo in the foreground, so its
 `Hello from ELF32` system-call output is visible while the shell remains
 responsive. The demo installs a `SIGINT` handler and then waits; pressing
-Ctrl+C makes the handler print `Bye` and exit via `SYS_EXIT`, which releases
+Ctrl+C makes the handler print `Bye` and exit via `PROC_EXIT`, which releases
 its ELF user mappings so `elf` can be run again.
 
 ## Layout

@@ -3,7 +3,7 @@ from common import IntegrationFailure
 
 def check_signal_handler_delivery(session):
     """Ctrl+C must invoke the user-registered SIGINT handler and resume
-    the interrupted context via SYS_SIGRETURN."""
+    the interrupted context via SIG_RETURN."""
     sig_start = len(session.serial_data)
     session.send_line("run sigdemo.elf")
     session.wait_for_regex(rb"\[ELF\] Loaded ELF32 entry=", start=sig_start,

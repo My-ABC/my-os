@@ -7,20 +7,24 @@ global fs_demo_end
 
 ; User-space demo for the filesystem syscalls. Assembled once and loaded
 ; from the FAT32 test image as fsdemo.elf; run with `run fsdemo.elf`.
-; Exercises SYS_FOPEN/FWRITE/FSTAT/FCLOSE/FOPEN/FREAD/GETCWD/EXIT and
-; prints FSDEMO-* markers over SYS_WRITE.
+; Exercises FS_OPEN/FS_WRITE/FS_STAT/FS_CLOSE/FS_OPEN/FS_READ/FS_GETCWD/
+; PROC_EXIT and prints FSDEMO-* markers over IO_WRITE.
+; Syscall ABI: eax = class, ebx = sub-op, args in ecx/edx/esi.
 
 %define LOAD_ADDR 0x00700000
 %define VBASE (LOAD_ADDR - 0x100)
 
-%define SYS_WRITE   1
-%define SYS_EXIT    10
-%define SYS_FOPEN   11
-%define SYS_FCLOSE  12
-%define SYS_FREAD   13
-%define SYS_FWRITE  14
-%define SYS_FSTAT   18
-%define SYS_GETCWD  19
+%define SYS_IO       1
+%define SYS_PROCESS  5
+%define SYS_FS       6
+%define IO_WRITE     1
+%define PROC_EXIT    2
+%define FS_OPEN      1
+%define FS_CLOSE     2
+%define FS_READ      3
+%define FS_WRITE     4
+%define FS_STAT      8
+%define FS_GETCWD    9
 %define SYSFS_O_RDONLY 0
 %define SYSFS_O_RDWR   1
 %define FILE_MSG_LEN 13
@@ -53,100 +57,117 @@ fs_demo_start:
 
     times 0x100 - ($ - fs_demo_start) db 0
 fs_demo_code:
-    ; SYS_WRITE "FSDEMO-START"
-    mov eax, SYS_WRITE
-    mov ebx, start_msg + VBASE
+    ; IO_WRITE "FSDEMO-START"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, start_msg + VBASE
     int 0x80
 
-    ; fd = SYS_FOPEN("/fsdemo.txt", O_RDWR)
-    mov eax, SYS_FOPEN
-    mov ebx, path_str + VBASE
-    mov ecx, SYSFS_O_RDWR
+    ; fd = FS_OPEN("/fsdemo.txt", O_RDWR)
+    mov eax, SYS_FS
+    mov ebx, FS_OPEN
+    mov ecx, path_str + VBASE
+    mov edx, SYSFS_O_RDWR
     int 0x80
     cmp eax, -1
     je .fail
     cmp eax, 8
     jae .fail
-    mov esi, eax
+    mov ebp, eax
 
-    ; SYS_FWRITE(fd, msg, msg_len)
-    mov eax, SYS_FWRITE
-    mov ebx, esi
-    mov ecx, file_msg + VBASE
-    mov edx, FILE_MSG_LEN
-    int 0x80
-    cmp eax, edx
-    jne .fail
-
-    ; SYS_FSTAT("/fsdemo.txt") must equal msg_len
-    mov eax, SYS_FSTAT
-    mov ebx, path_str + VBASE
+    ; FS_WRITE(fd, msg, msg_len)
+    mov eax, SYS_FS
+    mov ebx, FS_WRITE
+    mov ecx, ebp
+    mov edx, file_msg + VBASE
+    mov esi, FILE_MSG_LEN
     int 0x80
     cmp eax, FILE_MSG_LEN
     jne .fail
 
-    ; SYS_FCLOSE(fd)
-    mov eax, SYS_FCLOSE
-    mov ebx, esi
+    ; FS_STAT("/fsdemo.txt") must equal msg_len
+    mov eax, SYS_FS
+    mov ebx, FS_STAT
+    mov ecx, path_str + VBASE
+    int 0x80
+    cmp eax, FILE_MSG_LEN
+    jne .fail
+
+    ; FS_CLOSE(fd)
+    mov eax, SYS_FS
+    mov ebx, FS_CLOSE
+    mov ecx, ebp
     int 0x80
     cmp eax, 0
     jne .fail
 
-    ; fd2 = SYS_FOPEN(path, O_RDONLY)
-    mov eax, SYS_FOPEN
-    mov ebx, path_str + VBASE
-    mov ecx, SYSFS_O_RDONLY
+    ; fd2 = FS_OPEN(path, O_RDONLY)
+    mov eax, SYS_FS
+    mov ebx, FS_OPEN
+    mov ecx, path_str + VBASE
+    mov edx, SYSFS_O_RDONLY
     int 0x80
     cmp eax, -1
     je .fail
     cmp eax, 8
     jae .fail
-    mov esi, eax
+    mov ebp, eax
 
-    ; n = SYS_FREAD(fd2, read_buf, 64)
-    mov eax, SYS_FREAD
-    mov ebx, esi
-    mov ecx, read_buf + VBASE
-    mov edx, 64
+    ; n = FS_READ(fd2, read_buf, 64)
+    mov eax, SYS_FS
+    mov ebx, FS_READ
+    mov ecx, ebp
+    mov edx, read_buf + VBASE
+    mov esi, 64
     int 0x80
     cmp eax, FILE_MSG_LEN
     jne .fail
     mov byte [read_buf + VBASE + eax], 0
 
     ; print the read-back content
-    mov eax, SYS_WRITE
-    mov ebx, read_buf + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, read_buf + VBASE
     int 0x80
 
-    ; SYS_GETCWD(cwd_buf, 32)
-    mov eax, SYS_GETCWD
-    mov ebx, cwd_buf + VBASE
-    mov ecx, 32
+    ; FS_GETCWD(cwd_buf, 32)
+    mov eax, SYS_FS
+    mov ebx, FS_GETCWD
+    mov ecx, cwd_buf + VBASE
+    mov edx, 32
     int 0x80
     test eax, eax
     js .fail
     mov byte [cwd_buf + VBASE + eax], 0
-    mov eax, SYS_WRITE
-    mov ebx, cwd_msg + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, cwd_msg + VBASE
     int 0x80
-    mov eax, SYS_WRITE
-    mov ebx, cwd_buf + VBASE
-    int 0x80
-
-    ; SYS_WRITE "FSDEMO-DONE"
-    mov eax, SYS_WRITE
-    mov ebx, done_msg + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, cwd_buf + VBASE
     int 0x80
 
-    ; SYS_EXIT
-    mov eax, SYS_EXIT
+    ; IO_WRITE "FSDEMO-DONE"
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, done_msg + VBASE
+    int 0x80
+
+    ; PROC_EXIT
+    mov eax, SYS_PROCESS
+    mov ebx, PROC_EXIT
+    xor ecx, ecx
     int 0x80
 
 .fail:
-    mov eax, SYS_WRITE
-    mov ebx, fail_msg + VBASE
+    mov eax, SYS_IO
+    mov ebx, IO_WRITE
+    mov ecx, fail_msg + VBASE
     int 0x80
-    mov eax, SYS_EXIT
+    mov eax, SYS_PROCESS
+    mov ebx, PROC_EXIT
+    xor ecx, ecx
     int 0x80
 .halt:
     jmp .halt

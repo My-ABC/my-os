@@ -3,39 +3,59 @@
 
 #include "stdint.h"
 
-// 系统调用号
-#define SYS_WRITE    1   // 向 VGA 输出字符串
-#define SYS_READ     2   // 从键盘读取字符串（带回显）
-#define SYS_GETCHAR  3   // 从键盘读取单个字符（阻塞）
-#define SYS_CLEAR    4   // 清屏
-#define SYS_REBOOT   5   // 重启系统
-#define SYS_TIME     6   // 获取 RTC 时间
-#define SYS_MEMORY   7   // 用户内存操作
-#define SYS_POWER    8   // 电源操作
-#define SYS_GETPID   9   // 获取当前 Ring 3 进程 ID
-#define SYS_EXIT     10  // 退出当前 Ring 3 进程
-#define SYS_FOPEN    11  // 打开 FAT32 文件，返回 fd
-#define SYS_FCLOSE   12  // 关闭文件描述符
-#define SYS_FREAD    13  // 从文件描述符读取
-#define SYS_FWRITE   14  // 向文件描述符写入
-#define SYS_FUNLINK  15  // 删除 FAT32 文件
-#define SYS_FMKDIR   16  // 创建 FAT32 目录
-#define SYS_FRMDIR   17  // 删除空 FAT32 目录
-#define SYS_FSTAT    18  // 获取路径的文件大小/类型
-#define SYS_GETCWD   19  // 获取当前工作目录
-#define SYS_CHDIR    20  // 切换当前工作目录
-#define SYS_YIELD    21  // 主动让出 CPU
-#define SYS_KILL     22  // 向进程发送信号 (ebx=pid, ecx=sig)
-#define SYS_SIGNAL   23  // 注册信号处理器 (ebx=sig, ecx=handler)
-#define SYS_SIGRETURN 24 // 信号处理器返回，恢复被中断的上下文（由 restorer 调用）
+// 系统调用 ABI：eax = 大类（SYS_*），ebx = 子操作号，
+// 参数依次为 ecx、edx、esi（最多 3 个），返回值在 eax。
 
-#define MEMORY_MALLOC  1
-#define MEMORY_CALLOC  2
-#define MEMORY_REALLOC 3
-#define MEMORY_FREE    4
+// 大类
+#define SYS_IO       1   // 控制台 / 键盘输入输出
+#define SYS_TIME     2   // 时间
+#define SYS_MEMORY   3   // 用户堆内存
+#define SYS_POWER    4   // 电源
+#define SYS_PROCESS  5   // 进程
+#define SYS_FS       6   // 文件系统
+#define SYS_SIG      7   // 信号
 
-#define POWER_SHUTDOWN 1
-#define POWER_REBOOT   2
+// SYS_IO 子操作
+#define IO_WRITE    1   // ecx: const char *str —— 向 VGA+串口输出字符串
+#define IO_GETCHAR  2   // 阻塞读取单个字符，返回字符
+#define IO_READ     3   // ecx: char *buf, edx: size —— 读取一行（带回显）
+#define IO_CLEAR    4   // 清屏
+
+// SYS_TIME 子操作
+#define TIME_GET    1   // 返回 Unix 时间戳（UTC）
+#define TIME_TO     2   // ecx: int32 偏移秒数, edx: rtc_time_t *buf —— 换算到 UTC±n
+
+// SYS_MEMORY 子操作
+#define MEMORY_MALLOC  1   // ecx: size
+#define MEMORY_CALLOC  2   // ecx: nmemb, edx: size
+#define MEMORY_REALLOC 3   // ecx: ptr, edx: size
+#define MEMORY_FREE    4   // ecx: ptr
+
+// SYS_POWER 子操作
+#define PWR_SHUTDOWN 1
+#define PWR_REBOOT   2
+
+// SYS_PROCESS 子操作
+#define PROC_GETPID  1   // 返回当前 Ring 3 进程 ID
+#define PROC_EXIT    2   // ecx: 退出码（暂不记录）—— 退出当前进程
+#define PROC_YIELD   3   // 主动让出 CPU
+
+// SYS_FS 子操作
+#define FS_OPEN    1   // ecx: path, edx: mode —— 返回 fd
+#define FS_CLOSE   2   // ecx: fd
+#define FS_READ    3   // ecx: fd, edx: buf, esi: size
+#define FS_WRITE   4   // ecx: fd, edx: buf, esi: size
+#define FS_UNLINK  5   // ecx: path —— 删除文件
+#define FS_MKDIR   6   // ecx: path —— 创建目录
+#define FS_RMDIR   7   // ecx: path —— 删除空目录
+#define FS_STAT    8   // ecx: path —— 返回大小，目录为 -2
+#define FS_GETCWD  9   // ecx: buf, edx: size —— 获取当前目录
+#define FS_CHDIR   10  // ecx: path —— 切换当前目录
+
+// SYS_SIG 子操作
+#define SIG_KILL    1   // ecx: pid, edx: sig —— 发送信号
+#define SIG_SIGNAL  2   // ecx: sig, edx: handler —— 注册处理器
+#define SIG_RETURN  3   // 信号处理器返回，恢复被中断的上下文（由 restorer 调用）
 
 #define SYSFS_O_RDONLY 0
 #define SYSFS_O_RDWR   1
@@ -45,7 +65,8 @@
 #define USER_HEAP_END   0x40000000U
 uint32_t sys_user_heap_contains(uint32_t addr);
 
-uint32_t sys_call(int call_number, uint32_t arg1, uint32_t arg2, uint32_t arg3);
+uint32_t sys_call(uint32_t klass, uint32_t op,
+                  uint32_t arg1, uint32_t arg2, uint32_t arg3);
 void *sys_malloc(uint32_t size);
 void *sys_calloc(uint32_t nmemb, uint32_t size);
 void *sys_realloc(void *ptr, uint32_t size);

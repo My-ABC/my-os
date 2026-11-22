@@ -22,8 +22,8 @@ Each Ring 3 process owns a private address space through `struct user_mm`
 ## Rules
 
 - CR3 is switched on every context switch: `ring3_timer_switch`
-  (preemption both ways), `SYS_YIELD`, and both termination paths
-  (`SYS_EXIT`, fatal signals, `ring3_kill`). CR3 reload flushes all
+  (preemption both ways), `PROC_YIELD`, and both termination paths
+  (`PROC_EXIT`, fatal signals, `ring3_kill`). CR3 reload flushes all
   non-global TLB entries.
 - ISR14 demand paging only maps into the *running* process's mm
   (`ring3_current_mm()`); `ring3_user_range_permitted()` therefore only
@@ -46,7 +46,7 @@ Each Ring 3 process owns a private address space through `struct user_mm`
 
 The full `make test-qemu` suite passes: Ring 3 scheduling and
 foreground/background switching, SIGINT handler delivery with
-`SYS_SIGRETURN`, ELF load/run, stack demand-mapping, illegal-access
+`SIG_RETURN`, ELF load/run, stack demand-mapping, illegal-access
 termination, and OOM reclamation. Isolation is structural — a process
 cannot observe another's pages because they are simply absent from its
 page tables.

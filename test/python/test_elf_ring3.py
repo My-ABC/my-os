@@ -21,21 +21,21 @@ class ElfRing3RegressionTests(unittest.TestCase):
         linked_user_base = amount * (1024 ** (2 if suffix == "m" else 1 if suffix == "k" else 0))
         elf_addresses = asm_hex_values(elf_demo, "dd")
 
-        # Header entry, PT_LOAD vaddr/paddr and SYS_WRITE string pointer.
+        # Header entry, PT_LOAD vaddr/paddr and IO_WRITE string pointer.
         self.assertNotEqual(linked_user_base, 0x00500000)
         self.assertEqual(
             [elf_addresses[0], elf_addresses[2], elf_addresses[3]],
             [0x00500000, 0x00500000, 0x00500000],
         )
         # Message and handler pointers are label offsets rebased onto the
-        # 0x00500000 load address.
+        # 0x00500000 load address (args now travel in ecx/edx).
         self.assertRegex(
             elf_demo,
-            r"mov ebx,\s*hello_msg - elf_demo_code \+ 0x00500000",
+            r"mov ecx,\s*hello_msg - elf_demo_code \+ 0x00500000",
         )
         self.assertRegex(
             elf_demo,
-            r"mov ecx,\s*bye_handler - elf_demo_code \+ 0x00500000",
+            r"mov edx,\s*bye_handler - elf_demo_code \+ 0x00500000",
         )
 
     def test_elf_run_uses_foreground_scheduler_and_tracks_image_for_cleanup(self):
