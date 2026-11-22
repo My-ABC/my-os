@@ -1,8 +1,8 @@
 # mini-libc API docs
 
-Bilingual reference for every public mini-libc header:
+Bilingual per-header API reference — one chapter per library:
 
-- [English](en/reference.md)
-- [中文](zh/reference.md)
+- [English](en/README.md)
+- [中文](zh/README.md)
 
-Keep both files in sync when adding or changing APIs.
+Keep both languages in sync with `mini-libc/include/` changes.
