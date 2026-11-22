@@ -15,7 +15,7 @@ stdlib、inttypes、setjmp、assert）、`stdio/`、`fs/`、
 运行器将每个测试编译链接 `build/libmyc.a`，连同 fixture
 文件注入 FAT32 镜像（每盘最多 6 个 ELF——64 MiB 镜像
 根目录约 16 个目录项），每组启动一次 QEMU，验证串口
-输出 `DONE-<tag> fails=0`。
+输出 `DONE-<tag> fails=0`。通过 `make test-libmyc` 运行。
 
 ## 目录结构
 

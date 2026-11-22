@@ -16,7 +16,8 @@ failure). The runner compiles each test against
 `build/libmyc.a`, injects the ELFs plus fixture files into a
 FAT32 image (max 6 ELFs per disk — the 64 MiB image root
 directory holds ~16 entries), boots one QEMU session per
-chunk, and verifies `DONE-<tag> fails=0` on serial.
+chunk, and verifies `DONE-<tag> fails=0` on serial. Run it via
+`make test-libmyc`.
 
 ## Layout
 

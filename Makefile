@@ -110,6 +110,10 @@ test-qemu-highmem:
 	python3 test/integration/run_qemu_highmem.py --qemu "$(QEMU)" \
 		--kernel build/highmem-test/myos.bin
 
+# mini-libc 测试套件：编译全部测试 ELF，注入 FAT32 盘，QEMU 逐个 run
+test-libmyc: build
+	python3 mini-libc/test/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
+
 # 编译 C 文件
 $(BUILD_DIR)/%.o: src/%.c
 	mkdir -p $(dir $@)
@@ -205,4 +209,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc test test-qemu test-qemu-highmem test-libmyc disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
