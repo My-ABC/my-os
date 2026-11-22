@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include "sys/syscall.h"
 
 /* ================= console output ================= */
@@ -25,10 +26,17 @@ struct out_sink {
     size_t cap;     /* string capacity; 0 = unlimited */
     size_t len;     /* chars stored (string mode) */
     int count;      /* chars processed (return value) */
+    FILE *f;        /* non-NULL → FILE stream target */
 };
+
+static int file_putc_raw(FILE *f, int c);
 
 static void os_ch(struct out_sink *o, int c) {
     ++o->count;
+    if (o->f != 0) {
+        file_putc_raw(o->f, c);
+        return;
+    }
     if (o->buf == 0) {
         if (clen >= CBUF_CAP - 1) cflush();
         cbuf[clen++] = (char)c;
@@ -183,7 +191,7 @@ static int vformat(struct out_sink *o, const char *fmt, va_list ap) {
 }
 
 int printf(const char *fmt, ...) {
-    struct out_sink o = { 0, 0, 0, 0 };
+    struct out_sink o = { 0, 0, 0, 0, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vformat(&o, fmt, ap);
@@ -193,7 +201,7 @@ int printf(const char *fmt, ...) {
 }
 
 int sprintf(char *buf, const char *fmt, ...) {
-    struct out_sink o = { buf, 0, 0, 0 };
+    struct out_sink o = { buf, 0, 0, 0, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vformat(&o, fmt, ap);
@@ -203,7 +211,7 @@ int sprintf(char *buf, const char *fmt, ...) {
 }
 
 int snprintf(char *buf, size_t n, const char *fmt, ...) {
-    struct out_sink o = { buf, n, 0, 0 };
+    struct out_sink o = { buf, n, 0, 0, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vformat(&o, fmt, ap);
@@ -213,7 +221,7 @@ int snprintf(char *buf, size_t n, const char *fmt, ...) {
 }
 
 int putchar(int c) {
-    struct out_sink o = { 0, 0, 0, 0 };
+    struct out_sink o = { 0, 0, 0, 0, 0 };
     os_ch(&o, c);
     cflush();
     return c;
@@ -256,10 +264,14 @@ static void in_ungetch(int c) {
 /* ================= input core ================= */
 
 struct in_src {
-    const char *s;      /* NULL → console */
+    const char *s;      /* NULL → console or FILE (see f) */
     size_t pos;
     int pushed;
+    FILE *f;            /* non-NULL → read from this stream */
 };
+
+static int file_getc_raw(FILE *f);
+static void file_ungetc_raw(FILE *f, int c);
 
 static int isrc_getc(struct in_src *src) {
     if (src->pushed >= 0) {
@@ -267,6 +279,7 @@ static int isrc_getc(struct in_src *src) {
         src->pushed = -1;
         return c;
     }
+    if (src->f != 0) return file_getc_raw(src->f);
     if (src->s == 0) return in_getch();
     unsigned char c = (unsigned char)src->s[src->pos];
     if (c == 0) return -1;
@@ -276,6 +289,7 @@ static int isrc_getc(struct in_src *src) {
 
 static void isrc_ungetc(struct in_src *src, int c) {
     if (c < 0) return;
+    if (src->f != 0) { file_ungetc_raw(src->f, c); return; }
     if (src->s == 0) { in_ungetch(c); return; }
     if (src->pushed < 0) src->pushed = c;
 }
@@ -472,7 +486,7 @@ int getchar(void) {
 }
 
 int scanf(const char *fmt, ...) {
-    struct in_src src = { 0, 0, -1 };
+    struct in_src src = { 0, 0, -1, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vfscanf(&src, fmt, ap);
@@ -481,10 +495,174 @@ int scanf(const char *fmt, ...) {
 }
 
 int sscanf(const char *s, const char *fmt, ...) {
-    struct in_src src = { s, 0, -1 };
+    struct in_src src = { s, 0, -1, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vfscanf(&src, fmt, ap);
     va_end(ap);
     return rc;
+}
+
+/* ================= FILE streams ================= */
+
+static FILE stdin_obj  = { -1, 0, 0, FS_FILE_STDIN,  -1 };
+static FILE stdout_obj = { -1, 0, 0, FS_FILE_STDOUT, -1 };
+FILE *stdin  = &stdin_obj;
+FILE *stdout = &stdout_obj;
+
+/* one char out; REG files go through fs_fputc, console streams share
+ * the printf buffer so ordering with printf() is preserved */
+static int file_putc_raw(FILE *f, int c) {
+    if (f == 0) return EOF;
+    if (f->kind == FS_FILE_REG) {
+        if (f->fd < 0) { f->err = 1; return EOF; }
+        unsigned char ch = (unsigned char)c;
+        if (fs_fwrite(&ch, 1, 1, f) != 1) { f->err = 1; return EOF; }
+        return c;
+    }
+    if (f->kind == FS_FILE_STDOUT) {
+        if (clen >= CBUF_CAP - 1) cflush();
+        cbuf[clen++] = (char)c;
+        return c;
+    }
+    f->err = 1;
+    return EOF;
+}
+
+static int file_getc_raw(FILE *f) {
+    if (f == 0) return EOF;
+    if (f->ungot >= 0) {
+        int c = f->ungot;
+        f->ungot = -1;
+        return c;
+    }
+    int c;
+    if (f->kind == FS_FILE_REG) {
+        if (f->fd < 0) { f->err = 1; return EOF; }
+        c = fs_fgetc(f);
+    } else if (f->kind == FS_FILE_STDIN) {
+        c = in_getch();
+    } else {
+        f->err = 1;
+        return EOF;
+    }
+    if (c == EOF) f->eof = 1;
+    return c;
+}
+
+static void file_ungetc_raw(FILE *f, int c) {
+    if (f == 0 || c < 0 || f->ungot >= 0) return;
+    f->ungot = c;
+}
+
+FILE *fopen(const char *path, const char *mode) {
+    return fs_fopen(path, mode);
+}
+
+int fclose(FILE *f) {
+    if (f == 0 || f->kind != FS_FILE_REG) {
+        if (f) f->err = 1;
+        errno = EBADF;
+        return EOF;
+    }
+    return fs_fclose(f);
+}
+
+size_t fread(void *buf, size_t size, size_t count, FILE *f) {
+    if (f == 0 || f->kind == FS_FILE_STDOUT || buf == 0 ||
+        size == 0 || count == 0) {
+        if (f) f->err = 1;
+        errno = EINVAL;
+        return 0;
+    }
+    if (f->kind == FS_FILE_REG) return fs_fread(buf, size, count, f);
+    /* console stdin: byte-at-a-time through file_getc_raw */
+    size_t total = size * count, done = 0;
+    char *p = (char *)buf;
+    while (done < total) {
+        int c = file_getc_raw(f);
+        if (c == EOF) break;
+        p[done++] = (char)c;
+    }
+    return done / size;
+}
+
+size_t fwrite(const void *buf, size_t size, size_t count, FILE *f) {
+    if (f == 0 || f->kind == FS_FILE_STDIN || buf == 0 ||
+        size == 0 || count == 0) {
+        if (f) f->err = 1;
+        errno = EINVAL;
+        return 0;
+    }
+    if (f->kind == FS_FILE_REG) return fs_fwrite(buf, size, count, f);
+    const char *p = (const char *)buf;
+    size_t total = size * count, done = 0;
+    while (done < total && file_putc_raw(f, (unsigned char)p[done]) != EOF)
+        ++done;
+    return done / size;
+}
+
+int fgetc(FILE *f) {
+    return file_getc_raw(f);
+}
+
+int fputc(int c, FILE *f) {
+    return file_putc_raw(f, c);
+}
+
+int fputs(const char *s, FILE *f) {
+    if (s == 0) return EOF;
+    int n = 0;
+    while (*s != '\0') {
+        if (file_putc_raw(f, (unsigned char)*s++) == EOF) return EOF;
+        ++n;
+    }
+    return n;
+}
+
+char *fgets(char *buf, int size, FILE *f) {
+    if (buf == 0 || size <= 0 || f == 0) return 0;
+    int i = 0, c;
+    while (i < size - 1 && (c = file_getc_raw(f)) != EOF) {
+        buf[i++] = (char)c;
+        if (c == '\n') break;
+    }
+    if (i == 0 && c == EOF) return 0;
+    buf[i] = '\0';
+    return buf;
+}
+
+int fprintf(FILE *f, const char *fmt, ...) {
+    if (f == 0) return EOF;
+    struct out_sink o = { 0, 0, 0, 0, f };
+    va_list ap;
+    va_start(ap, fmt);
+    int rc = vformat(&o, fmt, ap);
+    va_end(ap);
+    if (f->kind == FS_FILE_STDOUT) cflush();
+    return rc;
+}
+
+int fscanf(FILE *f, const char *fmt, ...) {
+    if (f == 0) return EOF;
+    struct in_src src = { 0, 0, -1, f };
+    va_list ap;
+    va_start(ap, fmt);
+    int rc = vfscanf(&src, fmt, ap);
+    va_end(ap);
+    return rc;
+}
+
+int feof(FILE *f) { return f ? f->eof : 0; }
+int ferror(FILE *f) { return f ? f->err : 0; }
+
+void clearerr(FILE *f) {
+    if (f) { f->eof = 0; f->err = 0; }
+}
+
+int fflush(FILE *f) {
+    if (f == 0 || f->kind == FS_FILE_STDOUT) { cflush(); return 0; }
+    if (f->kind == FS_FILE_REG) return 0;   /* unbuffered: nothing to do */
+    f->err = 1;
+    return EOF;
 }

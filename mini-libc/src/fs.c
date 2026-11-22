@@ -65,6 +65,8 @@ static FILE *file_alloc(void) {
     f->fd = -1;
     f->eof = 0;
     f->err = 0;
+    f->kind = FS_FILE_REG;
+    f->ungot = -1;
     return f;
 }
 

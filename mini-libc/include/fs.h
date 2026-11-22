@@ -47,10 +47,17 @@ int fs_readdir(const char *path, void *buf, unsigned size);
  * Minimal FILE for stdio to build on: wraps one kernel fd plus eof/err
  * flags. No buffering yet — every call is a syscall. `stdin`/`stdout`/
  * `stderr` are not provided here (console streams live in stdio.h). */
+/* FILE kinds: regular FAT32 file vs console streams owned by stdio */
+#define FS_FILE_REG   0
+#define FS_FILE_STDIN 1
+#define FS_FILE_STDOUT 2
+
 typedef struct {
-    int fd;         /* kernel fd, -1 when closed */
+    int fd;         /* kernel fd; unused for console kinds */
     int eof;        /* set after a short/EOF read */
     int err;        /* set on kernel errors */
+    int kind;       /* FS_FILE_* */
+    int ungot;      /* one-char pushback for scanf (-1 = none) */
 } FILE;
 
 FILE *fs_fopen(const char *path, const char *mode);
