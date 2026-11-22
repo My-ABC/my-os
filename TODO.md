@@ -103,7 +103,7 @@ This document tracks completed work and the project roadmap. When an item is com
 ## Hardware, Devices, and ACPI
 
 - [ ] **Inventory and enumerate driver-ecosystem gaps**
-  - [x] Review the capabilities and limits of existing ATA, keyboard, PIC/PIT, RTC, VGA/VBE, and ACPI drivers. (See `docs/en/11-driver-gaps.md` / `docs/zh/11-driver-gaps.md`.)
+  - [x] Review the capabilities and limits of existing ATA, keyboard, PIC/PIT, RTC, VGA/VBE, and ACPI drivers. (See `docs/en/12-driver-gaps.md` / `docs/zh/12-driver-gaps.md`.)
   - [x] List missing drivers by bus/device category, with priorities and test devices. (Same document; includes a suggested adoption order.)
   - [ ] Select and implement drivers incrementally based on actual needs; do not promise blanket compatibility in advance.
 - [ ] **Establish a device subsystem**
@@ -115,7 +115,7 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Enumerate buses/devices/functions, read vendor/device IDs, and class codes; log the bus map over serial.
   - [ ] Discover and assign BARs (memory and I/O windows) without conflicting with existing ISA devices.
   - [ ] Provide basic INTx interrupt routing so PCI devices can signal the PIC/APIC.
-  - [ ] Validate against QEMU `-device` fixtures (e1000, ich9-ahci, qemu-xhci, bochs-display) per `docs/en/11-driver-gaps.md`.
+  - [ ] Validate against QEMU `-device` fixtures (e1000, ich9-ahci, qemu-xhci, bochs-display) per `docs/en/12-driver-gaps.md`.
 - [ ] **Add GPU support**
   - [ ] Enumerate display-class PCI devices and identify GPU candidates (bochs-display, virtio-gpu, VMware SVGA, QXL).
   - [ ] Extend the framebuffer abstraction to cover GPU-provided scanout surfaces.

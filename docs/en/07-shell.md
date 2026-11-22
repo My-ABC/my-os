@@ -1,6 +1,6 @@
-# 06 — Shell
+# 07 — Shell
 
-English | [中文](../zh/06-shell.md)
+English | [中文](../zh/07-shell.md)
 
 `src/shell/shell.c` implements the interactive shell entered by `kmain`
 via `start_shell()`.
@@ -28,7 +28,7 @@ via `start_shell()`.
   shell echoes `^C`, discards the line being edited, sends `SIGINT` to the
   foreground Ring 3 process when one exists, and redraws the prompt on the
   next loop iteration — no Enter is needed. See
-  [12-signals.md](12-signals.md).
+  [13-signals.md](13-signals.md).
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped), but only when the
@@ -66,7 +66,7 @@ the destination is an existing directory, the effective target becomes
 ## Command table
 
 Every command, its arguments, and semantics are documented in
-[07-shell-commands.md](07-shell-commands.md). The `cmd_table` in
+[08-shell-commands.md](08-shell-commands.md). The `cmd_table` in
 `shell.c` is the authoritative list — update both together.
 
 ## Status: kernel-mode shell

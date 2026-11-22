@@ -18,12 +18,13 @@ Shell，以及运行在 ATA 磁盘上的 FAT32 文件系统。
 | [03-interrupts.md](03-interrupts.md) | IDT/PIC/PIT、`irq_frame` 契约、异常与 IRQ 分发 |
 | [04-syscall-abi.md](04-syscall-abi.md) | `int 0x80` 门、调用约定、调用号表、ABI 限制 |
 | [05-processes.md](05-processes.md) | Ring 3 调度器、ELF 加载、前后台、进程终止 |
-| [06-shell.md](06-shell.md) | 交互式 Shell 主循环、命令分发、路径解析 |
-| [07-shell-commands.md](07-shell-commands.md) | 全部 Shell 命令、参数与语义 |
-| [08-filesystem.md](08-filesystem.md) | ATA PIO、FAT32 模块划分、文件名编码、目录语义 |
-| [09-drivers.md](09-drivers.md) | 键盘、RTC、串口、VGA/VBE、ACPI、PIC/PIT 驱动说明 |
-| [10-build-and-test.md](10-build-and-test.md) | Makefile 目标、链接布局、host 测试、QEMU 集成套件 |
-| [11-driver-gaps.md](11-driver-gaps.md) | 驱动能力盘点、按总线列出的缺失驱动、优先级、QEMU 测试设备 |
+| [06-memory-isolation.md](06-memory-isolation.md) | 每进程页表、CR3 切换、mm 拆除 |
+| [07-shell.md](07-shell.md) | 交互式 Shell 主循环、命令分发、路径解析 |
+| [08-shell-commands.md](08-shell-commands.md) | 全部 Shell 命令、参数与语义 |
+| [09-filesystem.md](09-filesystem.md) | ATA PIO、FAT32 模块划分、文件名编码、目录语义 |
+| [10-drivers.md](10-drivers.md) | 键盘、RTC、串口、VGA/VBE、ACPI、PIC/PIT 驱动说明 |
+| [11-build-and-test.md](11-build-and-test.md) | Makefile 目标、链接布局、host 测试、QEMU 集成套件 |
+| [12-driver-gaps.md](12-driver-gaps.md) | 驱动能力盘点、按总线列出的缺失驱动、优先级、QEMU 测试设备 |
 
 英文版见 [../en/](../en/)。
 

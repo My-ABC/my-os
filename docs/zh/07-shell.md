@@ -1,6 +1,6 @@
-# 06 — Shell
+# 07 — Shell
 
-[English](../en/06-shell.md) | 中文
+[English](../en/07-shell.md) | 中文
 
 `src/shell/shell.c` 实现交互式 Shell，由 `kmain` 经 `start_shell()` 进
 入。
@@ -21,7 +21,7 @@
 - Ctrl+C：键盘驱动上报 `KEYBOARD_KEY_SIGINT`（0x05）。Shell 回显 `^C`、
   丢弃正在编辑的行、向前台 Ring 3 进程发送 `SIGINT`（若存在），下一轮循
   环自动重绘提示符——无需再按 Enter。详见
-  [12-signals.md](12-signals.md)。
+  [13-signals.md](13-signals.md)。
 - `split_line()` 按空白拆分为最多 16 个参数；以 `"` 开头的参数会保留
   内部空格直到配对的闭引号（引号本身被去除），但要求引号内容非空——
   `""`、未闭合的 `"` 以及单词中间的 `"` 都按字面量处理；引号内的 `\"`
@@ -55,7 +55,7 @@
 
 ## 命令表
 
-全部命令、参数与语义见 [07-shell-commands.md](07-shell-commands.md)。
+全部命令、参数与语义见 [08-shell-commands.md](08-shell-commands.md)。
 `shell.c` 中的 `cmd_table` 是权威清单——两者需同步更新。
 
 ## 现状：内核态 Shell

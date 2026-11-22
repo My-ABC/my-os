@@ -41,19 +41,8 @@ process. Two shell paths use it:
 
 ## Memory isolation
 
-Each Ring 3 process owns a private address space (`struct user_mm` in
-`src/mm/paging.c`): a private PDPT[0] -> page-directory chain covers the
-low 1 GiB of user space, a private copy of the supervisor-only low
-4 MiB identity map keeps boot stubs and the initial kernel stack
-reachable, and PDPT[3] is shared with the kernel page directory so the
-kernel half (including the KMAP window) is identical everywhere. CR3 is
-switched on every context switch (`ring3_timer_switch`, yield, and
-termination paths); the ISR14 demand pager only maps into the running
-process's mm, and `paging_mm_release` frees every owned user page —
-stack, image, heap, and the per-process signal trampoline — plus the
-private page tables. Kernel pages borrowed into a user space (the low
-identity map, the linker-placed `.user.text` code page) carry PTE bit 9
-and are never freed. User mappings below 4 MiB are refused.
+Each Ring 3 process owns a private address space with its own CR3 —
+see [06-memory-isolation.md](06-memory-isolation.md).
 
 ## Limitations
 

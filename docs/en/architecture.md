@@ -19,12 +19,13 @@ Numbered documents cover each subsystem in detail:
 | [03-interrupts.md](03-interrupts.md) | IDT/PIC/PIT, `irq_frame` contract, exception and IRQ dispatch |
 | [04-syscall-abi.md](04-syscall-abi.md) | `int 0x80` gate, calling convention, call table, ABI limitations |
 | [05-processes.md](05-processes.md) | Ring 3 scheduler, ELF loading, foreground/background, termination |
-| [06-shell.md](06-shell.md) | Interactive shell loop, command dispatch, path resolution |
-| [07-shell-commands.md](07-shell-commands.md) | Every shell command, arguments, and semantics |
-| [08-filesystem.md](08-filesystem.md) | ATA PIO, FAT32 module layout, name encoding, directory semantics |
-| [09-drivers.md](09-drivers.md) | Keyboard, RTC, serial, VGA/VBE, ACPI, PIC/PIT driver notes |
-| [10-build-and-test.md](10-build-and-test.md) | Makefile targets, linker layout, host tests, QEMU integration suite |
-| [11-driver-gaps.md](11-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
+| [06-memory-isolation.md](06-memory-isolation.md) | Per-process page tables, CR3 switching, mm teardown |
+| [07-shell.md](07-shell.md) | Interactive shell loop, command dispatch, path resolution |
+| [08-shell-commands.md](08-shell-commands.md) | Every shell command, arguments, and semantics |
+| [09-filesystem.md](09-filesystem.md) | ATA PIO, FAT32 module layout, name encoding, directory semantics |
+| [10-drivers.md](10-drivers.md) | Keyboard, RTC, serial, VGA/VBE, ACPI, PIC/PIT driver notes |
+| [11-build-and-test.md](11-build-and-test.md) | Makefile targets, linker layout, host tests, QEMU integration suite |
+| [12-driver-gaps.md](12-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
 
 Chinese translations live under [../zh/](../zh/).
 
