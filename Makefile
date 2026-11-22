@@ -197,8 +197,10 @@ disk-shell: build shell3
 			Path("$(SHELL3_ELF)").read_bytes())'
 	@echo "Created shell disk image: $(DISK_SHELL) (contains shell3.elf)"
 
-run-disk-shell: disk-shell
-	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK_SHELL),format=raw,if=ide -serial stdio
+# 经 GRUB ISO 启动（带 VBE framebuffer），同时挂载带 shell 的磁盘镜像
+run-disk-shell: iso disk-shell
+	qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) \
+		-drive file=$(DISK_SHELL),format=raw,if=ide -serial stdio
 
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build

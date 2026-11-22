@@ -71,7 +71,7 @@ make disk           # 创建 64 MB FAT32 格式的 disk.img
 make run            # 有 disk.img 就挂载，否则不连接磁盘
 make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并连接磁盘
 make disk-shell     # 创建包含 shell3.elf 的 FAT32 磁盘镜像 disk-shell.img
-make run-disk-shell # 构建带 shell 的磁盘镜像并通过 -kernel 启动
+make run-disk-shell # 构建带 shell 的磁盘镜像并通过 ISO 启动挂载
 ```
 
 内核启动时会探测主盘 ATA 设备；检测到磁盘后会自动执行 Shell 的磁盘

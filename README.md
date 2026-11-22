@@ -75,7 +75,7 @@ make disk           # create disk.img as a 64 MB FAT32 image
 make run            # attach disk.img when it exists; otherwise boot without a disk
 make run-disk       # create disk.img if needed and boot -kernel with it attached
 make disk-shell     # create disk-shell.img (FAT32) containing shell3.elf
-make run-disk-shell # build the shell disk and boot -kernel with it attached
+make run-disk-shell # build the shell disk and boot the ISO with it attached
 ```
 
 At startup the kernel probes the primary-master ATA device. If a disk is
