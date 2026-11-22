@@ -212,6 +212,12 @@
 - [ ] **定义用户态 ABI 与工具链**
   - [ ] 设计并稳定满足 libc 所需的系统调用与 ABI。
   - [ ] 建立简单的用户态编译、链接和打包工具链。
+- [ ] **实现 mini-libc（`mini-libc/`，MIT 协议）**
+  - [ ] 基于大类/子操作 ABI 的系统调用封装（`write`、`read`、`open`/`close`、`malloc` 系列、`exit`、`yield`、信号）。
+  - [ ] `string.h`/`stdlib.h` freestanding 实现（memcpy/memset/strlen/strcmp/malloc 封装）。
+  - [ ] 精简 `stdio.h`（`printf`/`puts`/`putchar`，基于 `IO_WRITE`）。
+  - [ ] `_start` 入口与 ELF32 链接方式，使用户程序可直接链接使用。
+  - [ ] 用 QEMU 下的 hello-world ELF32 验证。
 - [ ] **移植 musl libc**
   - [ ] 移植 musl libc 并将其系统调用层适配到 MyOS。
   - [ ] 用测试验证核心 libc 功能（stdio、malloc、字符串、时间）。

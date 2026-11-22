@@ -212,6 +212,12 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Define the user-space ABI and toolchain**
   - [ ] Design and stabilize the system-call ABI required by libc.
   - [ ] Establish a basic user-space compile, link, and packaging toolchain.
+- [ ] **Implement mini-libc (`mini-libc/`, MIT licensed)**
+  - [ ] Syscall wrappers over the class/sub-op ABI (`write`, `read`, `open`/`close`, `malloc` family, `exit`, `yield`, signals).
+  - [ ] `string.h`/`stdlib.h` freestanding implementations (memcpy/memset/strlen/strcmp/malloc wrappers).
+  - [ ] Minimal `stdio.h` (`printf`/`puts`/`putchar` over `IO_WRITE`).
+  - [ ] `_start` entry and ELF32 link recipe so user programs compile against it.
+  - [ ] Validate with a hello-world ELF32 under QEMU.
 - [ ] **Port musl libc**
   - [ ] Port musl libc and adapt its syscall layer to MyOS.
   - [ ] Validate core libc facilities (stdio, malloc, string, time) with tests.
