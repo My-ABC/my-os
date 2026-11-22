@@ -25,12 +25,17 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Implemented `cp`/`cp -r`/`mv` file and directory operations with Linux-style destination semantics.
 - [x] Implemented the `run` command to load and execute an ELF32 program from a FAT32 disk.
 - [x] Added filesystem syscalls `SYS_FSOPEN`/`WRITE`/`READ`/`CLOSE`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR` (11–20), `SYS_EXIT` (10), `SYS_YIELD` (21), `SYS_TIME` (6), and signal syscalls `SYS_KILL` (22)/`SYS_SIGNAL` (23)/`SYS_SIGRETURN` (24); user pointers are validated against registered ranges and paths resolve through the shared `fat32_resolve_path`/`g_cwd`.
-- [x] Implemented signal delivery end to end: `SIGINT`/`SIGKILL` only, per-process pending/blocked/handler state, Ctrl+C `KEYBOARD_KEY_SIGINT` → foreground `SIGINT`, fatal-default termination, and user handler invocation via a lazily mapped restorer page at `0x00900000` plus `SYS_SIGRETURN` context restore.
+- [x] Implemented signal delivery end to end: `SIGINT`/`SIGKILL` only, per-process pending/blocked/handler state, Ctrl+C `KEYBOARD_KEY_SIGINT` → foreground `SIGINT`, fatal-default termination, and user handler invocation via a per-process restorer trampoline at `0x00900000` plus `SYS_SIGRETURN` context restore.
 - [x] Implemented shell line editing: 16-entry history (Up/Down), cursor movement (Left/Right), insertion and Backspace editing with full-line repaint, double-quoted arguments, `\n`/`\\`/`\"` escapes with unknown-escape warnings, Ctrl+C `^C` echo + line discard + prompt redraw, and differentiated ELF/`run` error messages (bad image vs. process slots full vs. read failure).
 - [x] Made `echo` write to both the screen and COM1 serial so scripted/headless sessions keep serial visibility; removed the `secho` command.
-- [x] Added a unittest-style QEMU integration framework (`QemuTestCase` with `assert*` helpers, per-method PASS lines) alongside the existing bounded session orchestration.
+- [x] Added a unittest-style QEMU integration framework (`QemuTestCase` with `assert*` helpers, per-method PASS lines) alongside the existing bounded session orchestration; check results are marked with `✓ PASS`/`✗ FAIL`.
 - [x] Fixed RTC 12/24-hour handling: PM flag is extracted before BCD decode, decoded hours >12 fall back to 24-hour values for RTCs with unreliable mode bits, and all QEMU invocations pass `-rtc base=utc` so the guest RTC reads UTC for the UTC→Beijing conversion. `time` accepts `time 12`/`time 24`.
 - [x] Guarded `vbe_put_pixel` against out-of-bounds coordinates (serial diagnostic instead of an intermittent kernel panic).
+
+### Drivers, Console, and Power
+
+- [x] Implemented the basic platform drivers: PIC interrupt-controller setup, the PIT IRQ0 timer, PS/2 keyboard scancode decoding (including Ctrl+C `KEYBOARD_KEY_SIGINT` injection), the VGA text-mode console, VBE framebuffer initialization from GRUB multiboot info with bounded pixel drawing, COM1 serial output, and the RTC.
+- [x] Implemented ACPI table discovery and FADT parsing, including S5 shutdown through the PM1a control block with graceful fallback when tables or registers are unavailable.
 
 ### Project Structure, Tests, and Documentation
 
@@ -38,6 +43,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Organized tests by purpose, separating Python tests, host C tests, Shell launchers, and QEMU integration tests; added the optional `make test-qemu-highmem` test for real high-page allocation and access.
 - [x] Added host and QEMU integration tests covering PAE/PMM, high physical-page allocation and access, FAT32 LFN, Shell operations, Ring 3 processes, and disk ELF execution.
 - [x] Created the project roadmap and documented its entry points in both READMEs and the kernel agent guide.
+- [x] Created the bilingual architecture documentation series under `docs/en` and `docs/zh` (numbered chapters from boot through signals, plus driver-gap analysis and the memory-isolation chapter), with synchronized language links.
 
 ## Kernel, User Space, and System Calls
 

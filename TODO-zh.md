@@ -25,12 +25,17 @@
 - [x] 实现 `cp`/`cp -r`/`mv` 文件和目录操作，按 Linux 语义处理目标已存在的情况。
 - [x] 实现 `run` 命令，从 FAT32 磁盘装载并运行 ELF32 程序。
 - [x] 增加文件系统调用 `SYS_FSOPEN`/`WRITE`/`READ`/`CLOSE`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`（11–20）、`SYS_EXIT`（10）、`SYS_YIELD`（21）、`SYS_TIME`（6）以及信号调用 `SYS_KILL`（22）/`SYS_SIGNAL`（23）/`SYS_SIGRETURN`（24）；用户指针按登记范围校验，路径统一走 `fat32_resolve_path`/`g_cwd`。
-- [x] 端到端实现信号投递：仅 `SIGINT`/`SIGKILL`，每进程 pending/blocked/handler 状态，Ctrl+C `KEYBOARD_KEY_SIGINT` → 前台 `SIGINT`，默认致命即终止，用户 handler 经 `0x00900000` 惰性映射的 restorer 页 + `SYS_SIGRETURN` 恢复上下文执行。
+- [x] 端到端实现信号投递：仅 `SIGINT`/`SIGKILL`，每进程 pending/blocked/handler 状态，Ctrl+C `KEYBOARD_KEY_SIGINT` → 前台 `SIGINT`，默认致命即终止，用户 handler 经每进程私有的 `0x00900000` restorer trampoline + `SYS_SIGRETURN` 恢复上下文执行。
 - [x] 实现 Shell 行编辑：16 条历史（Up/Down）、光标移动（Left/Right）、插入与退格编辑及整行重绘、双引号参数、`\n`/`\\`/`\"` 转义（未知转义告警）、Ctrl+C 回显 `^C` + 丢弃当前行 + 重绘提示符、ELF/`run` 错误信息细分（镜像错误 vs 进程槽满 vs 读文件失败）。
 - [x] `echo` 同时输出屏幕和 COM1 串口，脚本化/无头会话保留串口可见性；移除 `secho` 命令。
-- [x] 新增 unittest 风格 QEMU 集成框架（`QemuTestCase` 及 `assert*` 断言、按方法输出 PASS），与原有有界会话编排并存。
+- [x] 新增 unittest 风格 QEMU 集成框架（`QemuTestCase` 及 `assert*` 断言、按方法输出 PASS），与原有有界会话编排并存；检查结果以 `✓ PASS`/`✗ FAIL` 标记。
 - [x] 修复 RTC 12/24 小时制：PM 位在 BCD 解码前提取，解码后小时 >12 时按 24 小时值处理（部分 RTC 模式位不可靠），所有 QEMU 调用统一 `-rtc base=utc` 使客体 RTC 读 UTC 供 UTC→北京时间换算。`time` 支持 `time 12`/`time 24`。
 - [x] 为 `vbe_put_pixel` 增加坐标边界检查（越界像素串口告警，不再间歇性内核 panic）。
+
+### 驱动、控制台与电源
+
+- [x] 实现基础平台驱动：PIC 中断控制器初始化、PIT IRQ0 定时器、PS/2 键盘扫描码解码（含 Ctrl+C `KEYBOARD_KEY_SIGINT` 注入）、VGA 文本控制台、基于 GRUB multiboot 信息的 VBE framebuffer 初始化（像素绘制带边界检查）、COM1 串口输出和 RTC。
+- [x] 实现 ACPI 表发现与 FADT 解析，包括经 PM1a 控制块的 S5 关机；表或寄存器不可用时优雅回退。
 
 ### 项目结构、测试与文档
 
@@ -38,6 +43,7 @@
 - [x] 按用途整理测试目录，将 Python、宿主 C、Shell 启动脚本和 QEMU 集成测试分开放置；新增可选的 `make test-qemu-highmem` 测试，验证真实高地址物理页分配与访问。
 - [x] 建立宿主和 QEMU 集成测试，覆盖 PAE/PMM、高地址物理页分配与访问、FAT32 LFN、Shell 操作、Ring 3 进程及磁盘 ELF 运行。
 - [x] 建立项目级 TODO 路线图，并在中英文 README 和内核 agent 指引中记录维护入口。
+- [x] 在 `docs/en` 和 `docs/zh` 下建立双语架构文档系列（从启动到信号的编号章节、驱动缺口分析及内存隔离章节），语言链接保持同步。
 
 ## 内核、用户态与系统调用
 
