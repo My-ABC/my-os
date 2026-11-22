@@ -41,7 +41,7 @@ pid_t proc_foreground(void);
 int proc_run_demo(void);
 
 /* start the kernel's built-in Ring 3 user-code demo in the
- * background (equivalent of the shell `ring3` command).
+ * foreground (equivalent of the shell `ring3` command).
  * Returns 0 or <0. */
 int proc_run_usercode(void);
 

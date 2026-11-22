@@ -593,7 +593,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         uint32_t *rec = (uint32_t *)(a1 + i * 12U);
                         rec[0] = pids[i];
                         rec[1] = states[i];
-                        rec[2] = pids[i] == fg ? 1U : 0U;
+                        rec[2] = (fg != 0U && pids[i] == fg) ? 1U : 0U;
                     }
                     return count;
                 }
@@ -635,7 +635,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         paging_mm_release(mm);
                         return (uint32_t)-1;
                     }
-                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 0) == 0
+                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) == 0
                            ? 0U : (uint32_t)-1;
                 }
                 default:

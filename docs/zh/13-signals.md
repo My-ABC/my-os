@@ -76,13 +76,13 @@ READY 进程的已存帧都有效）以及 `IO_READ`/`IO_GETCHAR` 等待循环�
 ## 信号来源
 
 - **Ctrl+C**：键盘驱动跟踪 Ctrl 修饰键，产生
-  `KEYBOARD_KEY_SIGINT`（0x05）控制字节而非字符 `'c'`。Shell 输入
-  循环消费该字节，对前台进程调用 `ring3_signal_send()` 发送
-  `SIGINT`；无前台进程时忽略。Shell 消费该字节时回显 `^C`、丢弃
-  当前输入行，并在前台进程结束后重绘提示符。若
-  `IO_READ`/`IO_GETCHAR` 等待循环
-  先读到该字节，则改为向自身投递 `SIGINT`，因此阻塞在键盘输入上的
-  进程同样会被中断（仍受其处置影响）。
+  `KEYBOARD_KEY_SIGINT`（0x05）控制字节而非字符 `'c'`。存在 Ring 3
+  前台进程时，键盘 ISR 本身即对其调用 `ring3_signal_send()`——即使
+  停止的 Shell 永远读不到缓冲字节，信号也已送达。该字节仍留在缓冲
+  区，之后无论被 Shell 输入循环还是 `IO_READ`/`IO_GETCHAR` 等待循环
+  读到，都可能再次投递 `SIGINT`，但因信号已 pending 或正在处理，
+  属无害重复。无前台进程时字节由 Shell 消费，回显 `^C` 并丢弃当前
+  输入行。
 - **`SIG_KILL`（`SYS_SIG`/1）**：`ecx` = pid、`edx` = 信号编号；把信号置为
   目标进程的 pending。只接受 `SIGINT`/`SIGKILL`，保留编号返回 -1。
   返回 0 或 -1。

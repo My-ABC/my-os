@@ -616,7 +616,7 @@ static int cmd_ring3(int argc, char *argv[]) {
         printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
         return -1;
     }
-    printf("Started a Ring 3 process in background; use ps then fg <pid>\n");
+    printf("Started a Ring 3 process in foreground; use bg <pid> to hide it\n");
     return 0;
 }
 

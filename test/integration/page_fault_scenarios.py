@@ -12,6 +12,17 @@ def check_page_faults(session):
         raise IntegrationFailure("user stack growth did not demand-map pages")
     session.pass_check("user stack growth demand-maps registered pages")
 
+    # stack.elf halts forever in the foreground, so the console belongs
+    # to it: Ctrl+C (turned into SIGINT by the keyboard ISR) is the only
+    # way back to the shell.
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    session.monitor_read_until(b"(qemu)", 3)
+    session.wait_for("^C", timeout=5)
+    ps_start = len(session.serial_data)
+    session.send_line("ps")
+    session.wait_for_regex(rb"\[PS\] 5 DEAD", start=ps_start, timeout=8)
+    session.pass_check("Ctrl+C reaps the halted foreground stack.elf")
+
     # faultu.elf touches an unregistered user address; the kernel must kill
     # the process and keep the shell alive.
     unmapped_start = len(session.serial_data)
@@ -41,10 +52,7 @@ def check_page_faults(session):
     session.wait_for_regex(rb"\[PS\] 7 DEAD", start=ps_start, timeout=5)
     session.pass_check("user protection violation terminates the process")
 
-    # The still-running stack.elf process must remain schedulable, and the
-    # shell must still accept commands.
-    session.send_line("kill 5")
-    session.wait_for("[RING3] Killed PID 5")
+    # The shell must still accept commands after the fault kills.
     session.send_line("echo page-fault-suite-ok")
     session.wait_for("page-fault-suite-ok")
     session.pass_check("shell survives page-fault process termination")

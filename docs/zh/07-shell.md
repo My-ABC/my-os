@@ -9,7 +9,8 @@
 
 - 行缓冲 128 字节；`shell_read_line()` 通过 `keyboard_hit()` 轮询 PS/2
   键盘驱动，无按键时以 `sti; hlt` 休眠等待。存在前台 Ring 3 进程时隐藏
-  提示符但仍接受输入，保证 `bg`/`kill` 可用。
+  提示符并完全停止消费按键（`sti; hlt` 循环）——输入留在缓冲区，留给
+  子进程或子进程退出后的 Shell。
 - 命令历史：保存最近 16 条非空行，连续重复条目不重复记录。`Up`/`Down`
   方向键回看历史（正在编辑的行保存为草稿，回到最新条目之后再按 `Down`
   可恢复）；回显通过 `vga_set_cursor` 重绘，VBE 图形模式同样支持。仅
@@ -18,9 +19,11 @@
   `Backspace` 删除光标前的字符（此前两者都只能在行尾生效）。每次编辑
   从记录的提示符原点经 `vga_set_cursor`/`vga_columns` 整行重绘，支持
   跨行换行；无提示符原点时（前台 Ring 3 任务运行中）编辑键被忽略。
-- Ctrl+C：键盘驱动上报 `KEYBOARD_KEY_SIGINT`（0x05）。Shell 回显 `^C`、
-  丢弃正在编辑的行、向前台 Ring 3 进程发送 `SIGINT`（若存在），下一轮循
-  环自动重绘提示符——无需再按 Enter。详见
+- Ctrl+C：键盘驱动上报 `KEYBOARD_KEY_SIGINT`（0x05）。键盘 ISR 本身
+  会对前台 Ring 3 进程调用 `ring3_signal_send()`，因此即使 Shell 处于
+  halt 状态、无人读取缓冲字节，信号也能送达。Shell 消费到该字节时回显
+  `^C`、丢弃正在编辑的行、向仍存活的前台进程转发 `SIGINT`，下一轮循环
+  自动重绘提示符——无需再按 Enter。详见
   [13-signals.md](13-signals.md)。
 - `split_line()` 按空白拆分为最多 16 个参数；以 `"` 开头的参数会保留
   内部空格直到配对的闭引号（引号本身被去除），但要求引号内容非空——
@@ -65,7 +68,11 @@
 
 实验性用户态移植位于 `src/shell/shell_ring3.c`（头文件
 `include/shell/shell_ring3.h`），由 `make shell3` 构建为
-`build/shell3.elf`，用 `run shell3.elf` 启动。最终版通过
+`build/shell3.elf`，用 `run shell3.elf` 启动。当挂载的磁盘根目录
+带有 `shell3.elf` 时——例如 `make disk-shell` 生成的
+`disk-shell.img`——`start_shell()` 会在打印内核横幅前将其自动
+置于前台启动，因此 `make run-disk-shell` 开机即进入 Ring 3
+Shell（`exit` 回到内核 Shell）。最终版通过
 mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
 `fs.h` 文件命令（`ls`、`cat`、`write`、`cp [-r]`、`mv`、
 `rm [-f]`、`cd`、`mkdir`、`rmdir`）、进程控制（`ps`、`fg`、

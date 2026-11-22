@@ -9,8 +9,9 @@ via `start_shell()`.
 
 - Line buffer: 128 bytes; `shell_read_line()` polls the PS/2 keyboard
   driver with `keyboard_hit()` and sleeps via `sti; hlt` while waiting.
-  While a foreground Ring 3 process exists the prompt is hidden but input
-  is still accepted so `bg`/`kill` keep working.
+  While a foreground Ring 3 process exists the prompt is hidden and the
+  shell stops consuming keys entirely (`sti; hlt` loop) — input stays
+  buffered for the child or for the shell once it exits.
 - Command history: the last 16 non-blank lines are kept in a static
   table; consecutive duplicates are skipped. `Up`/`Down` recall entries
   (the in-progress line is preserved as a draft and restored when
@@ -25,10 +26,13 @@ via `start_shell()`.
   keys are ignored while no prompt origin exists (foreground Ring 3
   task running).
 - Ctrl+C: the keyboard driver reports `KEYBOARD_KEY_SIGINT` (0x05). The
-  shell echoes `^C`, discards the line being edited, sends `SIGINT` to the
-  foreground Ring 3 process when one exists, and redraws the prompt on the
-  next loop iteration — no Enter is needed. See
-  [13-signals.md](13-signals.md).
+  keyboard ISR itself calls `ring3_signal_send()` for the foreground
+  Ring 3 process, so the signal lands even while the shell is halted
+  and nobody reads the buffered byte. When the shell does consume the
+  byte it echoes `^C`, discards the line being edited, forwards
+  `SIGINT` to the foreground process if one is still alive, and
+  redraws the prompt on the next loop iteration — no Enter is needed.
+  See [13-signals.md](13-signals.md).
 - `split_line()` tokenizes on whitespace into at most 16 arguments; an
   argument starting with `"` keeps its inner spaces up to the matching
   closing quote (the quotes themselves are stripped), but only when the
@@ -76,7 +80,12 @@ directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
 
 An experimental user-mode port lives in `src/shell/shell_ring3.c`
 (header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
-by `make shell3` and started with `run shell3.elf`. The final
+by `make shell3` and started with `run shell3.elf`. When the mounted
+disk carries `shell3.elf` at its root — e.g. the `disk-shell.img`
+produced by `make disk-shell` — `start_shell()` auto-starts it in the
+foreground before printing the kernel banner, so `make run-disk-shell`
+lands directly in the Ring 3 shell (`exit` returns to the kernel
+shell). The final
 version implements the full kernel command set through the
 mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
 `write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),
