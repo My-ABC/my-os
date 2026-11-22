@@ -3,7 +3,6 @@
 #include "pic.h"
 #include "pit.h"
 #include "keyboard.h"
-#include "serial.h"
 #include "vbe.h"
 
 void isr_handler(uint32_t int_no) {
@@ -14,12 +13,6 @@ void irq_handler(uint32_t int_no) {
     if (int_no == 32) {
         pit_tick();
         vbe_cursor_tick();
-
-        uint32_t ticks = pit_ticks();
-        if (ticks % PIT_FREQUENCY == 0) {
-            serial_print_dec(ticks / PIT_FREQUENCY);
-            serial_putchar('\n');
-        }
     } else if (int_no == 33) {
         keyboard_irq();
     }

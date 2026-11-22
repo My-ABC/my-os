@@ -171,14 +171,18 @@ class QemuSession:
         end = min(self.deadline, time.monotonic() + timeout)
         while time.monotonic() < end:
             self.check_running()
+            # The needle may already sit in the buffer: a previous wait can
+            # consume a chunk that also carries this wait's output, and the
+            # guest then goes idle. Re-check every iteration, not only when
+            # new bytes arrive.
+            if needle in self.serial_data:
+                return
             try:
                 chunk = self.serial_client.recv(65536)
             except BlockingIOError:
                 chunk = b""
             if chunk:
                 self.serial_data.extend(chunk)
-                if needle in self.serial_data:
-                    return
             else:
                 time.sleep(0.01)
         raise IntegrationFailure(f"serial output did not contain {needle!r}")
