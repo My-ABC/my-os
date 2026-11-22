@@ -55,6 +55,10 @@ TESTS = [
 ]
 # negative test: must abort; checked separately
 AFail = ("negative", "afail.elf", "negative/afail.c")
+# power test: power_reboot() reaches the kernel ACPI handler; the
+# actual reset/poweroff is hardware-level and does not complete
+# under QEMU, so we only verify the syscall path end-to-end
+Power = ("power", "power.elf", "power/power.c")
 
 CFLAGS = ["-m32", "-nostdlib", "-static", "-no-pie", "-ffreestanding",
           "-O2", "-I", str(ROOT / "mini-libc" / "include")]
@@ -137,6 +141,7 @@ def main():
         # session per chunk.
         chunks = [TESTS[i:i + 7] for i in range(0, len(TESTS), 6)]
         chunks.append([AFail + (None,)])   # negative test, own session
+        chunks.append([Power + (None,)])   # power test, own session
         results = []
         for chunk in chunks:
             elfs = build_tests_chunk(workdir, chunk, args.cc)
@@ -146,7 +151,10 @@ def main():
             try:
                 session.start()
                 session.wait_for(b"Unix timestamp", timeout=90)
-                run_chunk(session, chunk, results)
+                if chunk[0][0] == "power":
+                    run_power_test(session, results)
+                else:
+                    run_chunk(session, chunk, results)
             finally:
                 session.close()
 
@@ -173,6 +181,22 @@ def build_tests_chunk(workdir, chunk, cc):
         compile_test(cc, src, out)
         elfs.append((disk_name, out))
     return elfs
+
+
+def run_power_test(session, results):
+    """power_reboot() must reach the kernel ACPI handler. The reset
+    itself does not complete under QEMU (no firmware reset), so the
+    pass criterion is the [ACPI] serial trace after `run power.elf`."""
+    tag = "power/power"
+    try:
+        session.send_line("run power.elf")
+        session.wait_for(b"power-reboot-start", timeout=30)
+        session.wait_for(b"[ACPI]", timeout=30)
+        results.append((tag, True, "power_reboot reached ACPI handler"))
+        print("PASS", tag, "- power_reboot reached ACPI handler")
+    except IntegrationFailure as e:
+        results.append((tag, False, str(e)))
+        print("FAIL", tag, "-", e)
 
 
 def run_chunk(session, chunk, results):

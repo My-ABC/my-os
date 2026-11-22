@@ -66,7 +66,7 @@ LIBMYC_SRCS = mini-libc/syscall.S mini-libc/src/crt0.S \
 	mini-libc/src/unistd.c mini-libc/src/stdlib.c \
 	mini-libc/src/assert.c mini-libc/src/inttypes.c \
 	mini-libc/src/signal.c mini-libc/src/process.c \
-	mini-libc/src/console.c
+	mini-libc/src/console.c mini-libc/src/power.c
 LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$(LIBMYC_SRCS))) \
 	$(patsubst mini-libc/src/%.c,$(BUILD_DIR)/mini-libc/%.o,$(filter %.c,$(LIBMYC_SRCS)))
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
