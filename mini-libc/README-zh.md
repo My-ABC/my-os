@@ -12,13 +12,20 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 让用户程序可以用 C 编写而不必手写汇编。
 完整 ABI 参考见 `docs/zh/04-syscall-abi.md`。
 
+需要支持 C11 的 freestanding 编译器（如 `i686-elf-gcc`，配合
+`-m32 -ffreestanding -nostdlib`）。
+
 ## 目录结构
 
 | 路径 | 内容 |
 |------|------|
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 打开模式、`PROC_STATE_*` 状态值，以及 `syscall0`–`syscall3` 声明。与 `include/os/syscall.h` 对齐。 |
+| `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | freestanding 基础头文件：定宽整数类型、`size_t`/`ptrdiff_t`/`NULL`/`offsetof`、`bool`、整数与浮点极限值 |
+| `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
+| `include/stdio.h` `stdarg.h` | 精简 `printf`/`scanf` 与 `va_list` 内建封装 |
 | `syscall.S` | `int 0x80` 原始封装 `syscall0`–`syscall3`（cdecl 约定） |
 | `src/crt0.S` | ELF 入口点 `_start`：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
+| `src/string.c` `ctype.c` `stdio.c` | `string.h`/`ctype.h`/`stdio.h` 函数的 freestanding 实现 |
 | `examples/hello.c` | 使用 syscall 封装的最小 Ring 3 hello-world |
 
 ## 调用内核
@@ -44,26 +51,27 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 见 `TODO-zh.md` 中 "Implement mini-libc / 实现 mini-libc" 条目：
 
-- `string.h` / `stdlib.h` — 纯函数与基于 `SYS_MEMORY` 的堆辅助
-- `stdio.h` — 基于 `IO_WRITE` 的精简 `printf`/`puts`
-- 高层封装（`open`/`read`/`write`/`malloc` 风格 API）
+- `stdlib.h` — 基于 `SYS_MEMORY` 的堆辅助（`malloc`/`free`/`calloc`/`realloc`）
+- 按需扩展 `stdio.h`（`puts`/`putchar`/`fgets`、字段宽度）
+- 高层封装（`open`/`read`/`write`/`exit` 风格 API）
 
 ## 构建说明
 
-使用与内核相同的 freestanding 工具链。把 `crt0.S`、`syscall.S` 和
-程序源码一起编译链接：
+用 `make libmyc` 构建静态库，产物为 `build/libmyc.a`，包含
+`syscall.S`、`crt0.S`、`string.c`、`ctype.c`。手动构建库和用户程序：
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S mini-libc/examples/hello.c \
-    -o hello.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-产物是入口点为 `_start` 的静态 ELF32；`crt0` 调用 `main`，把返回值
-作为 `PROC_EXIT` 参数传出，随后不再返回。用户程序用
-`-I mini-libc/include` 编译。可通过 shell 的 `run` 命令或
-`PROC_EXEC` syscall 加载。
+产物是入口点为 `_start` 的静态 ELF32（`_start` 由归档中的 `crt0.o`
+提供）；`crt0` 调用 `main`，把返回值作为 `PROC_EXIT` 参数传出，随后
+不再返回。可通过 shell 的 `run` 命令或 `PROC_EXEC` syscall 加载。
 
 ## 开发分支
 

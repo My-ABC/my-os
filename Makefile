@@ -6,6 +6,9 @@ LD := $(shell if command -v i686-elf-ld >/dev/null 2>&1; then echo i686-elf-ld; 
 # 检测 nasm
 AS := $(shell if command -v nasm >/dev/null 2>&1; then echo nasm; else echo "nasm not found"; exit 1; fi)
 
+# 检测 ar
+AR := $(shell if command -v i686-elf-ar >/dev/null 2>&1; then echo i686-elf-ar; else echo ar; fi)
+
 
 INCLUDE_DIRS = include include/arch/x86 include/drivers include/fs include/lib \
 	include/mm include/os include/shell
@@ -53,6 +56,16 @@ QEMU ?= qemu-system-i386
 DISK ?= disk.img
 DISK_SIZE ?= 64M
 
+# mini-libc 用户态库：编译为静态归档 build/libmyc.a
+LIBMYC_CFLAGS = -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector -O2 \
+	-I mini-libc/include -MMD -MP
+LIBMYC_SRCS = mini-libc/syscall.S mini-libc/src/crt0.S \
+	mini-libc/src/string.c mini-libc/src/ctype.c mini-libc/src/stdio.c
+LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$(LIBMYC_SRCS))) \
+	$(patsubst mini-libc/src/%.c,$(BUILD_DIR)/mini-libc/%.o,$(filter %.c,$(LIBMYC_SRCS)))
+LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
+LIBMYC_A = $(BUILD_DIR)/libmyc.a
+
 ifdef HIGHMEM_QEMU_TEST
 CFLAGS += -DPMM_QEMU_HIGHMEM_TEST
 BUILD_DIR := build/highmem-test
@@ -60,11 +73,26 @@ KERNEL := build/highmem-test/myos.bin
 endif
 
 -include $(DEPFILES)
+-include $(LIBMYC_DEPFILES)
 
 # 构建
 build: $(OBJS)
 	mkdir -p $(dir $(KERNEL))
 	$(LD) $(LDFLAGS) $^ -o $(KERNEL)
+
+# 编译 mini-libc 为静态库 build/libmyc.a
+libmyc: $(LIBMYC_A)
+
+$(LIBMYC_A): $(LIBMYC_OBJS)
+	$(AR) rcs $@ $^
+
+$(BUILD_DIR)/mini-libc/%.o: mini-libc/%.S
+	mkdir -p $(dir $@)
+	$(CC) $(LIBMYC_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/mini-libc/%.o: mini-libc/src/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(LIBMYC_CFLAGS) -c $< -o $@
 
 test:
 	python3 -m unittest discover -s test/python -p 'test_*.py' -v
@@ -172,4 +200,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

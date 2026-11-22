@@ -2,6 +2,7 @@
 
 `mini-libc/` 是面向 Ring 3 程序的轻量 freestanding C 库，采用 MIT 协议（`mini-libc/LICENSE`；每个源文件都带 `SPDX-License-Identifier: MIT` 标记）。
 它封装 `int 0x80` 大类/子操作 syscall ABI，使用户程序可以用 C 而非纯汇编编写。
+mini-libc 面向 **C11**，使用 freestanding 编译器构建（`i686-elf-gcc -m32 -ffreestanding -nostdlib`）。
 
 English: [English version](../en/14-mini-libc.md)
 
@@ -10,11 +11,15 @@ English: [English version](../en/14-mini-libc.md)
 | 文件 | 内容 |
 |------|------|
 | `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
+| `include/stdint.h` `stddef.h` `stdbool.h` `limits.h` `float.h` | freestanding 基础头文件 |
+| `include/string.h` `ctype.h` | 字符串/内存与字符分类函数声明 |
+| `include/stdio.h` `stdarg.h` | 精简 `printf`/`scanf` 与 `va_list` 内建封装 |
 | `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
 | `src/crt0.S` | `_start` 入口点：构造 `argc`/`argv`/`envp`，调用 `main`，经 `PROC_EXIT` 退出 |
+| `src/string.c` `ctype.c` `stdio.c` | `string.h`/`ctype.h`/`stdio.h` 的 freestanding 实现 |
 | `examples/hello.c` | 最小 Ring 3 hello-world 示例 |
 
-更多模块（`string.h`、`stdlib.h`、`stdio.h`、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
+更多模块（`stdlib.h`、更宽的 `stdio.h` 覆盖、高层封装）计划中——见 TODO "实现 mini-libc" 条目。
 
 ## 调用内核
 
@@ -37,17 +42,30 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 大类与子操作常量在 `mini-libc/include/sys/syscall.h` 中，与 `include/os/syscall.h` 保持一致；用户程序直接包含它即可，无需自备副本。
 
+## stdio
+
+`stdio.h` 刻意保持精简——只有 `printf` 和 `scanf`：
+
+- `printf` 支持 `%d` `%i` `%u` `%x` `%X` `%s` `%c` `%p` 和 `%%`；输出先缓冲再经 `IO_WRITE` 冲刷。
+- `scanf` 支持 `%d` `%i` `%u` `%x` `%s` `%c`、字面字符和空白跳过；输入经 `IO_READ` 按行读入静态小缓冲区，带一个字符的 pushback。
+
+`stdarg.h` 基于 GCC 内建实现 `va_list`/`va_start`/`va_arg`/`va_end`/`va_copy`。
+
 ## 构建说明
 
-把 `crt0.S`、`syscall.S` 和程序源码一起编译链接为入口点为
-`_start` 的静态 ELF32，例如：
+用 `make libmyc` 构建静态库，产物为 `build/libmyc.a`（包含
+`syscall.S`、`crt0.S`、`string.c`、`ctype.c`）。然后编译程序并链接
+该归档：
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S program.c -o program.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-内核启动用户进程时栈为空，`crt0` 为 `main` 构造 `argc`/`argv`/`envp`
-调用帧，把 `main` 返回值作为 `PROC_EXIT` 参数传出，随后不再返回。
-用 Shell 的 `run` 命令或 `PROC_EXEC` 装载生成的 ELF 运行。
+归档中的 `crt0` 为 `main` 构造 `argc`/`argv`/`envp` 调用帧（内核启动
+用户进程时栈为空），把 `main` 返回值作为 `PROC_EXIT` 参数传出，随后
+不再返回。用 Shell 的 `run` 命令或 `PROC_EXEC` 装载生成的 ELF 运行。
