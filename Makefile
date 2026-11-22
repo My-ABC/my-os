@@ -182,6 +182,24 @@ disk:
 run-disk: build disk
 	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
 
+# 带用户态 shell 的 FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录
+DISK_SHELL ?= disk-shell.img
+
+disk-shell: build shell3
+	@command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }
+	@rm -f "$(DISK_SHELL)"
+	truncate -s $(DISK_SIZE) "$(DISK_SHELL)"
+	mkfs.fat -F 32 -n MYOS "$(DISK_SHELL)"
+	python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
+		from fat32_image import add_root_file; \
+		from pathlib import Path; \
+		add_root_file("$(DISK_SHELL)", "shell3.elf", \
+			Path("$(SHELL3_ELF)").read_bytes())'
+	@echo "Created shell disk image: $(DISK_SHELL) (contains shell3.elf)"
+
+run-disk-shell: disk-shell
+	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK_SHELL),format=raw,if=ide -serial stdio
+
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
 	qemu-system-i386 -rtc base=utc -machine q35 -kernel $(KERNEL) -serial stdio
@@ -223,4 +241,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem test-libmyc disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem test-libmyc disk disk-shell run run-kernel run-nographic run-serial run-disk run-disk-shell run-q35 run-q35-nographic iso run-iso debug clean
