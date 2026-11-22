@@ -58,10 +58,19 @@
 全部命令、参数与语义见 [08-shell-commands.md](08-shell-commands.md)。
 `shell.c` 中的 `cmd_table` 是权威清单——两者需同步更新。
 
-## 现状：内核态 Shell
+## 现状：内核态 Shell + 实验性 Ring 3 Shell
 
-Shell 目前运行在内核态，直接调用内核子系统（`fat32_*`、`ring3_*`、
-`vga_*`、`printf`）。迁移到 Ring 3 是 `TODO.md` 中已规划的工作（"将
-Shell 完善并迁移到 Ring 3"）；前置条件包括新的进程控制、控制台光标定
-位、目录列举、更丰富时间/RTC 数据的系统调用，以及更大的
-`RING3_PROCESS_COUNT` 和用于隔离的每进程页表。
+主 Shell 运行在内核态，直接调用内核子系统（`fat32_*`、`ring3_*`、
+`vga_*`、`printf`）。
+
+实验性用户态移植位于 `src/shell/shell_ring3.c`（头文件
+`include/shell/shell_ring3.h`），由 `make shell3` 构建为
+`build/shell3.elf`，用 `run sh3.elf` 启动（需 8.3 短名）。它在
+`SYS_IO`/`SYS_TIME`/`SYS_PROCESS`/`SYS_FS`/`SYS_SIG`/`SYS_POWER`
+与 mini-libc 之上重新实现了所有可由 syscall 覆盖的命令——`time`、
+`echo`、`reboot`、`shutdown`、`help`、`clear`、`hello`、`ps`、
+`fg`、`bg`、`kill`、`ls`、`cat`、`write`、`cp [-r]`、`mv`、`rm`、
+`cd`、`mkdir`、`rmdir [-f]`、`run`；仅内核可用的命令（`ring3`、
+`elf`、`disk`）未移植。已知缺口：行输入走 `IO_READ`（无历史/方向
+键编辑）、`bg` 只能隐藏前台进程、控制台输出要求 shell 处于前台。
+完整迁移仍在 `TODO.md` 跟踪。

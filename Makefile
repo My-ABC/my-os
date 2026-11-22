@@ -39,7 +39,7 @@ ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T linker.ld -nostdlib
 
 # 自动查找所有 .c 和 .asm 文件
-C_SRCS = $(shell find src -type f -name '*.c' -print)
+C_SRCS = $(filter-out src/shell/shell_ring3.c,$(shell find src -type f -name '*.c' -print))
 ASM_SRCS = $(filter-out boot/gdt.asm boot/paging.asm,$(wildcard boot/*.asm))
 
 # 自动生成目标文件列表
@@ -67,6 +67,10 @@ LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
 LIBMYC_A = $(BUILD_DIR)/libmyc.a
 
+# Ring 3 用户态 shell：独立 ELF32，链接 libmyc.a，经 run 启动
+SHELL3_ELF = $(BUILD_DIR)/shell3.elf
+SHELL3_OBJ = $(BUILD_DIR)/shell_ring3_user.o
+
 ifdef HIGHMEM_QEMU_TEST
 CFLAGS += -DPMM_QEMU_HIGHMEM_TEST
 BUILD_DIR := build/highmem-test
@@ -83,6 +87,15 @@ build: $(OBJS)
 
 # 编译 mini-libc 为静态库 build/libmyc.a
 libmyc: $(LIBMYC_A)
+
+shell3: libmyc $(SHELL3_ELF)
+
+$(SHELL3_ELF): $(SHELL3_OBJ) $(LIBMYC_A)
+	$(CC) -m32 -nostdlib -static -no-pie -Wl,-e,_start -o $@ $^
+
+$(SHELL3_OBJ): src/shell/shell_ring3.c
+	mkdir -p $(dir $@)
+	$(CC) $(LIBMYC_CFLAGS) -Iinclude/shell -c $< -o $@
 
 $(LIBMYC_A): $(LIBMYC_OBJS)
 	$(AR) rcs $@ $^
@@ -201,4 +214,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean

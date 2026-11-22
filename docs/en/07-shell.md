@@ -69,11 +69,20 @@ Every command, its arguments, and semantics are documented in
 [08-shell-commands.md](08-shell-commands.md). The `cmd_table` in
 `shell.c` is the authoritative list — update both together.
 
-## Status: kernel-mode shell
+## Status: kernel-mode shell + experimental Ring 3 shell
 
-The shell currently runs in kernel mode and calls kernel subsystems
-directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`). Migrating it to Ring 3
-is planned work tracked in `TODO.md` ("Complete the Shell and migrate it
-to Ring 3"); it requires new syscalls for process control, console cursor
-positioning, directory listing, and richer time/RTC data, plus a larger
-`RING3_PROCESS_COUNT` and per-process page tables for isolation.
+The primary shell runs in kernel mode and calls kernel subsystems
+directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
+
+An experimental user-mode port lives in `src/shell/shell_ring3.c`
+(header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
+by `make shell3` and started with `run sh3.elf` (rename for 8.3). It
+reimplements the syscall-coverable commands — `time`, `echo`,
+`reboot`, `shutdown`, `help`, `clear`, `hello`, `ps`, `fg`, `bg`,
+`kill`, `ls`, `cat`, `write`, `cp [-r]`, `mv`, `rm`, `cd`, `mkdir`,
+`rmdir [-f]`, `run` — on top of `SYS_IO`/`SYS_TIME`/`SYS_PROCESS`/
+`SYS_FS`/`SYS_SIG`/`SYS_POWER` and mini-libc. Kernel-only commands
+(`ring3`, `elf`, `disk`) are omitted. Known gaps: line input uses
+`IO_READ` (no history/arrow editing), `bg` only hides the foreground
+process, and console output requires the shell to be foreground.
+Full migration remains tracked in `TODO.md`.

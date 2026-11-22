@@ -15,7 +15,7 @@ mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-g
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
 | `include/errno.h` | `errno` global plus common `E*` constants (Linux-compatible values) |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` plus `va_list` builtins |
-| `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
+| `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl); save/restore callee-saved regs (`ebx`/`esi`/`edi`/`ebp`) around the trap since the kernel may clobber them |
 | `src/crt0.S` | `_start` entry point: builds `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
 | `src/string.c` `ctype.c` `stdio.c` `errno.c` | Freestanding implementations of `string.h`/`ctype.h`/`stdio.h`/`errno.h` |
 | `examples/hello.c` | Minimal Ring 3 hello-world |
