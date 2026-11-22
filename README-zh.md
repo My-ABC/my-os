@@ -2,6 +2,10 @@
 
 # MyOS
 
+[![License](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/lang-C%20%2B%20Assembly-yellow.svg)]()
+[![Arch](https://img.shields.io/badge/arch-x86%20%2832--bit%29-orange.svg)]()
+
 一个 32 位 x86 内核：通过 Multiboot/GRUB 启动，使用 GRUB 提供的 framebuffer 控制台和 COM1 串口，处理 CPU 异常与硬件中断。
 
 ## 功能

@@ -1,5 +1,9 @@
 # mini-libc
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/lang-C-yellow.svg)]()
+[![Freestanding](https://img.shields.io/badge/freestanding-no_libc-lightgrey.svg)]()
+
 MyOS Ring 3 用户程序的轻量 freestanding C 库。
 以 MIT 协议发布——见 [LICENSE](LICENSE)。
 每个源文件均带有 `SPDX-License-Identifier: MIT` 标记。

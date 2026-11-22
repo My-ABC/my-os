@@ -3,6 +3,9 @@ English | [中文](README-zh.md) | [Documentation](docs/en/)
 # MyOS
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/My-ABC/my-os)
+[![License](https://img.shields.io/badge/License-GPL--2.0-blue.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/lang-C%20%2B%20Assembly-yellow.svg)]()
+[![Arch](https://img.shields.io/badge/arch-x86%20%2832--bit%29-orange.svg)]()
 
 A small 32-bit x86 kernel: boots via Multiboot/GRUB, uses a GRUB-provided framebuffer console and COM1, and handles CPU exceptions and hardware IRQs.
 

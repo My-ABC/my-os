@@ -1,5 +1,9 @@
 # mini-libc
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/lang-C-yellow.svg)]()
+[![Freestanding](https://img.shields.io/badge/freestanding-no_libc-lightgrey.svg)]()
+
 A small freestanding C library for Ring 3 user programs on MyOS.
 Licensed under the MIT License — see [LICENSE](LICENSE).
 Every source file carries `SPDX-License-Identifier: MIT`.
