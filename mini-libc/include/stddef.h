@@ -2,10 +2,7 @@
 #ifndef _MINI_LIBC_STDDEF_H
 #define _MINI_LIBC_STDDEF_H
 
-#ifndef _MINI_LIBC_STDINT_H
-#define _MINI_LIBC_STDINT_H
 #include <stdint.h>
-#endif
 
 #ifndef NULL
 #define NULL ((void *)0)
