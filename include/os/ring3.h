@@ -28,6 +28,6 @@ struct irq_frame *ring3_terminate_current(void);
 #define RING3_PROCESS_READY  1U
 #define RING3_PROCESS_RUNNING 2U
 #define RING3_PROCESS_DEAD   3U
-#define RING3_PROCESS_COUNT  2U
+#define RING3_PROCESS_COUNT  4U
 
 #endif

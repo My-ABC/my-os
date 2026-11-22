@@ -20,6 +20,8 @@
 #define IO_GETCHAR  2   // 阻塞读取单个字符，返回字符
 #define IO_READ     3   // ecx: char *buf, edx: size —— 读取一行（带回显）
 #define IO_CLEAR    4   // 清屏
+#define IO_CURSOR_GET 5 // 返回 (row<<16)|col
+#define IO_CURSOR_SET 6 // ecx: row, edx: col —— 设置光标位置
 
 // SYS_TIME 子操作
 #define TIME_GET    1   // 返回 Unix 时间戳（UTC）
@@ -40,6 +42,9 @@
 #define PROC_GETPID  1   // 返回当前 Ring 3 进程 ID
 #define PROC_EXIT    2   // ecx: 退出码（暂不记录）—— 退出当前进程
 #define PROC_YIELD   3   // 主动让出 CPU
+#define PROC_LIST    4   // ecx: buf, edx: size —— 枚举进程（每项 12 字节: pid/state/fg）
+#define PROC_SET_FG  5   // ecx: pid（0=取消前台）—— 设置前台进程
+#define PROC_EXEC    6   // ecx: path —— 从 FAT32 加载 ELF32 并以前台运行
 
 // SYS_FS 子操作
 #define FS_OPEN    1   // ecx: path, edx: mode —— 返回 fd
@@ -52,6 +57,8 @@
 #define FS_STAT    8   // ecx: path —— 返回大小，目录为 -2
 #define FS_GETCWD  9   // ecx: buf, edx: size —— 获取当前目录
 #define FS_CHDIR   10  // ecx: path —— 切换当前目录
+#define FS_RENAME  11  // ecx: old path, edx: new path —— 移动/重命名
+#define FS_READDIR 12  // ecx: path, edx: buf, esi: size —— 列目录（每行 "d/- name"）
 
 // SYS_SIG 子操作
 #define SIG_KILL    1   // ecx: pid, edx: sig —— 发送信号
