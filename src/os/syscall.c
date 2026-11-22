@@ -579,6 +579,11 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return 0;
                 }
                 case PROC_YIELD:
+                    /* A process spinning in a yield loop (e.g. a shell
+                     * waiting for a foreground child) never enters a
+                     * blocking wait, so this is the only place a
+                     * pending fatal/handled signal can be noticed. */
+                    if (sys_signal_check(frame)) return 0;
                     syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
                     return 0;
                 case PROC_LIST: {
