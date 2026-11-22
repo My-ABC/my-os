@@ -71,6 +71,9 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Add anonymous pipes (`SYS_PIPE`) backed by bounded kernel buffers with blocking read/write semantics.
   - [ ] Support fd redirection so pipelines like `cmd1 | cmd2` work between user processes (requires per-process fd tables, which do not exist yet).
   - [ ] Extend toward named pipes or additional IPC primitives (shared memory, message queues) as needed.
+- [ ] **Implement I/O redirection**
+  - [ ] Provide fd duplication/redirect support (`dup2`-style) on top of per-process fd tables.
+  - [ ] Support `>`, `>>`, and `<` redirection in the shell once user-side command execution exists.
 
 ## Filesystem, Storage, and Caches
 
