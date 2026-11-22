@@ -26,6 +26,8 @@ Numbered documents cover each subsystem in detail:
 | [10-drivers.md](10-drivers.md) | Keyboard, RTC, serial, VGA/VBE, ACPI, PIC/PIT driver notes |
 | [11-build-and-test.md](11-build-and-test.md) | Makefile targets, linker layout, host tests, QEMU integration suite |
 | [12-driver-gaps.md](12-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
+| [13-signals.md](13-signals.md) | Signal numbers, delivery, handlers, restorer trampoline, `SIG_RETURN` |
+| [14-mini-libc.md](14-mini-libc.md) | `mini-libc/` user-space C library, syscall wrappers, build notes |
 
 Chinese translations live under [../zh/](../zh/).
 

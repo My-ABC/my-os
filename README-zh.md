@@ -20,9 +20,10 @@
 - **蓝屏** — INT3 在蓝底屏幕上 dump 全部寄存器，然后重启
 - **ACPI 重启** — 通过 FADT reset register 复位，依次回退到 `0xCF9`、键盘控制器、三重错误
 - **ACPI 关机** — 通过 ACPI S5 状态关机，备用方案使用常见 ACPI I/O 端口
-- **Ring 3 进程** — 使用 PIT IRQ0 抢占式软件上下文切换，最多运行两个用户进程，每个进程有独立的内核栈和用户栈
+- **Ring 3 进程** — 使用 PIT IRQ0 抢占式软件上下文切换，最多四个用户进程，各自拥有独立页表（见 `06-memory-isolation.md`）
 - **进程管理** — Shell 支持 `ps`、`fg <pid>`、`bg <pid>` 和 `kill <pid>`；Ring 3 进程默认在后台运行
-- **系统调用** — Ring 3 可输出文本、通过 `PROC_GETPID` 查询进程 PID，并用 `PROC_YIELD` 主动让出 CPU
+- **系统调用** — `int 0x80` 两级大类/子操作 ABI，覆盖控制台 I/O 与光标控制、时间（基于已校准 TSC 的 `TIME_GET`/`TIME_TO`/`TIME_SLEEP`）、用户堆、电源、进程管理（`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC`）、FAT32 文件/目录操作和信号
+- **mini-libc** — `mini-libc/` 下的 MIT 协议 freestanding 用户态 C 库，提供 `int 0x80` 原始封装
 - **信号** — `SIGINT`/`SIGKILL` 及每进程 pending 状态；Ctrl+C 向前台进程投递 `SIGINT`，用户注册的 handler 经 restorer 跳板和 `SIG_RETURN` 执行
 - **shell(内核)** — 制作了一个内核态的shell
 - **内存分页** — 实现了完整内存分页
