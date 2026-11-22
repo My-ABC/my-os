@@ -14,7 +14,9 @@ SECTIONS
 
     .boot.text ALIGN(4K) :
     {
+        boot_text_start = .;
         *(.boot.text)
+        boot_text_end = .;
     }
 
     .boot.bss ALIGN(4K) (NOLOAD) :

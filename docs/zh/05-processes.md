@@ -34,9 +34,20 @@
 - `run <file>` —— 从 FAT32 把 ELF32 文件读入 1 MiB 内核缓冲
   （`FAT32_MAX_FILE_SIZE`）后调用 `elf_run`。
 
+## 内存隔离
+
+每个 Ring 3 进程拥有独立地址空间（`src/mm/paging.c` 中的
+`struct user_mm`）：私有的 PDPT[0] -> 页目录链覆盖低 1 GiB 用户空间；
+私有副本的低 4 MiB supervisor 恒等映射保证启动 stub 与初始内核栈在任何
+CR3 下都可达；PDPT[3] 与内核页目录共享，因此内核半区（含 KMAP 窗口）在
+所有地址空间中完全一致。CR3 在每次上下文切换时更换
+（`ring3_timer_switch`、yield 与终止路径）；ISR14 按需分页只向正在运行
+的进程的 mm 映射，`paging_mm_release` 会释放所有自有用户页——栈、镜像、
+堆以及每进程私有的信号 trampoline——连同私有页表。借入用户空间的内核页
+（低恒等映射、链接器放置的 `.user.text` 代码页）以 PTE bit 9 标记，永不
+被回收。4 MiB 以下的用户映射会被拒绝。
+
 ## 限制
 
-- 没有按进程地址空间隔离：所有 Ring 3 进程共享内核页表和彼此的用户
-  区间。
-- 没有 `wait`/退出状态、信号或 IPC。
+- 没有 `wait`/退出状态、更多信号编号或 IPC。
 - 系统调用接口见 [04-syscall-abi.md](04-syscall-abi.md)。

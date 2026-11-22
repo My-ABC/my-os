@@ -20,9 +20,14 @@ static int isr14_demand_map(uint32_t fault_addr) {
     uint64_t physical_page = pmm_alloc_page();
     if (physical_page == 0U) return 0;
 
-    paging_map_page(page, physical_page,
-                    PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
-    if (paging_get_page_physical(page) == 0U) {
+    struct user_mm *mm = ring3_current_mm();
+    if (mm == 0) {
+        pmm_free_page(physical_page);
+        return 0;
+    }
+    paging_mm_map(mm, page, physical_page,
+                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+    if (paging_mm_get_phys(mm, page) == 0U) {
         pmm_free_page(physical_page);
         return 0;
     }

@@ -39,10 +39,24 @@ process. Two shell paths use it:
 - `run <file>` — reads an ELF32 file from FAT32 into a 1 MiB kernel
   buffer (`FAT32_MAX_FILE_SIZE`) and calls `elf_run`.
 
+## Memory isolation
+
+Each Ring 3 process owns a private address space (`struct user_mm` in
+`src/mm/paging.c`): a private PDPT[0] -> page-directory chain covers the
+low 1 GiB of user space, a private copy of the supervisor-only low
+4 MiB identity map keeps boot stubs and the initial kernel stack
+reachable, and PDPT[3] is shared with the kernel page directory so the
+kernel half (including the KMAP window) is identical everywhere. CR3 is
+switched on every context switch (`ring3_timer_switch`, yield, and
+termination paths); the ISR14 demand pager only maps into the running
+process's mm, and `paging_mm_release` frees every owned user page —
+stack, image, heap, and the per-process signal trampoline — plus the
+private page tables. Kernel pages borrowed into a user space (the low
+identity map, the linker-placed `.user.text` code page) carry PTE bit 9
+and are never freed. User mappings below 4 MiB are refused.
+
 ## Limitations
 
-- No per-process address-space isolation: all Ring 3 processes share the
-  kernel page tables and each other's user ranges.
-- No `wait`/exit-status reporting, signals, or IPC.
+- No `wait`/exit-status reporting, more signal numbers, or IPC.
 - The syscall interface is documented in
   [04-syscall-abi.md](04-syscall-abi.md).

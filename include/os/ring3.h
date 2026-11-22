@@ -3,13 +3,16 @@
 
 #include "stdint.h"
 #include "regs.h"
+#include "paging.h"
 
 extern void user_entry(void);
 
 void ring0_to_ring3(uint32_t *ustack_top, void (*func)(void));
 int ring3_schedule(void (*func)(void));
-int ring3_schedule_foreground(void (*func)(void),
-                             uint32_t image_start, uint32_t image_end);
+int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
+                      uint32_t image_start, uint32_t image_end,
+                      int foreground);
+struct user_mm *ring3_current_mm(void);
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame);
 struct irq_frame *ring3_yield_current(struct irq_frame *frame);
 uint32_t ring3_current_pid(void);

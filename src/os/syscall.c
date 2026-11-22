@@ -122,22 +122,26 @@ static void user_remove_free(struct user_block *block) {
 }
 
 static uint32_t user_restore_pages(struct user_block *block) {
+    struct user_mm *mm = ring3_current_mm();
+    if (mm == 0) return 0;
     uint32_t block_addr = (uint32_t)block;
     for (uint32_t page = 1U; page < block->pages; ++page) {
         uint32_t virtual_addr = block_addr + page * PAGE_SIZE;
-        if (paging_get_page_physical(virtual_addr) == 0U) {
+        if (paging_mm_get_phys(mm, virtual_addr) == 0U) {
             uint64_t physical = pmm_alloc_page();
             if (physical == 0U) {
                 return 0;
             }
-            paging_map_page(virtual_addr, physical,
-                            PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+            paging_mm_map(mm, virtual_addr, physical,
+                          PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
         }
     }
     return 1;
 }
 
 static void *user_alloc(uint32_t size) {
+    struct user_mm *mm = ring3_current_mm();
+    if (mm == 0) return 0;
     if (size == 0U || size > 0xFFFFFFFFU - sizeof(struct user_block)) {
         return 0;
     }
@@ -169,16 +173,16 @@ static void *user_alloc(uint32_t size) {
             while (page > 0U) {
                 --page;
                 uint32_t virtual_addr = address + page * PAGE_SIZE;
-                uint64_t physical_addr = paging_get_page_physical(virtual_addr);
-                paging_unmap_page(virtual_addr);
+                uint64_t physical_addr = paging_mm_get_phys(mm, virtual_addr);
+                paging_mm_unmap(mm, virtual_addr);
                 if (physical_addr != 0U) {
                     pmm_free_page(physical_addr & ~(uint64_t)(PAGE_SIZE - 1U));
                 }
             }
             return 0;
         }
-        paging_map_page(address + page * PAGE_SIZE, physical,
-                        PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
+        paging_mm_map(mm, address + page * PAGE_SIZE, physical,
+                      PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER);
     }
 
     block = (struct user_block *)address;
@@ -192,7 +196,8 @@ static void *user_alloc(uint32_t size) {
 }
 
 static void user_free(void *ptr) {
-    if (ptr == 0) {
+    struct user_mm *mm = ring3_current_mm();
+    if (ptr == 0 || mm == 0) {
         return;
     }
     uint32_t address = (uint32_t)ptr;
@@ -207,8 +212,8 @@ static void user_free(void *ptr) {
 
     for (uint32_t page = 1U; page < block->pages; ++page) {
         uint32_t virtual_addr = (uint32_t)block + page * PAGE_SIZE;
-        uint64_t physical_addr = paging_get_page_physical(virtual_addr);
-        paging_unmap_page(virtual_addr);
+        uint64_t physical_addr = paging_mm_get_phys(mm, virtual_addr);
+        paging_mm_unmap(mm, virtual_addr);
         if (physical_addr != 0U) {
             pmm_free_page(physical_addr & ~(uint64_t)(PAGE_SIZE - 1U));
         }

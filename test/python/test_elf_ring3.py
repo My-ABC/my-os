@@ -42,7 +42,7 @@ class ElfRing3RegressionTests(unittest.TestCase):
         elf_source = (ROOT / "src" / "os" / "elf.c").read_text()
         ring3_source = (ROOT / "src" / "os" / "ring3.c").read_text()
 
-        self.assertIn("ring3_schedule_foreground", elf_source)
+        self.assertIn("ring3_schedule_mm", elf_source)
         self.assertNotIn("ring0_to_ring3", elf_source)
         self.assertIn("processes[i].image_start = image_start", ring3_source)
         self.assertIn("processes[i].image_end = image_end", ring3_source)

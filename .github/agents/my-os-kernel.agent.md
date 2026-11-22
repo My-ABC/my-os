@@ -41,7 +41,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel that boots through GRUB/Mult
 
 - Keep the kernel freestanding, 32-bit x86, and compatible with the existing C/NASM toolchain.
 - IRQ0 and `int 0x80` frames must match `struct irq_frame` and their assembly push/pop order. Do not preempt arbitrary kernel syscall frames; use `SYS_YIELD` to switch at an explicit safe syscall boundary.
-- Ring 3 processes currently share one address space; they have separate user/kernel stacks but not independent memory isolation. Do not describe them as isolated processes.
+- Each Ring 3 process owns a private `struct user_mm` address space: a private PDPT[0]->PD chain for the low 1 GiB of user space, a private copy of the supervisor-only low 4 MiB identity map, and a shared PDPT[3] kernel half. CR3 is switched on every context switch; kernel code may run on any CR3 because the kernel half is identical. User pages below 4 MiB are refused; borrowed kernel pages (low identity map, `.user.text`) are marked with PTE bit 9 and never freed by `paging_mm_release`.
 - Keep ELF user virtual ranges separate from linker-placed `.user.text`; ELF mappings belong to their scheduled process and must be released when it is killed.
 - Update TSS `esp0` whenever switching the active user kernel stack. Avoid freeing a stack while it is still active.
 - User mappings must remain below `USER_SPACE_END`; kernel mappings must not be made user-accessible.

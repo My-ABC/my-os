@@ -48,8 +48,9 @@ struct elf32_loaded_image {
     uint32_t image_end;
 };
 
+struct user_mm;
 int elf32_load(const void *image, uint32_t image_size,
-               struct elf32_loaded_image *loaded);
+               struct user_mm *mm, struct elf32_loaded_image *loaded);
 int elf_run(const void *image, uint32_t image_size);
 
 #endif
