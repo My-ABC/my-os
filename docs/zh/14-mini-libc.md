@@ -2,6 +2,7 @@
 
 `mini-libc/` 是面向 Ring 3 程序的轻量 freestanding C 库，采用 MIT 协议（`mini-libc/LICENSE`；每个源文件都带 `SPDX-License-Identifier: MIT` 标记）。
 它封装 `int 0x80` 大类/子操作 syscall ABI，使用户程序可以用 C 而非纯汇编编写。
+mini-libc 面向 **C11**，使用 freestanding 编译器构建（`i686-elf-gcc -m32 -ffreestanding -nostdlib`）。
 
 English: [English version](../en/14-mini-libc.md)
 

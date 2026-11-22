@@ -12,6 +12,9 @@ mini-libc 封装 MyOS 的 `int 0x80`「大类 + 子操作」syscall ABI，
 让用户程序可以用 C 编写而不必手写汇编。
 完整 ABI 参考见 `docs/zh/04-syscall-abi.md`。
 
+需要支持 C11 的 freestanding 编译器（如 `i686-elf-gcc`，配合
+`-m32 -ffreestanding -nostdlib`）。
+
 ## 目录结构
 
 | 路径 | 内容 |

@@ -2,6 +2,7 @@
 
 `mini-libc/` is a small freestanding C library for Ring 3 programs, licensed under MIT (`mini-libc/LICENSE`; every source file carries `SPDX-License-Identifier: MIT`).
 It wraps the `int 0x80` class/sub-operation syscall ABI so user programs can be written in C instead of raw assembly.
+mini-libc targets **C11** and is built with a freestanding compiler (`i686-elf-gcc -m32 -ffreestanding -nostdlib`).
 
 中文版本: [中文版](../zh/14-mini-libc.md)
 

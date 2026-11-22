@@ -5,6 +5,10 @@ static int is_alpha(int c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
+int isdigit(int c) {
+    return c >= '0' && c <= '9';
+}
+
 int isalnum(int c) {
     return is_alpha(c) || isdigit(c);
 }
@@ -19,10 +23,6 @@ int isblank(int c) {
 
 int iscntrl(int c) {
     return c >= 0 && c < 32;
-}
-
-int isdigit(int c) {
-    return c >= '0' && c <= '9';
 }
 
 int isgraph(int c) {

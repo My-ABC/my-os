@@ -12,6 +12,9 @@ mini-libc wraps the MyOS `int 0x80` class/sub-operation syscall ABI so
 user programs can be written in C instead of raw assembly. See
 `docs/en/04-syscall-abi.md` for the full ABI reference.
 
+Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
+`-m32 -ffreestanding -nostdlib`).
+
 ## Layout
 
 | Path | Contents |
