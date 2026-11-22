@@ -21,7 +21,7 @@ PASS_PATTERN = re.compile(
 
 
 def fail(message, serial=b"", detail=""):
-    print(f"FAIL: high-memory QEMU test: {message}", file=sys.stderr)
+    print(f"✗ FAIL: high-memory QEMU test: {message}", file=sys.stderr)
     if serial:
         print("--- serial output ---", file=sys.stderr)
         print(serial.decode("ascii", errors="replace"), file=sys.stderr)
@@ -106,7 +106,7 @@ def main():
                     line = match.group(0).decode("ascii")
                     print(line, flush=True)
                     print(
-                        f"PASS: QEMU allocated, mapped, tested, and freed "
+                        f"✓ PASS: QEMU allocated, mapped, tested, and freed "
                         f"physical page 0x{physical:016X} with -m 6G",
                         flush=True,
                     )

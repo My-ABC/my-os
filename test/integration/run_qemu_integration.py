@@ -53,7 +53,7 @@ def run_session(checks, qemu, kernel, disk, timeout):
         for check in checks:
             _run_check(check, session)
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:
-        print(f"FAIL: {error}", file=sys.stderr)
+        print(f"✗ FAIL: {error}", file=sys.stderr)
         print(session.diagnostics(), file=sys.stderr)
         raise
     finally:
@@ -75,14 +75,14 @@ def run_main_session(qemu, kernel, disk, timeout):
         ],
         qemu, kernel, disk, timeout,
     )
-    print("PASS: QEMU integration suite", flush=True)
+    print("✓ PASS: QEMU integration suite", flush=True)
 
 
 def run_kernel_fault_session(qemu, kernel, disk, timeout):
     # A kernel page fault panics and reboots the machine, so it gets a
     # dedicated session after the main suite has finished.
     run_session([check_kernel_fault_panic], qemu, kernel, disk, timeout)
-    print("PASS: kernel-fault panic session", flush=True)
+    print("✓ PASS: kernel-fault panic session", flush=True)
 
 
 def main():
@@ -100,10 +100,10 @@ def main():
         create_test_disk(tempdir.name)
         run_main_session(args.qemu, args.kernel, disk, args.timeout)
         run_kernel_fault_session(args.qemu, args.kernel, disk, args.timeout)
-        print("ALL PASS", flush=True)
+        print("✓ ALL PASS", flush=True)
         return 0
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:
-        print(f"FAIL: QEMU integration suite: {error}", file=sys.stderr)
+        print(f"✗ FAIL: QEMU integration suite: {error}", file=sys.stderr)
         return 1
     finally:
         tempdir.cleanup()
