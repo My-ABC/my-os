@@ -119,6 +119,10 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Concurrency and Memory
 
+- [ ] **Add an idle task and HLT-based power saving**
+  - [ ] Run a dedicated idle loop that executes `HLT` when no runnable task exists instead of busy-spinning in the scheduler.
+  - [ ] Ensure IRQ0/PIT and other interrupts wake the CPU reliably between sleeps.
+  - [ ] Verify wake behavior and reduced power usage with QEMU tests.
 - [ ] **Add SSE support**
   - [ ] Enable SSE in CR4/XCR0 as needed and validate availability (CPUID).
   - [ ] Provide aligned/unaligned load-store and arithmetic helpers for kernel and user code.
