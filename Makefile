@@ -65,7 +65,8 @@ LIBMYC_SRCS = mini-libc/syscall.S mini-libc/src/crt0.S \
 	mini-libc/src/errno.c mini-libc/src/fs.c mini-libc/src/time.c \
 	mini-libc/src/unistd.c mini-libc/src/stdlib.c \
 	mini-libc/src/assert.c mini-libc/src/inttypes.c \
-	mini-libc/src/signal.c mini-libc/src/process.c
+	mini-libc/src/signal.c mini-libc/src/process.c \
+	mini-libc/src/console.c
 LIBMYC_OBJS = $(patsubst mini-libc/%.S,$(BUILD_DIR)/mini-libc/%.o,$(filter %.S,$(LIBMYC_SRCS))) \
 	$(patsubst mini-libc/src/%.c,$(BUILD_DIR)/mini-libc/%.o,$(filter %.c,$(LIBMYC_SRCS)))
 LIBMYC_DEPFILES = $(LIBMYC_OBJS:.o=.d)
@@ -125,7 +126,7 @@ test-qemu-highmem:
 
 # mini-libc 测试套件：编译全部测试 ELF，注入 FAT32 盘，QEMU 逐个 run
 test-libmyc: build
-	python3 mini-libc/test/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
+	python3 test/mini-libc/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
 
 # 编译 C 文件
 $(BUILD_DIR)/%.o: src/%.c
