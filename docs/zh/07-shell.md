@@ -81,7 +81,10 @@ mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
 （`power.h`）、`clear`、`time [12|24]`、`echo`、`hello`、
 `help`、`exit`——`disk` 仍为内核专属。行编辑（方向键、
 16 条历史召回、行内光标）在用户态基于 `console.h` 原语实现；
-Ctrl+C 以投递的 `SIGINT` 形式到达。当前台有其他进程时编辑器
-退化为静默行读取，进程退出后 Shell 收回前台。已在 QEMU 下
+Ctrl+C 以投递的 `SIGINT` 形式到达。当前台有其他进程时编辑器完全
+停止读键并让出 CPU（`sched_yield`），直到前台槽位变化——所有
+Ring 3 进程共享内核键盘缓冲，继续读键会与子进程平分按键。缓冲
+的按键留给前台进程，子进程退出后成为 Shell 的 type-ahead，与
+内核 Shell 不消费按键直接 halt 的策略一致。已在 QEMU 下
 验证（`make test-qemu` 不受影响；手动 `run shell3.elf` 会话
 覆盖全部命令）。

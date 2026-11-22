@@ -260,7 +260,8 @@ static void read_line(char *line, int size) {
     int origin_valid = 0;
 
     for (;;) {
-        if (!fg_is_other()) {
+        int other_fg = fg_is_other();
+        if (!other_fg) {
             if (!origin_valid && length == 0) {
                 reclaim_foreground();
                 print_prompt();
@@ -269,6 +270,22 @@ static void read_line(char *line, int size) {
             }
         } else {
             origin_valid = 0;
+        }
+
+        if (other_fg) {
+            /* A foreground child owns the console AND the keyboard.
+             * Do not call con_getchar() here: every Ring 3 process
+             * shares the kernel key buffer, so reading would drain
+             * roughly half of the child's keystrokes into this silent
+             * append path. Yield instead of sleeping — TIME_SLEEP
+             * busy-waits in kernel mode where the timer cannot
+             * preempt, which would starve the child. Buffered keys
+             * stay for the child and become our type-ahead once it
+             * exits (same policy as the kernel shell, which halts
+             * without consuming keys). */
+            if (got_sigint) got_sigint = 0;
+            sched_yield();
+            continue;
         }
 
         int c = con_getchar();

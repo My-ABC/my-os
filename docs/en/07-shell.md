@@ -95,7 +95,10 @@ via `proc_run_demo`/`proc_run_usercode`), `reboot`/`shutdown`
 `exit` — `disk` stays kernel-only. Line editing (arrow keys,
 16-entry history recall, mid-line cursor) is done in user space on
 `console.h` primitives; Ctrl+C arrives as a delivered `SIGINT`.
-While another process is foreground the editor degrades to a
-silent line reader and the shell reclaims the foreground slot when
-it exits. Verified under QEMU (`make test-qemu` unaffected;
+While another process is foreground the editor stops reading keys
+entirely and yields the CPU (`sched_yield`) until the foreground slot
+changes — every Ring 3 process shares the kernel key buffer, so reading
+would split the child's keystrokes with this shell. Buffered keys stay
+for the foreground owner and become the shell's type-ahead once it
+exits, matching the kernel shell which halts without consuming keys. Verified under QEMU (`make test-qemu` unaffected;
 manual `run shell3.elf` session exercised every command).
