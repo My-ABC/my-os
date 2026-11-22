@@ -113,7 +113,7 @@ test-qemu-highmem:
 
 # mini-libc 测试套件：编译全部测试 ELF，注入 FAT32 盘，QEMU 逐个 run
 test-libmyc: build
-	python3 test/mini-libc/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
+	python3 test/mini-libc/run_tests.py --qemu "$(QEMU)" --kernel "$(KERNEL)" --cc "$(CC)"
 
 # 编译 C 文件
 $(BUILD_DIR)/%.o: src/%.c

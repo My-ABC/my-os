@@ -15,8 +15,9 @@ Each test prints `ok <check>` / `FAIL <check>` lines and ends with
 build/libmyc.a, injects the ELFs (plus tdata.txt) into a FAT32 image,
 boots QEMU once, and `run`s each test checking serial output.
 
-Usage: python3 test/mini-libc/run_tests.py [--qemu QEMU_BIN] [--keep]
-Requires: make libmyc (run first), gcc -m32, mkfs.fat, qemu-system-i386.
+Usage: python3 test/mini-libc/run_tests.py [--qemu QEMU_BIN] [--cc CC] [--keep]
+Requires: make libmyc (run first), a 32-bit-capable C compiler
+(i686-elf-gcc or gcc -m32), mkfs.fat, qemu-system-i386.
 """
 import argparse
 import shutil
@@ -59,17 +60,26 @@ CFLAGS = ["-m32", "-nostdlib", "-static", "-no-pie", "-ffreestanding",
           "-O2", "-I", str(ROOT / "mini-libc" / "include")]
 
 
-def build_tests(workdir):
+def default_cc():
+    """Prefer the freestanding cross toolchain; fall back to host gcc."""
+    return shutil.which("i686-elf-gcc") or "gcc"
+
+
+def compile_test(cc, src, out):
+    subprocess.run(
+        [cc, *CFLAGS, str(src), str(LIBMYC_A), "-o", str(out)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+
+
+def build_tests(workdir, cc):
     elfs = []
     for cat, disk_name, src_rel, *_ in TESTS + [AFail]:
         src = TESTDIR / src_rel
         out = Path(workdir) / f"{cat}_{disk_name}"
-        subprocess.run(
-            ["gcc", *CFLAGS, str(src), str(LIBMYC_A), "-o", str(out)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        compile_test(cc, src, out)
         elfs.append((disk_name, out))
     return elfs
 
@@ -106,6 +116,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--qemu", default="qemu-system-i386")
     ap.add_argument("--kernel", default=str(KERNEL))
+    ap.add_argument("--cc", default=default_cc(),
+                    help="C compiler for test ELFs (default: i686-elf-gcc "
+                         "if present, else gcc)")
     ap.add_argument("--timeout", type=int, default=300)
     ap.add_argument("--keep", action="store_true",
                     help="keep the temp workdir")
@@ -126,7 +139,7 @@ def main():
         chunks.append([AFail + (None,)])   # negative test, own session
         results = []
         for chunk in chunks:
-            elfs = build_tests_chunk(workdir, chunk)
+            elfs = build_tests_chunk(workdir, chunk, args.cc)
             disk = create_disk(workdir, elfs)
             session = QemuSession(args.qemu, args.kernel, str(disk),
                                   timeout=args.timeout)
@@ -152,17 +165,12 @@ def main():
             shutil.rmtree(workdir, ignore_errors=True)
 
 
-def build_tests_chunk(workdir, chunk):
+def build_tests_chunk(workdir, chunk, cc):
     elfs = []
     for cat, disk_name, src_rel, *_ in chunk:
         src = TESTDIR / src_rel
         out = Path(workdir) / f"{cat}_{disk_name}"
-        subprocess.run(
-            ["gcc", *CFLAGS, str(src), str(LIBMYC_A), "-o", str(out)],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
+        compile_test(cc, src, out)
         elfs.append((disk_name, out))
     return elfs
 
