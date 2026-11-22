@@ -43,15 +43,19 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 ## 构建说明
 
-把 `crt0.S`、`syscall.S` 和程序源码一起编译链接为入口点为
-`_start` 的静态 ELF32，例如：
+用 `make libmyc` 构建静态库，产物为 `build/libmyc.a`（包含
+`syscall.S`、`crt0.S`、`string.c`、`ctype.c`）。然后编译程序并链接
+该归档：
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S program.c -o program.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-内核启动用户进程时栈为空，`crt0` 为 `main` 构造 `argc`/`argv`/`envp`
-调用帧，把 `main` 返回值作为 `PROC_EXIT` 参数传出，随后不再返回。
-用 Shell 的 `run` 命令或 `PROC_EXEC` 装载生成的 ELF 运行。
+归档中的 `crt0` 为 `main` 构造 `argc`/`argv`/`envp` 调用帧（内核启动
+用户进程时栈为空），把 `main` 返回值作为 `PROC_EXIT` 参数传出，随后
+不再返回。用 Shell 的 `run` 命令或 `PROC_EXEC` 装载生成的 ELF 运行。

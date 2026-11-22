@@ -56,20 +56,21 @@ syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 
 ## 构建说明
 
-使用与内核相同的 freestanding 工具链。把 `crt0.S`、`syscall.S` 和
-程序源码一起编译链接：
+用 `make libmyc` 构建静态库，产物为 `build/libmyc.a`，包含
+`syscall.S`、`crt0.S`、`string.c`、`ctype.c`。手动构建库和用户程序：
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S mini-libc/examples/hello.c \
-    -o hello.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-产物是入口点为 `_start` 的静态 ELF32；`crt0` 调用 `main`，把返回值
-作为 `PROC_EXIT` 参数传出，随后不再返回。用户程序用
-`-I mini-libc/include` 编译。可通过 shell 的 `run` 命令或
-`PROC_EXEC` syscall 加载。
+产物是入口点为 `_start` 的静态 ELF32（`_start` 由归档中的 `crt0.o`
+提供）；`crt0` 调用 `main`，把返回值作为 `PROC_EXIT` 参数传出，随后
+不再返回。可通过 shell 的 `run` 命令或 `PROC_EXEC` syscall 加载。
 
 ## 开发分支
 

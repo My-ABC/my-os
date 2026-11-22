@@ -43,16 +43,21 @@ Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, whi
 
 ## Build notes
 
-Compile `crt0.S`, `syscall.S`, and the program sources together into a
-static ELF32 with entry point `_start`, e.g.:
+Build the static library with `make libmyc`, which produces
+`build/libmyc.a` (containing `syscall.S`, `crt0.S`, `string.c`,
+`ctype.c`). Then compile the program and link against the archive:
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S program.c -o program.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-`crt0` hands `main` a fabricated `argc`/`argv`/`envp` frame (the kernel
-starts user processes with an empty stack), forwards `main`'s return value
-to `PROC_EXIT`, and never returns. Load the resulting ELF with the shell
-`run` command or `PROC_EXEC`.
+`crt0` (inside the archive) hands `main` a fabricated
+`argc`/`argv`/`envp` frame (the kernel starts user processes with an
+empty stack), forwards `main`'s return value to `PROC_EXIT`, and never
+returns. Load the resulting ELF with the shell `run` command or
+`PROC_EXEC`.

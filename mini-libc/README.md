@@ -56,21 +56,23 @@ See the "Implement mini-libc" entry in `TODO.md`:
 
 ## Build notes
 
-Same freestanding toolchain as the kernel. Build a program by compiling
-`crt0.S`, `syscall.S`, and the program sources together:
+Build the static library with `make libmyc` — it produces
+`build/libmyc.a` containing `syscall.S`, `crt0.S`, `string.c`, and
+`ctype.c`. To build the library and a program by hand:
 
 ```sh
-i686-elf-gcc -m32 -ffreestanding -fno-pie -fno-stack-protector -O2 \
-    -nostdlib -I mini-libc/include \
-    mini-libc/src/crt0.S mini-libc/syscall.S mini-libc/examples/hello.c \
-    -o hello.elf
+make libmyc
+
+i686-elf-gcc -m32 -std=c11 -ffreestanding -fno-pie -fno-stack-protector \
+    -O2 -nostdlib -I mini-libc/include -c program.c -o program.o
+i686-elf-gcc -m32 -nostdlib -static -no-pie -Wl,-e,_start \
+    -o program.elf program.o build/libmyc.a
 ```
 
-The result is a static ELF32 whose entry point is `_start`; `crt0` calls
-`main`, forwards its return value as the `PROC_EXIT` argument, and never
-returns. Compile user programs
-with `-I mini-libc/include`. Load them via the shell `run` command or the
-`PROC_EXEC` syscall.
+The result is a static ELF32 whose entry point is `_start` (provided by
+`crt0.o` inside the archive); `crt0` calls `main`, forwards its return
+value as the `PROC_EXIT` argument, and never returns. Load it via the
+shell `run` command or the `PROC_EXEC` syscall.
 
 ## Development branch
 
