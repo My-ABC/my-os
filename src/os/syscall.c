@@ -756,7 +756,19 @@ uint32_t syscall_handler(struct irq_frame *frame) {
         case SYS_SIG:
             switch (op) {
                 case SIG_KILL:
-                    return ring3_signal_send(a1, a2) == 0 ? 0 : (uint32_t)-1;
+                    if (ring3_signal_send(a1, a2) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    /* A self-directed signal must take effect inside this
+                     * syscall: otherwise `kill <self>` returns to user mode
+                     * and the caller keeps running (printing a stray prompt)
+                     * until its next blocking wait notices the pending
+                     * fatal signal. */
+                    if (a1 == ring3_current_pid() &&
+                        sys_signal_check(frame)) {
+                        return 0;
+                    }
+                    return 0;
                 case SIG_SIGNAL:
                     return ring3_signal_set_handler(a1, a2) == 0 ? 0 : (uint32_t)-1;
                 case SIG_RETURN:
