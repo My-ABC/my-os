@@ -208,6 +208,14 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Port glibc**
   - > **Deprecated — not planned for now.** glibc's dynamic-linker, NSS, and locale architecture is far heavier than musl; revisit only if a concrete program requires glibc-only extensions.
 
+## Testing and Quality Assurance
+
+- [ ] **Automate code-quality assurance (static analysis and fuzzing)**
+  - [ ] Integrate static analysis for kernel C/assembly (e.g. sparse, cppcheck, or stricter compiler warnings) into `make test`/CI.
+  - [ ] Fuzz filesystem parsing (FAT32 directory entries, names, corrupt sectors) with malformed disk images in QEMU.
+  - [ ] Fuzz syscall-ABI inputs (bad pointers, lengths, signal numbers) from user-mode test ELFs.
+  - [ ] Fuzz the shell line editor (escapes, quotes, history) and the ELF loader with generated inputs.
+
 ## 64-bit Mode
 
 > **Deprecated — not planned for now.** This section is kept for reference
