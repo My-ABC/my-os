@@ -28,10 +28,11 @@ Requires a C11-capable freestanding compiler (e.g. `i686-elf-gcc` with
 | `include/string.h` `ctype.h` | String/memory and character-classification declarations |
 | `include/time.h` | `time`/`gmtime`/`localtime`/`mktime`/`strftime`/`difftime`/`clock`/`sleep`/`usleep` (UTC+8 local time) |
 | `include/errno.h` | `errno` global plus common `E*` constants (Linux-compatible values) |
+| `include/fs.h` | FAT32 file/directory API over `SYS_FS`: `fs_open`/`fs_close`/`fs_read`/`fs_write`/`fs_unlink`/`fs_mkdir`/`fs_rmdir`/`fs_stat`/`fs_getcwd`/`fs_chdir`/`fs_rename`/`fs_readdir` |
 | `include/stdio.h` `stdarg.h` | `printf`/`sprintf`/`snprintf`/`puts`/`putchar`/`scanf`/`sscanf`/`getchar` plus `va_list` builtins |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 | `src/crt0.S` | ELF entry point `_start`: fabricates `argc`/`argv`/`envp`, calls `main`, exits via `PROC_EXIT` |
-| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h` facilities |
+| `src/string.c` `ctype.c` `stdio.c` `errno.c` `time.c` `fs.c` | Freestanding implementations of the `string.h`/`ctype.h`/`stdio.h`/`errno.h`/`time.h`/`fs.h` facilities |
 | `examples/hello.c` | Minimal Ring 3 hello-world using the syscall wrappers |
 
 ## Calling the kernel
