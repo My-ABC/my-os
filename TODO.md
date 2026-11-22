@@ -189,6 +189,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Implement capabilities or equivalent fine-grained authorization.
   - [ ] Provide sandbox boundaries and resource limits for process/device access.
   - [ ] Security-test system calls, path resolution, shared memory, and inter-process interfaces.
+- [ ] **Implement an entropy pool and kernel PRNG**
+  - [ ] Collect entropy from available sources (RDTSC jitter, RTC/interrupt timing, device timing).
+  - [ ] Maintain a kernel entropy pool feeding a CSPRNG (e.g. ChaCha20-based) for random bytes and integers.
+  - [ ] Expose randomness through a syscall or device node for user programs; document seeding and pool-health rules.
 - [ ] **Evaluate VT-x virtualization**
   - [ ] Check VMX support via CPUID and enable VMX operation (CR4.VMXE, VMXON region).
   - [ ] Build minimal VMCS setup to run a guest in VMX non-root operation.
