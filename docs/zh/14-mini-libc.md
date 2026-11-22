@@ -9,7 +9,7 @@ English: [English version](../en/14-mini-libc.md)
 
 | 文件 | 内容 |
 |------|------|
-| `syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
+| `include/sys/syscall.h` | ABI 常量：`SYS_*` 大类、全部子操作号、`SYSFS_O_*` 模式、`PROC_STATE_*` 状态值 |
 | `syscall.S` | 原始 `int 0x80` 包装 `syscall0`–`syscall3`（cdecl） |
 
 更多模块（`string.h`、`stdlib.h`、`stdio.h`、`_start`）计划中——见 TODO "实现 mini-libc" 条目。
@@ -33,7 +33,7 @@ syscall1(SYS_IO, IO_WRITE, (unsigned)"hi\n");
 syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 ```
 
-大类与子操作常量在 `mini-libc/syscall.h` 中，与 `include/os/syscall.h` 保持一致；用户程序直接包含它即可，无需自备副本。
+大类与子操作常量在 `mini-libc/include/sys/syscall.h` 中，与 `include/os/syscall.h` 保持一致；用户程序直接包含它即可，无需自备副本。
 
 ## 构建说明
 

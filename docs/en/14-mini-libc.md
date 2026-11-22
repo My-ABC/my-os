@@ -9,7 +9,7 @@ It wraps the `int 0x80` class/sub-operation syscall ABI so user programs can be 
 
 | File | Contents |
 |------|----------|
-| `syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
+| `include/sys/syscall.h` | ABI constants: `SYS_*` classes, all sub-operation numbers, `SYSFS_O_*` modes, `PROC_STATE_*` values |
 | `syscall.S` | Raw `int 0x80` wrappers `syscall0`–`syscall3` (cdecl) |
 
 More modules (`string.h`, `stdlib.h`, `stdio.h`, `_start`) are planned — see the TODO entry "Implement mini-libc".
@@ -33,7 +33,7 @@ syscall1(SYS_IO, IO_WRITE, (unsigned)"hi\n");
 syscall3(SYS_FS, FS_READ, fd, (unsigned)buf, size);
 ```
 
-Class and sub-operation constants live in `mini-libc/syscall.h`, which mirrors `include/os/syscall.h`; user programs include it directly instead of keeping their own copy.
+Class and sub-operation constants live in `mini-libc/include/sys/syscall.h`, which mirrors `include/os/syscall.h`; user programs include it directly instead of keeping their own copy.
 
 ## Build notes
 
