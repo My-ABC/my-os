@@ -20,6 +20,9 @@
 #define SYSFS_MAX_FDS 8U
 #define SYSFS_PATH_MAX 128U
 
+extern const uint8_t elf_demo_start[];
+extern const uint8_t elf_demo_end[];
+
 /* Set by PROC_EXIT; the syscall stub switches to this kernel frame instead
  * of returning to the exiting process. */
 uint32_t syscall_exit_frame;
@@ -497,6 +500,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case IO_CURSOR_SET:
                     vga_set_cursor((uint16_t)a1, (uint16_t)a2);
                     return 0;
+                case IO_CONSOLE_INFO:
+                    return ((uint32_t)vga_rows() << 16) | vga_columns();
                 default:
                     return 0;
             }
@@ -613,6 +618,26 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     kfree(image);
                     return rc == 0 ? 0U : (uint32_t)-1;
                 }
+                case PROC_RUN_DEMO: {
+                    uint32_t size =
+                        (uint32_t)(elf_demo_end - elf_demo_start);
+                    return elf_run(elf_demo_start, size) == 0
+                           ? 0U : (uint32_t)-1;
+                }
+                case PROC_RUN_USERCODE: {
+                    struct user_mm *mm = paging_mm_create();
+                    if (mm == 0) return (uint32_t)-1;
+                    paging_mm_map(mm, (uint32_t)user_entry,
+                                  (uint32_t)user_entry,
+                                  PAGE_PRESENT | PAGE_WRITABLE |
+                                  PAGE_USER | PAGE_BORROWED);
+                    if (paging_mm_get_phys(mm, (uint32_t)user_entry) == 0U) {
+                        paging_mm_release(mm);
+                        return (uint32_t)-1;
+                    }
+                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 0) == 0
+                           ? 0U : (uint32_t)-1;
+                }
                 default:
                     return 0;
             }
@@ -706,10 +731,13 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     sysfs_readdir_ctx.len = 0;
                     sysfs_readdir_ctx.cap = 4096;
                     int rc = fat32_list_directory(path, sysfs_readdir_cb);
-                    if (rc == 0 && sysfs_readdir_ctx.len > 0) {
+                    if (rc == 0) {
                         uint32_t copy = sysfs_readdir_ctx.len < a3
                                         ? sysfs_readdir_ctx.len : a3;
-                        memcpy((void *)a2, sysfs_readdir_ctx.buf, copy);
+                        if (copy > 0) {
+                            memcpy((void *)a2, sysfs_readdir_ctx.buf,
+                                   copy);
+                        }
                         rc = (int)copy;
                     } else {
                         rc = -1;

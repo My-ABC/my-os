@@ -20,3 +20,11 @@ pid_t proc_foreground(void) {
         if (buf[i].foreground) return buf[i].pid;
     return -1;
 }
+
+int proc_run_demo(void) {
+    return syscall0(SYS_PROCESS, PROC_RUN_DEMO) == 0 ? 0 : -1;
+}
+
+int proc_run_usercode(void) {
+    return syscall0(SYS_PROCESS, PROC_RUN_USERCODE) == 0 ? 0 : -1;
+}

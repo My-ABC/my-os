@@ -76,12 +76,17 @@ directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
 
 An experimental user-mode port lives in `src/shell/shell_ring3.c`
 (header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
-by `make shell3` and started with `run shell3.elf`. It currently
-contains only code that goes through the mini-libc public API — no
-direct syscall usage: pure helpers (argument splitting, escape
-handling, path utilities, command history) plus stdio/time-backed
-commands `time`, `echo`, `hello`, `help`, `exit`. Filesystem,
-process, power, signal, raw-key editing, and foreground-arbitration
-commands are deferred until mini-libc grows the matching wrappers
-(the earlier syscall-based v1 command set is preserved in git
-history). Full migration remains tracked in `TODO.md`.
+by `make shell3` and started with `run shell3.elf`. The final
+version implements the full kernel command set through the
+mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
+`write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),
+process control (`ps`, `fg`, `bg`, `kill`, `run`, `elf`, `ring3`
+via `proc_run_demo`/`proc_run_usercode`), `reboot`/`shutdown`
+(`power.h`), `clear`, `time [12|24]`, `echo`, `hello`, `help`,
+`exit` — `disk` stays kernel-only. Line editing (arrow keys,
+16-entry history recall, mid-line cursor) is done in user space on
+`console.h` primitives; Ctrl+C arrives as a delivered `SIGINT`.
+While another process is foreground the editor degrades to a
+silent line reader and the shell reclaims the foreground slot when
+it exits. Verified under QEMU (`make test-qemu` unaffected;
+manual `run shell3.elf` session exercised every command).

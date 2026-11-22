@@ -65,10 +65,16 @@
 
 实验性用户态移植位于 `src/shell/shell_ring3.c`（头文件
 `include/shell/shell_ring3.h`），由 `make shell3` 构建为
-`build/shell3.elf`，用 `run shell3.elf` 启动。目前该文件只包含
-经 mini-libc 公开 API 实现的代码——不直接使用 syscall：纯计算
-辅助（参数分割、转义处理、路径工具、命令历史）加上基于
-stdio/time 的命令 `time`、`echo`、`hello`、`help`、`exit`。
-文件系统、进程、电源、信号、原始按键编辑和前台仲裁类命令
-暂缓，等待 mini-libc 提供对应封装（早期基于 syscall 的 v1
-命令集保留在 git 历史中）。完整迁移仍在 `TODO.md` 跟踪。
+`build/shell3.elf`，用 `run shell3.elf` 启动。最终版通过
+mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
+`fs.h` 文件命令（`ls`、`cat`、`write`、`cp [-r]`、`mv`、
+`rm [-f]`、`cd`、`mkdir`、`rmdir`）、进程控制（`ps`、`fg`、
+`bg`、`kill`、`run`、`elf`、`ring3`，分别经
+`proc_run_demo`/`proc_run_usercode`）、`reboot`/`shutdown`
+（`power.h`）、`clear`、`time [12|24]`、`echo`、`hello`、
+`help`、`exit`——`disk` 仍为内核专属。行编辑（方向键、
+16 条历史召回、行内光标）在用户态基于 `console.h` 原语实现；
+Ctrl+C 以投递的 `SIGINT` 形式到达。当前台有其他进程时编辑器
+退化为静默行读取，进程退出后 Shell 收回前台。已在 QEMU 下
+验证（`make test-qemu` 不受影响；手动 `run shell3.elf` 会话
+覆盖全部命令）。

@@ -21,6 +21,7 @@
 #define IO_CLEAR       4
 #define IO_CURSOR_GET  5
 #define IO_CURSOR_SET  6
+#define IO_CONSOLE_INFO 7
 
 /* SYS_TIME sub-operations */
 #define TIME_GET    1
@@ -44,6 +45,8 @@
 #define PROC_LIST    4
 #define PROC_SET_FG  5
 #define PROC_EXEC    6
+#define PROC_RUN_DEMO     7
+#define PROC_RUN_USERCODE 8
 
 /* SYS_FS sub-operations */
 #define FS_OPEN    1

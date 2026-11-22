@@ -941,6 +941,16 @@ static void shell_read_line(char *line, int size) {
             prompt_visible = 0;
         }
 
+        /* A foreground Ring 3 process owns the console AND the keyboard:
+         * leave keys buffered for it (or for us after it exits) instead
+         * of consuming them here. bg/kill while a task is foreground is
+         * handled by the Ring 3 shell; Ctrl+C still reaches the child
+         * through its own IO_GETCHAR/IO_READ waits. */
+        if (ring3_foreground_pid() != 0U) {
+            __asm__ volatile ("sti; hlt" : : : "memory");
+            continue;
+        }
+
         if (!keyboard_hit()) {
             __asm__ volatile ("sti; hlt" : : : "memory");
             continue;

@@ -13,5 +13,6 @@ void vbe_cursor_tick(void);
 void vbe_get_cursor(uint16_t *row, uint16_t *col);
 void vbe_set_cursor(uint16_t row, uint16_t col);
 uint32_t vbe_columns(void);
+uint32_t vbe_rows(void);
 
 #endif

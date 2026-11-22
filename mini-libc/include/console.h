@@ -22,4 +22,7 @@ int con_cursor_get(uint16_t *row, uint16_t *col);
 /* move the cursor to (row, col) */
 int con_cursor_set(uint16_t row, uint16_t col);
 
+/* console size in character cells; returns 0 or <0 */
+int con_size(uint16_t *rows, uint16_t *cols);
+
 #endif /* _MINI_LIBC_CONSOLE_H */
