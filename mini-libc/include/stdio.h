@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdarg.h>
+#include <fs.h>
 
 /* mini-libc stdio: formatted console/string I/O over the MyOS syscalls.
  * No FILE layer yet — all console output goes to SYS_IO/IO_WRITE
@@ -25,9 +26,5 @@ int putchar(int c);
 int scanf(const char *fmt, ...);
 int sscanf(const char *s, const char *fmt, ...);
 int getchar(void);
-
-#ifndef EOF
-#define EOF (-1)
-#endif
 
 #endif /* _MINI_LIBC_STDIO_H */

@@ -5,6 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef EOF
+#define EOF (-1)
+#endif
+
 /* mini-libc filesystem API over SYS_FS.
  *
  * Thin wrappers around the kernel's FAT32 fd table. File descriptors
