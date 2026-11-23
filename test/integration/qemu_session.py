@@ -167,21 +167,25 @@ class QemuSession:
     def send_line(self, line):
         self.send_text(line + "\n")
 
+    def _read_serial_clients(self):
+        """Drain both UART sockets (COM1 diagnostics + COM3 Ring 3
+        mirror) into serial_data. Returns True when any bytes arrived."""
+        got = False
+        for client in (self.serial_client, self.serial3_client):
+            try:
+                chunk = client.recv(65536)
+            except BlockingIOError:
+                chunk = b""
+            if chunk:
+                self.serial_data.extend(chunk)
+                got = True
+        return got
+
     def read_serial(self, duration):
         end = min(self.deadline, time.monotonic() + duration)
-        clients = (self.serial_client, self.serial3_client)
         while time.monotonic() < end:
             self.check_running()
-            got = False
-            for client in clients:
-                try:
-                    chunk = client.recv(65536)
-                except BlockingIOError:
-                    chunk = b""
-                if chunk:
-                    self.serial_data.extend(chunk)
-                    got = True
-            if not got:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
 
     def wait_for(self, needle, timeout=10):
@@ -195,13 +199,7 @@ class QemuSession:
             # new bytes arrive.
             if needle in self.serial_data:
                 return
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
         raise IntegrationFailure(f"serial output did not contain {needle!r}")
 
@@ -212,13 +210,7 @@ class QemuSession:
             self.check_running()
             if expression.search(self.serial_data[start:]):
                 return
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
         raise IntegrationFailure(f"serial output did not match {pattern!r}")
 
