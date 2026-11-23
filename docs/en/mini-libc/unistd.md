@@ -1,13 +1,115 @@
-# `unistd.h` + `sys/types.h`
+# `unistd.h` — process control and fd-level I/O
 
-`sys/types.h`: `pid_t` (int), `ssize_t` (int), `off_t` (int).
+POSIX-ish process control, fd-level I/O, and path operations over
+the MyOS syscall ABI. Only what the kernel supports is implemented;
+functions with no backing syscall return `-1` with `errno = ENOSYS`.
+`sleep()`/`usleep()` live in `time.h`.
 
-Process: `_exit(status)` (no atexit), `pid_t getpid()`,
-`int sched_yield()`, `int execve(path,argv,envp)` (PROC_EXEC).
-fd I/O: `ssize_t read(fd,buf,size)` `ssize_t write(fd,buf,size)`
-`int close(fd)`.
-Paths: `int unlink(path)` `int rmdir(path)` `int chdir(path)`
-`int getcwd(buf,size)` `int access(path,mode)`.
+Types come from `sys/types.h`: `pid_t` (int), `ssize_t` (int),
+`off_t` (int32_t).
 
-`fork`/`getppid`/`lseek` return `-1` with `errno=ENOSYS`
-(no kernel support).
+## Process control
+
+### `_Noreturn void _exit(int status)`
+
+- **Parameters**: `status` — exit status.
+- **Returns**: never returns.
+- **Details**: Immediate `PROC_EXIT`; same as `_Exit` in
+  `stdlib.h` — no `atexit` handlers, no stdio flush.
+
+### `pid_t getpid(void)`
+
+- **Parameters**: none.
+- **Returns**: current process id (positive).
+- **Details**: `PROC_GETPID` wrapper.
+
+### `pid_t getppid(void)`
+
+- **Parameters**: none.
+- **Returns**: always `-1`, `errno = ENOSYS`.
+- **Details**: The kernel tracks no parent pid.
+
+### `int sched_yield(void)`
+
+- **Parameters**: none.
+- **Returns**: `0` or `< 0`.
+- **Details**: `PROC_YIELD` — yields the CPU to another ready Ring 3
+  process. The syscall performs a signal check, so pending fatal
+  signals are delivered here.
+
+### `pid_t fork(void)`
+
+- **Parameters**: none.
+- **Returns**: always `-1`, `errno = ENOSYS`.
+- **Details**: No fork in the ABI — spawn via `execve`/`run`.
+
+### `int execve(const char *path, char *const argv[], char *const envp[])`
+
+- **Parameters**: `path` — FAT32 path of an ELF32 executable;
+  `argv`, `envp` — accepted for signature compatibility but
+  **ignored** (the kernel ABI takes only the path).
+- **Returns**: only on failure (`< 0`); on success the current
+  process image is replaced.
+- **Details**: `PROC_EXEC` — loads the ELF32 image and replaces the
+  address space.
+
+## fd-level I/O
+
+Identical semantics to `fs_read`/`fs_write`/`fs_close` in `fs.h`.
+
+### `ssize_t read(int fd, void *buf, size_t count)`
+
+- **Parameters**: `fd`; `buf` — destination; `count` — max bytes.
+- **Returns**: bytes read (short at EOF), or `-1` on error.
+- **Details**: —
+
+### `ssize_t write(int fd, const void *buf, size_t count)`
+
+- **Parameters**: `fd`; `buf` — source; `count` — bytes.
+- **Returns**: bytes written, or `-1` on error.
+- **Details**: —
+
+### `int close(int fd)`
+
+- **Parameters**: `fd` — descriptor.
+- **Returns**: `0` or `-1` (`EBADF`).
+- **Details**: —
+
+## Path operations
+
+### `int unlink(const char *path)`
+
+- **Parameters**: `path` — file to delete.
+- **Returns**: `0` or `-1`.
+- **Details**: Same as `fs_unlink`.
+
+### `int rmdir(const char *path)`
+
+- **Parameters**: `path` — empty directory to remove.
+- **Returns**: `0` or `-1`.
+- **Details**: Same as `fs_rmdir`.
+
+### `int chdir(const char *path)`
+
+- **Parameters**: `path` — target directory.
+- **Returns**: `0` or `-1`.
+- **Details**: Same as `fs_chdir`; changes the shared cwd.
+
+### `char *getcwd(char *buf, size_t size)`
+
+- **Parameters**: `buf` — destination; `size` — capacity.
+- **Returns**: `buf` on success, `NULL` on error/overflow.
+- **Details**: NUL-terminated cwd; same data as `fs_getcwd`.
+
+### `int access(const char *path, int mode)`
+
+- **Parameters**: `path`; `mode` — ignored beyond existence.
+- **Returns**: `0` if the path exists, `-1` otherwise.
+- **Details**: Existence check only (`F_OK` semantics); any `mode`
+  value is accepted.
+
+### `off_t lseek(int fd, off_t offset, int whence)`
+
+- **Parameters**: `fd`, `offset`, `whence` — standard seek args.
+- **Returns**: always `-1`, `errno = ENOSYS`.
+- **Details**: The kernel ABI has no seek support.

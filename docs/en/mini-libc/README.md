@@ -1,8 +1,21 @@
-# mini-libc API Reference (English)
+# mini-libc API Reference
 
-- [Base headers](base.md)
+mini-libc is a freestanding C library for Ring 3 programs on MyOS.
+All public declarations are reachable through the single umbrella
+header:
+
+```c
+#include <myos.h>
+```
+
+`myos.h` aggregates every module header; each header can still be
+included individually. Header changes must be mirrored in these
+docs.
+
+- [Base headers](base.md) — `stdint.h`, `stddef.h`, `stdbool.h`,
+  `limits.h`, `float.h`, `stdarg.h`, `stdnoreturn.h`
 - [`string.h`](string.md)
-- [`ctype.h`](ctype.md)
+- [`ctype.h`](ctype.h)
 - [`stdio.h`](stdio.md)
 - [`fs.h`](fs.md)
 - [`unistd.h`](unistd.md)
@@ -17,5 +30,3 @@
 - [`power.h`](power.md)
 - [`inttypes.h`](inttypes.md)
 - [`sys/syscall.h`](syscall.md)
-
-Keep in sync with `mini-libc/include/` header changes.

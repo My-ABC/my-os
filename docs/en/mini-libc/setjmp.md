@@ -1,11 +1,28 @@
-# `setjmp.h`
+# `setjmp.h` — non-local jumps
 
-`typedef int jmp_buf[6]` — saves ebx/esi/edi/ebp/esp/eip.
-`int setjmp(jmp_buf env)` — returns 0 first time, then re-returns
-with the `longjmp` value.
-`_Noreturn void longjmp(jmp_buf env, int val)` — `val==0` coerces
-to 1 per C11.
+Over callee-saved registers only; no signal mask is saved.
 
-Volatile locals modified between setjmp and longjmp have
-indeterminate values on the second return (standard C rule).
-No signal mask is saved (no sigprocmask in the ABI).
+## Types
+
+```c
+typedef int jmp_buf[6];   /* ebx esi edi ebp esp eip */
+```
+
+## Functions
+
+### `int setjmp(jmp_buf env)`
+
+- **Parameters**: `env` — buffer receiving the saved context.
+- **Returns**: `0` when called directly; `val` (the `longjmp`
+  argument) when the context is restored.
+- **Details**: Saves `ebx/esi/edi/ebp/esp/eip`. Volatile locals
+  modified between `setjmp` and `longjmp` have indeterminate values
+  on the second return — the standard C rule applies.
+
+### `_Noreturn void longjmp(jmp_buf env, int val)`
+
+- **Parameters**: `env` — buffer previously filled by `setjmp`;
+  `val` — value `setjmp` will return.
+- **Returns**: never returns.
+- **Details**: Restores the saved context; `val == 0` is converted
+  to `1` (so `setjmp` never appears to return `0` twice).
