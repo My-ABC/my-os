@@ -268,7 +268,8 @@ static int ring3_schedule_internal(void (*func)(void),
 }
 
 int ring3_schedule(void (*func)(void)) {
-    return ring3_schedule_mm(func, 0, 0U, 0U, 0, VT_FALLBACK);
+    return ring3_schedule_mm(func, 0, 0U, 0U, 0,
+                             (int)ring3_current_vt());
 }
 
 int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
