@@ -288,18 +288,23 @@ uint32_t sys_user_heap_contains(uint32_t addr) {
     return addr >= USER_HEAP_START && addr < USER_HEAP_END;
 }
 
-/* Validate that every page covering [addr, addr+len) belongs to a registered
- * user range (live ELF image, user stack, or user heap). Rejects kernel
- * addresses and unmapped holes so bad pointers return -1 instead of
- * panicking the kernel on the subsequent copy. */
+/* Validate that every page covering [addr, addr+len) is actually mapped
+ * in the current process's address space. Range-permission checks are
+ * not sufficient: a permitted-but-unmapped page (e.g. an unregistered
+ * image range or a not-yet-demand-paged stack page) would fault in
+ * kernel context and panic. */
+static int sys_user_page_mapped(uint32_t page) {
+    struct user_mm *mm = ring3_current_mm();
+    return mm != 0 && paging_mm_get_phys(mm, page) != 0U;
+}
+
 static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
     if (len == 0U) return 1;
     if (addr >= USER_SPACE_END || len > USER_SPACE_END - addr) return 0;
     uint32_t last = addr + len - 1U;
     for (uint32_t page = addr & ~(PAGE_SIZE - 1U); page <= last;
          page += PAGE_SIZE) {
-        if (!ring3_user_range_permitted(page) &&
-            !sys_user_heap_contains(page)) {
+        if (!sys_user_page_mapped(page)) {
             return 0;
         }
     }
@@ -310,11 +315,14 @@ static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
  * dst_size. Returns the string length (excluding NUL) or -1. */
 static int sys_copy_user_string(uint32_t addr, char *dst, uint32_t dst_size) {
     if (addr >= USER_SPACE_END || dst_size < 2U) return -1;
+    uint32_t checked_page = 0xFFFFFFFFU;
     for (uint32_t i = 0; i + 1U < dst_size; ++i) {
         uint32_t a = addr + i;
-        if (a >= USER_SPACE_END ||
-            (!ring3_user_range_permitted(a) && !sys_user_heap_contains(a))) {
-            return -1;
+        if (a >= USER_SPACE_END) return -1;
+        uint32_t page = a & ~(PAGE_SIZE - 1U);
+        if (page != checked_page) {
+            if (!sys_user_page_mapped(page)) return -1;
+            checked_page = page;
         }
         char c = *(const volatile char *)a;
         dst[i] = c;
