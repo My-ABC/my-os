@@ -10,7 +10,7 @@ English | [中文](../zh/02-memory.md)
 | `0x00100000`–… | Kernel physical load address (1 MiB) |
 | `0x00800000` | Boot-time mapping smoke-test page (transient) |
 | `0x01000000`–`0x40000000` | Ring 3 user heap (`USER_HEAP_START`/`USER_HEAP_END`) |
-| `0x810000`, `0x820000` | Per-process Ring 3 user stacks, 32 KiB each |
+| `0x00810000`, `0x00820000` | Per-process Ring 3 user stack tops (`USER_STACK_TOP_0/1`), 32 KiB each growing down |
 | ELF image ranges | Demand-mapped per live Ring 3 process |
 | `< 0xC0000000` | User range (`USER_SPACE_END`) |
 | `0xC0000000`+ | Kernel higher-half mapping (`KERNEL_VIRT_BASE`) |
@@ -53,8 +53,9 @@ User memory is demand-mapped, never fully populated:
 
 - **ELF image ranges** — recorded per live process; the loader maps code/
   data pages on demand.
-- **User stacks** — two 32 KiB regions at `0x810000` and `0x820000`,
-  released wholesale when a process dies.
+- **User stacks** — two 32 KiB regions whose tops are `0x00810000`
+  (`USER_STACK_TOP_0`) and `0x00820000` (`USER_STACK_TOP_1`), growing
+  down; released wholesale when a process dies.
 - **User heap** — `0x01000000`–`0x40000000`, managed by the `SYS_MEMORY`
   sub-operations in `src/os/syscall.c`.
 
