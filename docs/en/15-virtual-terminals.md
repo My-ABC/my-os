@@ -131,3 +131,11 @@ output only (diagnostics plus kernel-shell commands).
 - COM3 is a global mirror, not a per-terminal serial stream.
 - Each vt keeps exactly one screen of state — no scrollback buffer.
 - The kernel shell exists only on vt 0.
+- VBE backing-store allocation failure disables F1/F2 switching with
+  only a serial log; there is no on-screen indication. If `vt_alloc_fb`
+  fails partway through a terminal's page loop, the pages already mapped
+  for that terminal are leaked (the window is never reclaimed).
+- `vt_pending` is a plain int written by the keyboard ISR and read by
+  `vt_service`; on this single-CPU kernel the race window is a few
+  instructions wide and benign (worst case: a stale or overwritten
+  switch request), so it is left as-is.
