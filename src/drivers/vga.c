@@ -40,7 +40,7 @@ static inline uint8_t vga_color(enum vga_color fg, enum vga_color bg) {
 }
 
 /* 内部函数：更新硬件光标 (仅当该 ctx 属于当前可见终端时写寄存器) */
-static void vga_update_cursor(struct vga_ctx *ctx, int visible) {
+static void vga_update_cursor(struct vga_ctx *ctx) {
     uint16_t pos = ctx->cursor_row * VGA_WIDTH + ctx->cursor_col;
 
     // 写入光标位置到 VGA 寄存器
@@ -49,7 +49,6 @@ static void vga_update_cursor(struct vga_ctx *ctx, int visible) {
     outb(0x3D5, (uint8_t)(pos & 0xFF));
     outb(0x3D4, 0x0E);
     outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
-    (void)visible;
 }
 
 /* 内部函数：滚动屏幕 */
@@ -113,7 +112,7 @@ void vga_clear(void) {
     ctx->cursor_row = 0;
     ctx->cursor_col = 0;
     if (vt == vt_active_index()) {
-        vga_update_cursor(ctx, 1);
+        vga_update_cursor(ctx);
     }
 }
 
@@ -176,7 +175,7 @@ void vga_putchar(char c) {
 
     // 更新硬件光标 (仅可见终端)
     if (vt == vt_active_index()) {
-        vga_update_cursor(ctx, 1);
+        vga_update_cursor(ctx);
     }
 }
 
@@ -307,7 +306,7 @@ void vga_set_cursor(uint16_t row, uint16_t col) {
         ctx->cursor_row = row;
         ctx->cursor_col = col;
         if (vt == vt_active_index()) {
-            vga_update_cursor(ctx, 1);
+            vga_update_cursor(ctx);
         }
     }
 }
@@ -316,5 +315,5 @@ void vga_set_cursor(uint16_t row, uint16_t col) {
 void vga_console_switched(void) {
     if (vbe_available()) return;
     int active = vt_active_index();
-    vga_update_cursor(&vga_ctxs[active], 1);
+    vga_update_cursor(&vga_ctxs[active]);
 }

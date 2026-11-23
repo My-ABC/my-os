@@ -94,35 +94,3 @@ int serial_getchar(void) {
     }
     return inb(SERIAL_COM1);  // 读取数据端口
 }
-
-// 从串口读取一个字符（阻塞）
-int serial_wait_char(void) {
-    while (!serial_is_data_available()) {
-        __asm__ volatile ("pause");  // 等待数据就绪
-    }
-    return inb(SERIAL_COM1);
-}
-
-// 从串口读取一行字符串（阻塞）
-void serial_gets(char *buffer, int size) {
-    int i = 0;
-    while (i < size - 1) {
-        char c = serial_wait_char();
-        if (c == '\r' || c == '\n') {
-            buffer[i] = '\0';
-            serial_putchar('\n');  // 回显换行
-            break;
-        } else if (c == '\b' || c == 0x7F) {  // 退格
-            if (i > 0) {
-                i--;
-                serial_putchar('\b');
-                serial_putchar(' ');
-                serial_putchar('\b');
-            }
-        } else {
-            buffer[i++] = c;
-            serial_putchar(c);  // 回显
-        }
-    }
-    buffer[i] = '\0';
-}

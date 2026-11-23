@@ -18,13 +18,12 @@ class DeviceContractTests(unittest.TestCase):
         self.assertIn("if (next != tail[vt])", text)
         self.assertIn("current_scancode_set = set", text)
 
-    def test_serial_read_and_line_buffer_are_bounded(self):
+    def test_serial_read_is_bounded(self):
         text = source("src/drivers/serial.c")
         self.assertIn("if (!serial_is_data_available())",
                       function_body(text, "serial_getchar"))
-        body = function_body(text, "serial_gets")
-        self.assertIn("while (i < size - 1)", body)
-        self.assertIn("buffer[i] = '\\0'", body)
+        self.assertNotIn("serial_gets", text)
+        self.assertNotIn("serial_wait_char", text)
 
     def test_rtc_suite_covers_epoch_leap_day_and_timezone_rollover(self):
         test = source("test/c/test_rtc.c")

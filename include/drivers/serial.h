@@ -18,7 +18,5 @@ void serial3_putchar(char c);
 void serial3_print(const char *str);
 
 int serial_getchar(void);
-int serial_wait_char(void);
-void serial_gets(char *buffer, int size);
 
 #endif
