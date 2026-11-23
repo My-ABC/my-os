@@ -67,16 +67,15 @@ make iso            # 生成iso文件
 make test           # 运行内核例程的宿主机测试
 make test-qemu      # 构建内核并运行有时限的无头 QEMU 集成测试
 make test-qemu-highmem  # QEMU -m 6G：分配、映射、读写并释放 4 GiB 以上的物理页
-make disk           # 创建 64 MB FAT32 格式的 disk.img
-make run            # 有 disk.img 就挂载，否则不连接磁盘
+make disk           # 创建 64 MB FAT32 格式的 disk.img（内含 shell3.elf）
+make run            # 构建 ISO + 磁盘镜像并挂载磁盘启动
 make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并连接磁盘
-make disk-shell     # 创建包含 shell3.elf 的 FAT32 磁盘镜像 disk-shell.img
-make run-disk-shell # 构建带 shell 的磁盘镜像并通过 ISO 启动挂载
 ```
 
 内核启动时会探测主盘 ATA 设备；检测到磁盘后会自动执行 Shell 的磁盘
-初始化逻辑并尝试挂载 FAT32。`make run` 不会自动创建磁盘镜像；需要磁盘时
-先运行 `make disk`。
+初始化逻辑并尝试挂载 FAT32。`make disk` 构建的 `disk.img` 根目录带有
+`shell3.elf`；检测到该文件时内核监督器会自动启动 Ring 3 Shell，且每次
+退出后自动重启，因此 `make run` 开机即进入用户态 Shell。
 
 测试按用途整理在 `test/` 下：`python/` 放宿主 Python 用例和源码合约检查，`c/` 放宿主 C 测试程序，`shell/` 放各 C 测试对应的独立启动脚本，`support/` 放共享编译器脚本和断言头文件。只在 QEMU 中运行的检查位于 `integration/`，其中入口、QEMU 会话、FAT32 测试镜像和行为场景分别放在独立模块中。`make test` 自动发现 Python 用例，并由它们运行各个 shell 测试套件。C 测试直接使用宿主机 `cc`，与内核的 `CC` 交叉编译器无关。PMM 宿主测试还会验证 4 GiB 以上物理页的分配与释放。这些测试不会执行特权指令、访问物理地址或启动 QEMU；硬件行为仍需通过模拟器或设备验证。C 检查和具名 Python 用例都会输出清晰的测试名称及 PASS/FAIL 状态。
 

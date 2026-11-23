@@ -69,10 +69,11 @@
 实验性用户态移植位于 `src/shell/shell_ring3.c`（头文件
 `include/shell/shell_ring3.h`），由 `make shell3` 构建为
 `build/shell3.elf`，用 `run shell3.elf` 启动。当挂载的磁盘根目录
-带有 `shell3.elf` 时——例如 `make disk-shell` 生成的
-`disk-shell.img`——`start_shell()` 会在打印内核横幅前将其自动
-置于前台启动，因此 `make run-disk-shell` 开机即进入 Ring 3
-Shell（`exit` 回到内核 Shell）。最终版通过
+带有 `shell3.elf` 时——`make disk` 生成的 `disk.img`——内核监督器
+（`kernel.c` 中的 `shell3_supervisor`）会将其置于前台自动启动，
+并在每次退出或被杀后自动重启，因此 `make run` 开机即进入 Ring 3
+Shell，永远看不到内核 Shell。仅当未挂载磁盘或 `shell3.elf` 缺失/
+无法加载时才会进入内核 Shell。最终版通过
 mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
 `fs.h` 文件命令（`ls`、`cat`、`write`、`cp [-r]`、`mv`、
 `rm [-f]`、`cd`、`mkdir`、`rmdir`）、进程控制（`ps`、`fg`、

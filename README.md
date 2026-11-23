@@ -71,17 +71,17 @@ make iso            # gen iso file
 make test           # run host-side tests for kernel routines
 make test-qemu      # build and run the bounded headless QEMU integration suite
 make test-qemu-highmem  # QEMU -m 6G: allocate/map/test/free a page above 4 GiB
-make disk           # create disk.img as a 64 MB FAT32 image
-make run            # attach disk.img when it exists; otherwise boot without a disk
+make disk           # create disk.img (64 MB FAT32) containing shell3.elf
+make run            # build the ISO + disk image and boot with the disk attached
 make run-disk       # create disk.img if needed and boot -kernel with it attached
-make disk-shell     # create disk-shell.img (FAT32) containing shell3.elf
-make run-disk-shell # build the shell disk and boot the ISO with it attached
 ```
 
 At startup the kernel probes the primary-master ATA device. If a disk is
 present, it automatically runs the Shell disk initialization, which mounts a
-supported FAT32 volume. `make run` does not create a disk image; use `make disk`
-first if you want one.
+supported FAT32 volume. `make disk` builds `disk.img` with `shell3.elf` at its
+root; when that file is present the kernel supervisor auto-starts the Ring 3
+shell and respawns it whenever it exits, so `make run` lands directly in the
+user shell.
 
 Tests are grouped by purpose under `test/`: `python/` contains the host Python
 tests and small source-contract suites, `c/` contains host C test programs,

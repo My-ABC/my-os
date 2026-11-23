@@ -148,15 +148,11 @@ $(BUILD_DIR)/paging_asm.o: boot/paging.asm
 	mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# 运行：通过 GRUB ISO 启动；仅在已有镜像时附加 FAT32 IDE 磁盘
-run: iso
-	@if test -f "$(DISK)"; then \
-		echo "Attaching disk image: $(DISK)"; \
-		qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) -drive file="$(DISK)",format=raw,if=ide -serial stdio; \
-	else \
-		echo "No disk image found at $(DISK); booting without an IDE disk"; \
-		qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) -serial stdio; \
-	fi
+# 运行：通过 GRUB ISO 启动并挂载 FAT32 磁盘（内含 shell3.elf，
+# 开机由内核监督器自动启动并在退出后重启）
+run: iso disk
+	qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) \
+		-drive file="$(DISK)",format=raw,if=ide -serial stdio
 
 # 直接 -kernel 启动，不经过 GRUB，仅用于启动链调试
 run-kernel: build
@@ -169,38 +165,26 @@ run-nographic: build
 run-serial: build
 	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -serial stdio
 
-disk:
-	@if test -f "$(DISK)"; then \
+# FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录；
+# shell3.elf 比镜像新时重建
+disk: shell3
+	@if test -f "$(DISK)" && [ "$(SHELL3_ELF)" -ot "$(DISK)" ]; then \
 		echo "Disk image already exists: $(DISK)"; \
 	else \
 		command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }; \
+		rm -f "$(DISK)"; \
 		truncate -s $(DISK_SIZE) "$(DISK)"; \
 		mkfs.fat -F 32 -n MYOS "$(DISK)"; \
-		echo "Created FAT32 disk image: $(DISK) ($(DISK_SIZE))"; \
+		python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
+			from fat32_image import add_root_file; \
+			from pathlib import Path; \
+			add_root_file("$(DISK)", "shell3.elf", \
+				Path("$(SHELL3_ELF)").read_bytes())'; \
+		echo "Created FAT32 disk image: $(DISK) ($(DISK_SIZE), contains shell3.elf)"; \
 	fi
 
 run-disk: build disk
 	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -drive file=$(DISK),format=raw,if=ide -serial stdio
-
-# 带用户态 shell 的 FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录
-DISK_SHELL ?= disk-shell.img
-
-disk-shell: build shell3
-	@command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }
-	@rm -f "$(DISK_SHELL)"
-	truncate -s $(DISK_SIZE) "$(DISK_SHELL)"
-	mkfs.fat -F 32 -n MYOS "$(DISK_SHELL)"
-	python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
-		from fat32_image import add_root_file; \
-		from pathlib import Path; \
-		add_root_file("$(DISK_SHELL)", "shell3.elf", \
-			Path("$(SHELL3_ELF)").read_bytes())'
-	@echo "Created shell disk image: $(DISK_SHELL) (contains shell3.elf)"
-
-# 经 GRUB ISO 启动（带 VBE framebuffer），同时挂载带 shell 的磁盘镜像
-run-disk-shell: iso disk-shell
-	qemu-system-i386 -rtc base=utc -boot order=d -cdrom $(ISO) \
-		-drive file=$(DISK_SHELL),format=raw,if=ide -serial stdio
 
 # 使用 q35 机型运行（更好的 ACPI 支持）
 run-q35: build
@@ -243,4 +227,4 @@ clean:
 	rm -rf build $(KERNEL) $(ISO) test/__pycache__ \
 		test/python/__pycache__ test/integration/__pycache__
 
-.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem test-libmyc disk disk-shell run run-kernel run-nographic run-serial run-disk run-disk-shell run-q35 run-q35-nographic iso run-iso debug clean
+.PHONY: build libmyc shell3 test test-qemu test-qemu-highmem test-libmyc disk run run-kernel run-nographic run-serial run-disk run-q35 run-q35-nographic iso run-iso debug clean
