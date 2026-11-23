@@ -52,5 +52,6 @@ struct user_mm;
 int elf32_load(const void *image, uint32_t image_size,
                struct user_mm *mm, struct elf32_loaded_image *loaded);
 int elf_run(const void *image, uint32_t image_size);
+int elf_run_vt(const void *image, uint32_t image_size, int vt);
 
 #endif

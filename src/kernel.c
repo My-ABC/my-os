@@ -21,6 +21,7 @@
 #include "ata.h"
 #include "elf.h"
 #include "fat32.h"
+#include "vt.h"
 
 #ifdef PMM_QEMU_HIGHMEM_TEST
 static void highmem_qemu_test(void) {
@@ -77,54 +78,40 @@ halt:
 #endif
 
 /* Boot supervisor: when the mounted FAT32 disk carries /shell3.elf,
- * run it in the foreground and respawn it every time it exits or is
- * killed, so the Ring 3 shell is always the visible terminal. The
- * kernel shell is only reached when no disk is mounted or the file
- * is missing/unloadable. */
-static int shell3_pid_alive(uint32_t pid) {
-    uint32_t pids[RING3_PROCESS_COUNT];
-    uint32_t states[RING3_PROCESS_COUNT];
-    uint32_t count = ring3_process_list(pids, states, RING3_PROCESS_COUNT);
-    for (uint32_t i = 0; i < count; ++i) {
-        if (pids[i] == pid &&
-            (states[i] == RING3_PROCESS_READY ||
-             states[i] == RING3_PROCESS_RUNNING)) {
-            return 1;
-        }
+ * run it on vt 0 and let the vt layer keep a shell3 alive on every
+ * virtual terminal (F1/F2 switch between them; each exit or kill is
+ * respawned). The kernel shell is only reached when no disk is
+ * mounted or the file is missing/unloadable. */
+static uint8_t *shell3_image;
+
+static int shell3_spawn_on_vt(int vt) {
+    uint32_t size = 0U;
+    if (shell3_image == 0) {
+        shell3_image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+        if (shell3_image == 0) return -101;
     }
-    return 0;
+    if (fat32_read_file("/shell3.elf", shell3_image, FAT32_MAX_FILE_SIZE,
+                        &size) != 0) {
+        return -102;
+    }
+    return elf_run_vt(shell3_image, size, vt);
 }
 
 static void shell3_supervisor(void) {
-    uint8_t *image;
-    uint32_t size;
-    uint32_t pid;
-
     if (!fat32_mounted()) {
         start_shell();
         return;
     }
-    image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
-    if (image == 0) {
+    vt_set_spawner(shell3_spawn_on_vt);
+    if (vt_spawn_shell(VT_FALLBACK) != 0) {
         start_shell();
         return;
     }
+    serial_print("[SHELL] Auto-started /shell3.elf (Ring 3 shell)\n");
     for (;;) {
-        size = 0U;
-        if (fat32_read_file("/shell3.elf", image, FAT32_MAX_FILE_SIZE,
-                            &size) != 0 ||
-            elf_run(image, size) != 0) {
-            break;
-        }
-        pid = ring3_foreground_pid();
-        serial_print("[SHELL] Auto-started /shell3.elf (Ring 3 shell)\n");
-        while (shell3_pid_alive(pid)) {
-            __asm__ volatile ("hlt");
-        }
-        serial_print("[SHELL] /shell3.elf exited; restarting\n");
+        vt_service();
+        __asm__ volatile ("hlt");
     }
-    kfree(image);
-    start_shell();
 }
 
 void kmain(uint32_t multiboot_info) {
@@ -163,6 +150,9 @@ void kmain(uint32_t multiboot_info) {
     
     // 初始化 VGA
     vga_init();
+
+    // 虚拟终端：为每个 tty 分配屏幕备份 (VBE 模式下含离屏帧缓冲)
+    vt_init();
 
     serial_print("[DISK] Probing ATA primary master\n");
     if (ata_init()) {

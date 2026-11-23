@@ -47,7 +47,7 @@ class ElfRing3RegressionTests(unittest.TestCase):
         self.assertIn("processes[i].image_start = image_start", ring3_source)
         self.assertIn("processes[i].image_end = image_end", ring3_source)
         self.assertIn("release_process_resources(&processes[i])", ring3_source)
-        self.assertIn("if (foreground) foreground_pid = processes[i].pid", ring3_source)
+        self.assertIn("if (foreground) foreground_pid[processes[i].vt] = processes[i].pid", ring3_source)
 
 
 if __name__ == "__main__":

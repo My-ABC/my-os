@@ -106,6 +106,10 @@ int elf32_load(const void *image, uint32_t image_size,
 }
 
 int elf_run(const void *image, uint32_t image_size) {
+    return elf_run_vt(image, image_size, (int)ring3_current_vt());
+}
+
+int elf_run_vt(const void *image, uint32_t image_size, int vt) {
     struct elf32_loaded_image loaded;
     struct user_mm *mm = paging_mm_create();
     int result;
@@ -123,7 +127,7 @@ int elf_run(const void *image, uint32_t image_size) {
     serial_print_hex(loaded.entry);
     serial_print("\n");
     result = ring3_schedule_mm((void (*)(void))loaded.entry, mm,
-                               loaded.image_start, loaded.image_end, 1);
+                               loaded.image_start, loaded.image_end, 1, vt);
     if (result != 0) {
         elf32_release_mm(mm);
         serial_print("[ELF] Unable to schedule loaded image\n");

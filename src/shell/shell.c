@@ -13,6 +13,7 @@
 #include "signal.h"
 #include "elf.h"
 #include "vbe.h"
+#include "vt.h"
 #include "ata.h"
 #include "fat32.h"
 #include "heap.h"
@@ -253,7 +254,7 @@ int cmd_ring3(int argc, char *argv[]) {
     serial_print("[RING3] Scheduling user function at ");
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
-    if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) != 0) {
+    if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 1, VT_FALLBACK) != 0) {
         paging_mm_release(mm);
         printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
         return -1;
@@ -278,12 +279,13 @@ int cmd_ps(int argc, char *argv[]) {
         else if (states[i] == RING3_PROCESS_RUNNING) state = "RUNNING";
         else if (states[i] == RING3_PROCESS_DEAD) state = "DEAD";
         printf("%d    %s%s\n", pids[i], state,
-               ring3_foreground_pid() == pids[i] ? " (FOREGROUND)" : "");
+               ring3_foreground_pid_vt(VT_FALLBACK) == pids[i]
+                   ? " (FOREGROUND)" : "");
         serial_print("[PS] ");
         serial_print_dec(pids[i]);
         serial_putchar(' ');
         serial_print(state);
-        if (ring3_foreground_pid() == pids[i]) {
+        if (ring3_foreground_pid_vt(VT_FALLBACK) == pids[i]) {
             serial_print(" (FOREGROUND)");
         }
         serial_putchar('\n');
@@ -930,7 +932,8 @@ static void shell_read_line(char *line, int size) {
     int origin_valid = 0;
 
     for (;;) {
-        if (ring3_foreground_pid() == 0U) {
+        vt_service();
+        if (ring3_foreground_pid_vt(VT_FALLBACK) == 0U) {
             if (!prompt_visible && length == 0) {
                 shell_print_prompt();
                 prompt_visible = 1;
@@ -946,21 +949,21 @@ static void shell_read_line(char *line, int size) {
          * of consuming them here. bg/kill while a task is foreground is
          * handled by the Ring 3 shell; Ctrl+C still reaches the child
          * through its own IO_GETCHAR/IO_READ waits. */
-        if (ring3_foreground_pid() != 0U) {
+        if (ring3_foreground_pid_vt(VT_FALLBACK) != 0U) {
             __asm__ volatile ("sti; hlt" : : : "memory");
             continue;
         }
 
-        if (!keyboard_hit()) {
+        if (!keyboard_hit_vt(VT_FALLBACK)) {
             __asm__ volatile ("sti; hlt" : : : "memory");
             continue;
         }
 
-        char c = keyboard_getchar();
+        char c = keyboard_getchar_vt(VT_FALLBACK);
         if (c == KEYBOARD_KEY_SIGINT) {
             printf("^C\n");
             serial_print("^C\n");
-            uint32_t fg = ring3_foreground_pid();
+            uint32_t fg = ring3_foreground_pid_vt(VT_FALLBACK);
             if (fg != 0U) {
                 ring3_signal_send(fg, SIGINT);
                 serial_print("[SHELL] Sent SIGINT to PID ");

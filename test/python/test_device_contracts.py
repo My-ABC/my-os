@@ -14,8 +14,8 @@ class DeviceContractTests(unittest.TestCase):
     def test_keyboard_scan_set_two_release_prefix_and_bounded_ring(self):
         text = source("src/drivers/keyboard.c")
         self.assertIn("scancode == 0xF0", text)
-        self.assertIn("(head + 1) % BUFFER_SIZE", text)
-        self.assertIn("if (next != tail)", text)
+        self.assertIn("(head[vt] + 1) % BUFFER_SIZE", text)
+        self.assertIn("if (next != tail[vt])", text)
         self.assertIn("current_scancode_set = set", text)
 
     def test_serial_read_and_line_buffer_are_bounded(self):

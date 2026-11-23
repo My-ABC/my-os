@@ -55,4 +55,8 @@ uint16_t vga_columns(void);
 
 uint16_t vga_rows(void);
 
+/* Called by vt.c after a terminal switch (text mode only): resync the
+ * hardware cursor registers with the newly visible terminal. */
+void vga_console_switched(void);
+
 #endif

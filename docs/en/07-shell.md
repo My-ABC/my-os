@@ -87,7 +87,15 @@ disk carries `shell3.elf` at its root — the `disk.img` produced by
 time it exits or is killed, so `make run` lands directly in the
 Ring 3 shell and never shows the kernel shell. The kernel shell is
 only reached when no disk is mounted or `shell3.elf` is missing or
-unloadable. The final
+unloadable. Two virtual terminals (ttys) are provided by
+`src/drivers/vt.c`: F1 selects vt 0 and F2 selects vt 1, each running
+its own `shell3.elf` instance concurrently. Only the visible terminal
+receives keyboard input; every terminal keeps a private screen
+backing store (VGA cell buffer or VBE framebuffer copy) so switching
+preserves each terminal's contents. The kernel shell stays pinned to
+vt 0, foreground ownership and SIGINT are tracked per terminal, and
+`vt_service()` respawns a dead shell on its terminal from the kernel
+idle loop. The final
 version implements the full kernel command set through the
 mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
 `write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),

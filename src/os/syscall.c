@@ -49,25 +49,18 @@ extern uint32_t syscall_switch_frame;
 
 /* Yield the CPU while waiting for keyboard input. The saved user frame's
  * EIP is rewound past `int 0x80` (CD 80) so the syscall restarts from
- * scratch when the process is rescheduled. Only yields when another
- * Ring 3 process is runnable; otherwise keeps sleeping so the kernel
- * shell cannot steal the keystroke. Returns nonzero when yielded. */
+ * scratch when the process is rescheduled. Yields to the kernel idle
+ * context on every wait iteration so deferred kernel work (vt_service)
+ * is not starved by a lone blocked process. Returns nonzero when
+ * yielded. */
 static int sys_keyboard_wait_yield(struct irq_frame *frame) {
     if (ring3_current_pid() == 0U) return 0;
-    uint32_t pids[RING3_PROCESS_COUNT];
-    uint32_t states[RING3_PROCESS_COUNT];
-    uint32_t me = ring3_current_pid();
-    uint32_t n = ring3_process_list(pids, states, RING3_PROCESS_COUNT);
-    int other = 0;
-    for (uint32_t i = 0; i < n; ++i) {
-        if (pids[i] != me &&
-            (states[i] == RING3_PROCESS_READY ||
-             states[i] == RING3_PROCESS_RUNNING)) {
-            other = 1;
-            break;
-        }
-    }
-    if (!other) return 0;
+    /* Always yield to the kernel idle context while waiting for a
+     * key, even when no other Ring 3 process is runnable. The idle
+     * loop (shell supervisor / kernel shell) owns vt_service() and
+     * other deferred work; without this a lone process blocked in
+     * IO_GETCHAR would starve it forever. The syscall instruction is
+     * rewound so int 0x80 restarts on resume. */
     frame->eip -= 2;
     syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
     return syscall_switch_frame != 0;
@@ -77,8 +70,9 @@ static int sys_keyboard_wait_yield(struct irq_frame *frame) {
  * CPU is yielded to another process (syscall restarts on resume). */
 static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
+    int vt = (int)ring3_current_vt();
     while (i < size - 1) {
-        char c = keyboard_getchar();
+        char c = keyboard_getchar_vt(vt);
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
             if (sys_signal_check(frame)) return 1;
@@ -465,7 +459,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             switch (op) {
                 case IO_WRITE: { // a1: const char *str
                     uint32_t pid = ring3_current_pid();
-                    if (pid != 0U && pid == ring3_foreground_pid()) {
+                    if (pid != 0U &&
+                        pid == ring3_foreground_pid_vt((int)ring3_current_vt())) {
                         vga_print((const char *)a1);
                         serial_print((const char *)a1);
                     }
@@ -474,9 +469,10 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case IO_READ: // a1: char *buf, a2: size
                     sys_gets((char *)a1, a2, frame);
                     return 0;
-                case IO_GETCHAR:
+                case IO_GETCHAR: {
+                    int vt = (int)ring3_current_vt();
                     for (;;) {
-                        char c = keyboard_getchar();
+                        char c = keyboard_getchar_vt(vt);
                         if (c == KEYBOARD_KEY_SIGINT) {
                             /* Ctrl+C read by the syscall itself: deliver SIGINT
                              * to ourselves, then honor the disposition. */
@@ -489,6 +485,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         if (sys_keyboard_wait_yield(frame)) return 0;
                         __asm__ volatile ("hlt" ::: "memory");
                     }
+                }
                 case IO_CLEAR:
                     vga_clear();
                     return 0;
@@ -590,7 +587,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
                     uint32_t pids[RING3_PROCESS_COUNT];
                     uint32_t states[RING3_PROCESS_COUNT];
-                    uint32_t fg = ring3_foreground_pid();
+                    uint32_t fg = ring3_foreground_pid_vt((int)ring3_current_vt());
                     uint32_t count = ring3_process_list(pids, states,
                                                         RING3_PROCESS_COUNT);
                     if (a2 < count * 12U) return (uint32_t)-1;
@@ -604,7 +601,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 }
                 case PROC_SET_FG:
                     if (a1 == 0U) {
-                        uint32_t fg = ring3_foreground_pid();
+                        uint32_t fg = ring3_foreground_pid_vt(
+                            (int)ring3_current_vt());
                         return fg != 0U && ring3_set_background(fg) == 0
                                ? 0 : (uint32_t)-1;
                     }
@@ -640,7 +638,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         paging_mm_release(mm);
                         return (uint32_t)-1;
                     }
-                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) == 0
+                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1,
+                                             (int)ring3_current_vt()) == 0
                            ? 0U : (uint32_t)-1;
                 }
                 default:
