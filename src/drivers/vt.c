@@ -6,6 +6,7 @@
 #include "paging.h"
 #include "string.h"
 #include "serial.h"
+#include "pit.h"
 
 /* Physical VGA text memory; each inactive vt keeps a private copy in
  * text_cells and the visible vt renders straight into this window. */
@@ -20,11 +21,14 @@
 #define VT_FB_BASE      0xD0000000U
 #define VT_FB_LIMIT     0xE0000000U
 #define VT_FB_ALIGN     0x100000U
+/* Minimum PIT ticks between transient spawn retries (~1 s at 100 Hz). */
+#define VT_RETRY_TICKS  100U
 
 struct vt_state {
     uint32_t shell_pid;      /* tracked shell3 pid, 0 = none yet */
-    int spawn_failed;        /* spawner refused; stop retrying */
+    int spawn_failed;        /* spawner refused permanently; stop retrying */
     int fb_ready;
+    uint32_t next_retry_tick;/* earliest pit tick for a transient retry */
     uint16_t text_cells[VT_VGA_CELLS];
     uint8_t *fb;
 };
@@ -118,6 +122,14 @@ int vt_spawn_shell(int vt) {
     serial_print_dec((uint32_t)vt);
     serial_putchar('\n');
     rc = vt_spawner(vt);
+    if (rc == VT_SPAWN_RETRY) {
+        /* Transient failure (disk not mounted yet, file missing,
+         * allocation pressure): retry on a later vt_service pass
+         * instead of latching spawn_failed forever. */
+        vts[vt].next_retry_tick = pit_ticks() + VT_RETRY_TICKS;
+        vt_irq_restore(flags);
+        return -1;
+    }
     if (rc != 0) {
         vts[vt].spawn_failed = 1;
         serial_print("[VT] shell3 spawn failed on vt ");
@@ -152,6 +164,7 @@ static void vt_ensure_shells(void) {
     for (int i = 0; i < VT_COUNT; ++i) {
         if (vts[i].spawn_failed) continue;
         if (vt_shell_alive(i)) continue;
+        if (pit_ticks() < vts[i].next_retry_tick) continue;
         vts[i].shell_pid = 0U;
         (void)vt_spawn_shell(i);
     }

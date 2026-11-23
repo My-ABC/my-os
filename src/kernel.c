@@ -88,13 +88,16 @@ static int shell3_spawn_on_vt(int vt) {
     uint32_t size = 0U;
     if (shell3_image == 0) {
         shell3_image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
-        if (shell3_image == 0) return -101;
+        if (shell3_image == 0) return VT_SPAWN_RETRY;
     }
     if (fat32_read_file("/shell3.elf", shell3_image, FAT32_MAX_FILE_SIZE,
                         &size) != 0) {
-        return -102;
+        return VT_SPAWN_RETRY;
     }
-    return elf_run_vt(shell3_image, size, vt);
+    int rc = elf_run_vt(shell3_image, size, vt);
+    /* -8 = process-table schedule failure (transient); every other
+     * nonzero is an ELF load/parse error and latches permanently. */
+    return rc == -8 ? VT_SPAWN_RETRY : rc;
 }
 
 static void shell3_supervisor(void) {

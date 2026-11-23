@@ -89,6 +89,11 @@ stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
 拉起。内核 shell 固定在 vt 0，仅当未挂载磁盘或 `shell3.elf` 缺失
 时才可达。
 
+spawner 的失败按返回码分类：`VT_SPAWN_RETRY`（磁盘未挂载、文件缺
+失、内存分配压力、进程表已满）按 PIT tick 至多每秒重试一次且不锁
+存；其他任何非零返回（ELF 解析/加载错误）置 `spawn_failed`，永久
+停止该 vt 的重启尝试。
+
 两条不变量保证其可靠：
 
 - **`vt_spawn_shell` 全程关中断**执行 FAT32 读盘 + ELF 加载 + pid

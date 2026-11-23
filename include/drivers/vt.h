@@ -41,6 +41,12 @@ void vt_service(void);
  * and pmm_init. */
 void vt_init(void);
 
+/* Spawner return codes: 0 = shell scheduled; VT_SPAWN_RETRY = transient
+ * failure (disk not mounted, file missing, allocation pressure) — the
+ * vt layer retries later without latching; any other nonzero value is
+ * a permanent failure and stops respawn attempts for that vt. */
+#define VT_SPAWN_RETRY (-1)
+
 /* Register the callback that loads /shell3.elf and schedules it on a
  * vt. Signature: int fn(int vt) -> 0 on success. */
 void vt_set_spawner(int (*spawner)(int vt));
