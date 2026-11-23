@@ -69,6 +69,15 @@ class QemuSession:
         serial_listener.listen(1)
         serial_listener.settimeout(min(10, self.remaining()))
         serial_port = serial_listener.getsockname()[1]
+        # COM1 carries kernel diagnostics; COM3 mirrors Ring 3 IO_WRITE
+        # output. COM2 gets a 'none' backend so COM3 lands on the third
+        # -serial argument.
+        serial3_listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        serial3_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        serial3_listener.bind(("127.0.0.1", 0))
+        serial3_listener.listen(1)
+        serial3_listener.settimeout(min(10, self.remaining()))
+        serial3_port = serial3_listener.getsockname()[1]
         command = [
             qemu_path,
             "-machine", "pc,accel=tcg",
@@ -80,6 +89,8 @@ class QemuSession:
             "-no-shutdown",
             "-drive", f"file={self.disk},format=raw,if=ide",
             "-serial", f"tcp:127.0.0.1:{serial_port},server=off,nodelay=on",
+            "-serial", "none",
+            "-serial", f"tcp:127.0.0.1:{serial3_port},server=off,nodelay=on",
             "-monitor", f"unix:{self.monitor_path},server=on,wait=off",
         ]
         try:
@@ -89,13 +100,16 @@ class QemuSession:
                 stderr=subprocess.STDOUT,
             )
             self.serial_client, _ = serial_listener.accept()
+            self.serial3_client, _ = serial3_listener.accept()
         except socket.timeout as error:
             raise IntegrationFailure(
                 "timed out waiting for QEMU serial connection"
             ) from error
         finally:
             serial_listener.close()
+            serial3_listener.close()
         self.serial_client.setblocking(False)
+        self.serial3_client.setblocking(False)
 
         self.monitor = self.connect_monitor()
         self.monitor_read_until(b"(qemu)", 5)
@@ -155,15 +169,19 @@ class QemuSession:
 
     def read_serial(self, duration):
         end = min(self.deadline, time.monotonic() + duration)
+        clients = (self.serial_client, self.serial3_client)
         while time.monotonic() < end:
             self.check_running()
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            got = False
+            for client in clients:
+                try:
+                    chunk = client.recv(65536)
+                except BlockingIOError:
+                    chunk = b""
+                if chunk:
+                    self.serial_data.extend(chunk)
+                    got = True
+            if not got:
                 time.sleep(0.01)
 
     def wait_for(self, needle, timeout=10):
