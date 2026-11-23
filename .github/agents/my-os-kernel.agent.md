@@ -15,7 +15,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - `src/kernel.c`: kernel entry and top-level init, including `shell3_supervisor`.
 - `src/arch/x86/`: GDT/TSS/IDT/port I/O. `src/mm/`: PMM, paging/TLB, heap. `src/os/`: panic, ELF loader, Ring 3 scheduler (`ring3.c` owns per-process signal state; only `SIGINT`/`SIGKILL` exist), syscalls. `src/shell/`: kernel shell + `shell_ring3.c` (user-mode shell, built as `shell3.elf` by `make shell3`).
 - `src/fs/`: FAT32 split into `fat32_core`/`fat32_name`/`fat32_dir`/`fat32` + shared `fat32_int.h`. `src/lib/`: freestanding string/stdio.
-- `src/drivers/`: ATA PIO, keyboard, PIC/PIT, TSC, RTC (UTC→Beijing), serial, VGA/VBE, ACPI, font. Serial routing: **COM1 = kernel diagnostics only; COM3 = mirror of Ring 3 `IO_WRITE` output** (`serial3_putchar`/`serial3_print`), a global mirror across all vts. All QEMU invocations pass `-rtc base=utc`.
+- `src/drivers/`: ATA PIO, keyboard, PIC/PIT, TSC, RTC (UTC→Beijing), serial, VGA/VBE, ACPI, font. Serial routing: COM1 carries kernel diagnostics plus kernel-shell command output (kernel `echo` and friends still `serial_print*` to COM1); COM3 mirrors Ring 3 `IO_WRITE` output (`serial3_putchar`/`serial3_print`), a global mirror across all vts. All QEMU invocations pass `-rtc base=utc`.
 - `src/drivers/vt.c` + `include/drivers/vt.h`: two virtual terminals — F1 = vt 0, F2 = vt 1, each with its own `shell3.elf`. `vt_service()` runs from the kernel idle loop for deferred F-key switches and shell respawn; vt spawns run with IRQs off. Each process has a `vt` field; `foreground_pid` and Ctrl+C targeting are per-vt (`ring3_foreground_pid_vt`, `vt_active_index`).
 - `include/`: public headers grouped by subsystem; keep `include/arch/x86/regs.h` in sync with asm stack frames.
 - `mini-libc/`: MIT-licensed user-space C library (`myos.h` umbrella header; `libmyc.a` via `make libmyc`). **Develop on the `mini-libc` branch**; merge to `main` only at milestones or on request. QEMU suite: `make test-libmyc`.
@@ -27,6 +27,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 ## Architecture constraints
 
 - Freestanding 32-bit x86, existing C/NASM toolchain. IRQ0/`int 0x80` frames must match `struct irq_frame` push order; do not preempt arbitrary kernel syscall frames — switch only at explicit safe boundaries (`PROC_YIELD`, or `sys_keyboard_wait_yield` which rewinds `eip` by 2 and yields unconditionally so the kernel idle loop can run `vt_service`).
+- PAE runs 64-bit PTEs with a 32-byte PDPT/32-bit CR3 in 32-bit mode; PMM ceiling is 36-bit (64 GiB). The bootstrap identity map covers only the first 16 MiB — Multiboot info/mmap buffers must live inside it. High frames and page tables are reached through the single-slot kernel mapping window; honor the Multiboot memory map instead of assuming RAM up to the ceiling (`make test-qemu-highmem` covers the >4 GiB path).
 - Each Ring 3 process owns a private `user_mm` (private low-1 GiB PD chain + shared kernel half); CR3 switches every context switch. User pages below 4 MiB refused; borrowed kernel pages carry PTE bit 9 and are never freed by `paging_mm_release`. ELF ranges belong to their process and are released on kill.
 - Update TSS `esp0` on stack switches; never free an active stack. User mappings stay below `USER_SPACE_END`; kernel pages are never user-accessible.
 - `vbe_put_pixel` must bounds-check against `vbe_state.width`/`height`; preserve VGA text-mode fallback and serial diagnostics. Future network drivers must degrade gracefully when no device exists.
@@ -35,16 +36,19 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - Kernel shell does not consume keys while a Ring 3 foreground process exists. Ctrl+C is delivered by the keyboard ISR via `ring3_signal_send` to the active vt's foreground pid. `IO_READ`/`IO_GETCHAR` map a self-read 0x05 to SIGINT.
 - Shell has 16-entry history (Up/Down) and cursor line editing; quoting via `split_line`/`shell_unescape_arg`. Kernel `echo` dual-writes VGA+COM1; Ring 3 output goes to its vt buffer + COM3.
 - Keep changes surgical. Never hide an error behind a success-shaped fallback.
+- F1/F2 scancodes are consumed by the keyboard ISR as vt-switch requests — they never enter the per-vt input buffers. VBE per-terminal backing stores are stride = `vbe_scanout_bytes()` (= `pitch * height`, e.g. 5120×800 = 4,096,000 B for 1280×800×32) rounded up to `VT_FB_ALIGN` (1 MiB) → 5 MiB per terminal; never hardcode 640×480 sizes.
 
 ## History & lessons (why the rules exist)
+
+Only keep entries here when an Architecture constraint or Rejected design derives from the incident; pure bug fixes stay in git log.
 
 - `a2ebbbf` — Child `exit` briefly zeroed `foreground_pid`; kernel shell printed its prompt in that window, then the parent reclaimed it → doubled `myos / >`. Fixed by recording `parent_pid` at spawn and auto-falling-back the foreground slot on death.
 - `75d29cb` — `kill <self>` only pended SIGKILL; the process kept running until its next signal check, printing a stray prompt. Fatal signals aimed at the current process are now acted on inside the syscall.
 - `9f6456b` — Parent shell3 was consuming keystrokes meant for a foreground child; kernel shell must not consume keys while a Ring 3 foreground exists.
 - `051c17b` — VBE line editing dropped keys/spammed serial; repaints go through `vga_set_cursor`/`vga_columns` which delegate to VBE cell coords.
-- `bdeabce` — vt.c/F1-F2 terminals. Two hard-won invariants: (1) `sys_keyboard_wait_yield` must yield **unconditionally** — a lone process blocked in `IO_GETCHAR` otherwise starves the kernel idle loop and `vt_service` freezes (vt1 never spawns, F-keys dead); (2) vt spawns (FAT32+ELF load) run with IRQs off — a preempted spawn can get stuck in `kernel_frame`. VBE backing stores are sized from `vbe_scanout_bytes()` (real mode was 1280×800×32 ≈ 5 MB/terminal, not the assumed 640×480).
+- `bdeabce` — vt.c/F1-F2 terminals. Two hard-won invariants: (1) `sys_keyboard_wait_yield` must yield **unconditionally** — a lone process blocked in `IO_GETCHAR` otherwise starves the kernel idle loop and `vt_service` freezes (vt1 never spawns, F-keys dead); (2) vt spawns (FAT32+ELF load) run with IRQs off — a preempted spawn can get stuck in `kernel_frame`. VBE backing-store stride is `align_1MiB(vbe_scanout_bytes())` = `pitch*height` — 4,096,000 B scanout for the observed 1280×800×32 mode, i.e. a 5 MiB stride per terminal (the extra ~1 MiB is the 1 MiB alignment), not the assumed 640×480.
 - `016bae2` — `shell3_supervisor` in `kernel.c` auto-starts `/shell3.elf` and respawns it. Liveness is polled via `ring3_process_list` pid state — `foreground_pid` proved unreliable as a liveness signal (supervisor once hung in `hlt`).
-- `7809db8` — Serial split: COM1 kernel diagnostics only, COM3 mirrors Ring 3 `IO_WRITE`. Rationale: COM1 interleaved both vts' shell output with kernel logs and confused scripted sessions. COM3 is intentionally a global mirror (vt outputs interleave).
+- `7809db8` — Serial split: COM1 carries kernel-side output (diagnostics + kernel shell), COM3 mirrors Ring 3 `IO_WRITE`. Rationale: COM1 interleaved both vts' shell output with kernel logs and confused scripted sessions. COM3 is intentionally a global mirror (vt outputs interleave).
 - Rejected: a serial-terminal architecture (F1→COM2, F2→COM3 interactive shells sharing the process table) was implemented on `feature/serial-terminals`, then deleted at user request — do not reintroduce serial terminals; vt.c is the screen-terminal mechanism.
 - `896fd24` — `feature/disk-shell-autorestart` merged to `main`; `983badd` — PR #7 merged `mini-libc`; tag `v0.6.0` points at `983badd`.
 
