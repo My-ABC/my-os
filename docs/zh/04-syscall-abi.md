@@ -36,9 +36,9 @@ English: [English version](../en/04-syscall-abi.md)
 
 | 子操作 | 名称 | 参数 | 返回 | 职责 |
 |--------|------|------|------|------|
-| 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 恒 0 | 向进程所属虚拟终端的屏幕缓冲输出字符串，并镜像到 COM3（`vga_print` + `serial3_print`，无长度参数，按 NUL 结尾）。**仅当调用者 PID 等于其 vt 上的 `ring3_foreground_pid_vt()` 时才输出**；后台进程或内核上下文调用被静默丢弃。COM1 只承载内核诊断信息——Ring 3 输出不再出现在 COM1。 |
+| 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 成功 0，失败 -1 | 向进程所属虚拟终端的屏幕缓冲输出字符串（上限 `IO_WRITE_MAX` = 4096 字节），并镜像到 COM3（`vga_print` + `serial3_print`，无长度参数，按 NUL 结尾）。字符串先拷入有界内核缓冲，因此非法指针或缺 NUL 返回 -1 而不会 panic。**仅当调用者 PID 等于其 vt 上的 `ring3_foreground_pid_vt()` 时才输出**；后台进程或内核上下文调用被静默丢弃。COM1 只承载内核侧输出——Ring 3 输出不出现在 COM1。 |
 | 2 | `IO_GETCHAR` | 无 | 字符 | 阻塞读取单个键盘字符，循环到拿到非 0 字符为止；实际不会返回 0。 |
-| 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 恒 0 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL；`size <= 1` 时只写空串。阻塞直到收到换行。 |
+| 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 成功 0，失败 -1 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL。`size <= 0` 或 `buf` 不完全位于允许的用户地址范围内时返回 -1。阻塞直到收到换行。 |
 | 4 | `IO_CLEAR` | 无 | 0 | 清屏（`vga_clear`）。 |
 | 5 | `IO_CURSOR_GET` | 无 | `(row << 16) \| col` | 经 `vga_get_cursor` 返回当前光标位置。 |
 | 6 | `IO_CURSOR_SET` | `ecx` = 行，`edx` = 列 | 0 | 经 `vga_set_cursor` 移动光标（VGA 文本与 VBE 模式均可用）。 |
@@ -126,11 +126,11 @@ pending/blocked/handler 状态、Ctrl+C `SIGINT` 投递、经
 
 ## 已知限制（ABI 稳定化前需解决）
 
-- **无用户指针校验**：`IO_WRITE`/`IO_READ`/`MEMORY_*` 直接解引用用户传入的指针，未检查范围、越界或内核地址。Ring 3 传入未登记的非法指针会触发页错误并终止该进程；内核上下文传入非法指针会进入 kernel page fault panic（`kfault.elf` 测试覆盖）。
+- **部分用户指针校验**：`IO_WRITE`/`IO_READ` 现已拷贝/校验调用方指针并在非法输入时返回 -1，但 `MEMORY_*` 仍直接解引用用户指针；非法指针会触发页错误终止进程，内核上下文则进入 kernel page fault panic（`kfault.elf` 测试覆盖）。
 - **无 ABI 版本**：大类/子操作号是裸整数，无版本字段。
 - **错误语义不统一**：未定义大类返回 `-1`，未知子操作与内存操作失败返回 0，成功调用各自返回 0/指针/时间戳，调用方需逐个判断。
 - **阻塞调用不让出 CPU**：`IO_READ`/`IO_GETCHAR` 期间 IRQ0 照常触发，但 `ring3_timer_switch` 看到的是内核态帧而直接返回，其他 Ring 3 进程在调用返回前无法被调度。键盘等待本身可被 IRQ1 正常唤醒（trap gate 保留 IF）；需要合作式让出时可调用 `PROC_YIELD`。
-- **`IO_READ`/`IO_GETCHAR` 只认键盘**：不经过文件/控制台抽象。方向键以控制字节 `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT`（0x01–0x04）形式下发：`IO_GETCHAR` 将其作为普通字符返回，`IO_READ` 原样写入缓冲区。
+- **`IO_READ`/`IO_GETCHAR` 只认键盘**：不经过文件/控制台抽象，且无前台检查——同一 vt 上的后台进程可以消费本应属于前台进程的按键。方向键以控制字节 `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT`（0x01–0x04）形式下发：`IO_GETCHAR` 将其作为普通字符返回，`IO_READ` 原样写入缓冲区并回显——需要行编辑的调用方应自行过滤或改用 `IO_GETCHAR`。
 - **无设备访问接口**（串口、ATA 直访等）；无进程创建/等待类调用（`PROC_EXIT` 已有，`kill` 仍只能由 Shell 发起）。
 - fd 表全局共享且进程退出不回收 fd；`FS_READ`/`FS_WRITE` 为整文件读改写，I/O 复杂度高。
 - `IO_WRITE` 的前后台抑制是隐式行为，调用方无法主动选择输出通道。

@@ -36,9 +36,9 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 
 | Op | Name | Arguments | Returns | Purpose |
 |----|------|-----------|---------|---------|
-| 1 | `IO_WRITE` | `ecx` = `const char *` (NUL-terminated string pointer) | always 0 | Writes a string to the process's own virtual-terminal screen buffer and mirrors it to COM3 (`vga_print` + `serial3_print`; no length argument, NUL-terminated). **Output only happens when the caller's PID equals `ring3_foreground_pid_vt()` of the caller's vt**; calls from background processes or kernel context are silently dropped. COM1 carries kernel diagnostics only — Ring 3 output no longer appears there. |
+| 1 | `IO_WRITE` | `ecx` = `const char *` (NUL-terminated string pointer) | 0 on success, -1 on error | Writes a string (max `IO_WRITE_MAX` = 4096 bytes) to the process's own virtual-terminal screen buffer and mirrors it to COM3 (`vga_print` + `serial3_print`; no length argument, NUL-terminated). The string is first copied into a bounded kernel buffer, so invalid pointers or missing NULs return -1 instead of panicking. **Output only happens when the caller's PID equals `ring3_foreground_pid_vt()` of the caller's vt**; calls from background processes or kernel context are silently dropped. COM1 carries kernel-side output only — Ring 3 output does not appear there. |
 | 2 | `IO_GETCHAR` | none | char | Blocks until a keyboard character is available, looping until a nonzero char; effectively never returns 0. |
-| 3 | `IO_READ` | `ecx` = `char *buf`, `edx` = `size` | always 0 | Reads one line from the keyboard into `buf` (via `gets`, with echo). Writes at most `size-1` chars plus NUL; `size <= 1` produces an empty string. Blocks until a newline arrives. |
+| 3 | `IO_READ` | `ecx` = `char *buf`, `edx` = `size` | 0 on success, -1 on error | Reads one line from the keyboard into `buf` (via `gets`, with echo). Writes at most `size-1` chars plus NUL. Returns -1 when `size <= 0` or `buf` is not wholly inside permitted user ranges. Blocks until a newline arrives. |
 | 4 | `IO_CLEAR` | none | 0 | Clears the screen (`vga_clear`). |
 | 5 | `IO_CURSOR_GET` | none | `(row << 16) \| col` | Returns the current cursor position via `vga_get_cursor`. |
 | 6 | `IO_CURSOR_SET` | `ecx` = row, `edx` = col | 0 | Moves the cursor via `vga_set_cursor` (works in both VGA text and VBE modes). |
@@ -126,11 +126,11 @@ and current limitations.
 
 ## Known limitations (to resolve before stabilizing the ABI)
 
-- **No user-pointer validation**: `IO_WRITE`/`IO_READ`/`MEMORY_*` dereference caller-supplied pointers directly, without range checks or kernel-address rejection. An illegal pointer from Ring 3 triggers a page fault that kills the process; an illegal pointer in kernel context leads to a kernel page-fault panic (covered by the `kfault.elf` test).
+- **Partial user-pointer validation**: `IO_WRITE` and `IO_READ` now copy/validate caller pointers and return -1 on bad input, but `MEMORY_*` still dereference caller pointers directly; an illegal pointer there triggers a page fault that kills the process, and in kernel context a kernel page-fault panic (`kfault.elf` test).
 - **No ABI versioning**: class/sub-operation numbers are bare integers with no version field.
 - **Non-uniform error semantics**: undefined classes return `-1`, unknown sub-operations and memory-operation failures return 0, and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
 - **Blocking calls do not yield the CPU**: IRQ0 still fires during `IO_READ`/`IO_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching, so other Ring 3 processes cannot be scheduled until the call returns. The keyboard wait itself is woken normally by IRQ1 (the trap gate preserves IF); cooperative code can call `PROC_YIELD` at safe syscall boundaries.
-- **`IO_READ`/`IO_GETCHAR` only talk to the keyboard**: no file/console abstraction. Arrow keys are delivered as the control bytes `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT` (0x01–0x04); `IO_GETCHAR` returns them as ordinary char values and `IO_READ` stores them raw in the buffer.
+- **`IO_READ`/`IO_GETCHAR` only talk to the keyboard**: no file/console abstraction, and no foreground check — a background process on the same vt can consume keystrokes intended for the foreground process. Arrow keys are delivered as the control bytes `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT` (0x01–0x04); `IO_GETCHAR` returns them as ordinary char values while `IO_READ` stores them raw in the buffer and echoes them — consumers needing line editing should filter them or use `IO_GETCHAR`.
 - **No device-access interfaces** (serial, raw ATA, etc.) and no process create/wait calls (`PROC_EXIT` exists; `kill` is still shell-only).
 - The fd table is global and fds are not reclaimed on process exit; `FS_READ`/`FS_WRITE` do whole-file read-modify-write, so I/O is expensive.
 - `IO_WRITE`'s foreground/background suppression is implicit; callers cannot choose an output channel.

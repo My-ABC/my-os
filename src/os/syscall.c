@@ -459,11 +459,24 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             switch (op) {
                 case IO_WRITE: { // a1: const char *str
                     uint32_t pid = ring3_current_pid();
-                    if (pid != 0U &&
-                        pid == ring3_foreground_pid_vt((int)ring3_current_vt())) {
-                        vga_print((const char *)a1);
-                        serial3_print((const char *)a1);
+                    if (pid == 0U ||
+                        pid != ring3_foreground_pid_vt((int)ring3_current_vt())) {
+                        return 0;
                     }
+                    /* Copy the user string into a bounded kernel buffer
+                     * first: a bad pointer or a missing NUL used to fault
+                     * in kernel context and panic. Cap at 4096 bytes. */
+                    char *text = (char *)kmalloc(IO_WRITE_MAX + 1U);
+                    if (text == 0) return (uint32_t)-1;
+                    int len = sys_copy_user_string(a1, text,
+                                                  IO_WRITE_MAX + 1U);
+                    if (len < 0 || len > IO_WRITE_MAX) {
+                        kfree(text);
+                        return (uint32_t)-1;
+                    }
+                    vga_print(text);
+                    serial3_print(text);
+                    kfree(text);
                     return 0;
                 }
                 case IO_READ: // a1: char *buf, a2: size
