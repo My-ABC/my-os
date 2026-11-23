@@ -16,7 +16,8 @@ The implementation lives in `src/drivers/vt.c` /
 |---|---|
 | `vt_active_index()` | Index of the currently visible terminal |
 | `vt_render_index()` | Terminal that output from the current context belongs to: the running Ring 3 process's `vt`, or `VT_FALLBACK` (0) in kernel context. `vga.c`/`vbe.c` resolve their render target through this |
-| `vt_text_target(vt)` / `vt_vbe_target(vt)` | Backing-store pointer for a terminal — the physical display for the active vt, the private buffer otherwise (`NULL` when unavailable) |
+| `vt_text_target(vt)` | Text-mode backing store for a terminal — the physical `0xB8000` for the active vt, the private `text_cells` array otherwise. Never returns `NULL` |
+| `vt_vbe_target(vt)` | VBE backing store for a terminal — the scanout for the active vt, the private framebuffer otherwise. Returns `NULL` when VBE is unavailable or the terminal's `fb` is not ready |
 | `vt_request_switch(vt)` | Queue a switch; called from the keyboard ISR, executed later by `vt_service` |
 | `vt_service()` | Deferred work: performs a pending switch, then ensures every vt has a live shell3 (spawn or respawn via the registered spawner). Cheap when idle; safe from any kernel context |
 | `vt_init()` | Allocate per-vt backing stores; call after `vga_init`/`vbe_initialize` and `pmm_init` |
@@ -27,9 +28,10 @@ The implementation lives in `src/drivers/vt.c` /
 1. The keyboard ISR recognizes F1 (scan-set-1 make code `0x3B`) and F2
    (`0x3C`) and calls `vt_request_switch()`. The scancodes never enter
    the per-vt input buffers.
-2. `vt_service()` — run from the kernel idle loop inside
-   `shell3_supervisor` / `shell_read_line` — picks up the pending
-   request and calls `vt_do_switch()`.
+2. `vt_service()` — polled by whichever kernel idle loop is active:
+   `shell3_supervisor` while the disk shell runs, `shell_read_line`
+   otherwise. The two paths are mutually exclusive — it picks up the
+   pending request and calls `vt_do_switch()`.
 3. `vt_do_switch()` copies the outgoing terminal's screen into its
    private store and the incoming terminal's store onto the physical
    display, then calls `vga_console_switched()` /
@@ -48,8 +50,10 @@ physical `0xB8000`. Switching is two 4 KiB `memcpy`s.
 
 **VBE graphics mode** — each vt owns a private framebuffer in the free
 kernel-half window `0xD0000000`–`0xE0000000` (below the scanout map at
-`0xE0000000`). Pages are allocated from the PMM and mapped on demand.
-The per-terminal stride is derived at init:
+`0xE0000000`). All pages are allocated once in `vt_init`: each
+terminal maps `ceil(vbe_scanout_bytes() / PAGE_SIZE)` pages taken from
+the PMM — 1000 pages (3.906 MiB) per terminal at 1280×800×32, times
+`VT_COUNT`. The per-terminal stride is derived at init:
 
 ```
 stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
@@ -57,8 +61,10 @@ stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
 ```
 
 For the observed 1280×800×32 mode, `vbe_scanout_bytes()` returns
-5120×800 = 4,096,000 bytes, so each terminal gets a **4 MiB** stride —
-never hardcode 640×480 sizes.
+5120×800 = 4,096,000 bytes, so each terminal gets a **4 MiB** stride.
+Only `ceil(scanout_bytes / PAGE_SIZE)` pages are mapped inside each
+stride; the tail `[scanout_bytes, stride)` is intentionally left
+unmapped. Never hardcode 640×480 sizes.
 
 ## Process model
 

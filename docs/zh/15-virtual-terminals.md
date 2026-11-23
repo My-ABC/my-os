@@ -13,7 +13,8 @@ vt 0，F2 选择 vt 1**；每个终端并发运行各自的 `shell3.elf` Ring 3
 |---|---|
 | `vt_active_index()` | 当前可见终端的索引 |
 | `vt_render_index()` | 当前上下文输出所属的终端：运行中 Ring 3 进程的 `vt`，内核上下文为 `VT_FALLBACK`（0）。`vga.c`/`vbe.c` 经此解析渲染目标 |
-| `vt_text_target(vt)` / `vt_vbe_target(vt)` | 终端的备份存储指针——激活终端返回物理显示地址，否则返回私有缓冲（不可用时返回 `NULL`） |
+| `vt_text_target(vt)` | 终端的文本模式备份存储——激活 vt 返回物理 `0xB8000`，否则返回私有 `text_cells` 数组。永不返回 `NULL` |
+| `vt_vbe_target(vt)` | 终端的 VBE 备份存储——激活 vt 返回扫描输出，否则返回私有帧缓冲。VBE 不可用或该终端 `fb` 未就绪时返回 `NULL` |
 | `vt_request_switch(vt)` | 排队一次切换；键盘 ISR 中调用，由 `vt_service` 延迟执行 |
 | `vt_service()` | 延迟工作：执行挂起的切换，然后确保每个 vt 都有存活的 shell3（经注册的 spawner 拉起或重启）。空闲时代价很低，可在任意内核上下文调用 |
 | `vt_init()` | 分配各 vt 备份存储；在 `vga_init`/`vbe_initialize` 和 `pmm_init` 之后调用 |
@@ -23,8 +24,9 @@ vt 0，F2 选择 vt 1**；每个终端并发运行各自的 `shell3.elf` Ring 3
 
 1. 键盘 ISR 识别 F1（扫描码集 1 make code `0x3B`）和 F2（`0x3C`），
    调用 `vt_request_switch()`。这些扫描码不会进入各 vt 的输入缓冲。
-2. `vt_service()`——在 `shell3_supervisor` / `shell_read_line` 的
-   内核空闲循环中运行——取出挂起的请求并调用 `vt_do_switch()`。
+2. `vt_service()`——由当前空闲的内核循环轮询：disk shell 运行时为
+   `shell3_supervisor`，否则为 `shell_read_line`。两条路径互斥——
+   它取出挂起的请求并调用 `vt_do_switch()`。
 3. `vt_do_switch()` 把当前终端的屏幕拷入其私有存储，再把目标终端的
    存储拷上物理屏幕，然后调用 `vga_console_switched()` /
    `vbe_console_switched()` 重新同步光标状态。整个拷贝过程关中断
@@ -41,8 +43,10 @@ IRQ1 上下文。
 
 **VBE 图形模式**——每个 vt 在内核高半区空闲窗口
 `0xD0000000`–`0xE0000000`（扫描输出映射 `0xE0000000` 之下）拥有
-私有帧缓冲。页按需从 PMM 分配并映射。每终端 stride 在初始化时
-推导：
+私有帧缓冲。所有页都在 `vt_init` 时一次性分配：每个终端映射
+`ceil(vbe_scanout_bytes() / PAGE_SIZE)` 页，取自 PMM——1280×800×32
+下每终端 1000 页（3.906 MiB），共 `VT_COUNT` 份。每终端 stride 在
+初始化时推导：
 
 ```
 stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
@@ -50,8 +54,10 @@ stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
 ```
 
 实测 1280×800×32 模式下 `vbe_scanout_bytes()` 返回
-5120×800 = 4,096,000 字节，因此每个终端获得 **4 MiB** stride——
-切勿硬编码 640×480 的尺寸。
+5120×800 = 4,096,000 字节，因此每个终端获得 **4 MiB** stride。
+每个 stride 内只映射 `ceil(scanout_bytes / PAGE_SIZE)` 页；尾部
+`[scanout_bytes, stride)` 有意保持未映射。切勿硬编码 640×480 的
+尺寸。
 
 ## 进程模型
 
