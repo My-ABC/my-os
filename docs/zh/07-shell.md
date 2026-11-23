@@ -54,6 +54,9 @@
 
 - 磁盘和进程类命令把状态同时写到 VGA `printf` 和 COM1
   `serial_print*`，保证 QEMU 脚本化会话的确定性。
+- Ring 3 `IO_WRITE` 输出写入进程所属 vt 的屏幕缓冲，并镜像到
+  COM3（`serial3_print`）；COM1 保留给内核诊断信息。COM3 是全局
+  镜像，vt 0 与 vt 1 的输出会在其上交错出现。
 - 失败打印 `Unable to ...` / `Usage: ...`，仅走 VGA。
 
 ## 命令表

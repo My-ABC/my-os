@@ -13,7 +13,7 @@ device-registration bus layer yet.
 | PIC | `pic.c` | 8259 master/slave remap and per-line mask helpers |
 | PIT | `pit.c` | 8253 channel 0, `PIT_FREQUENCY` = 100 Hz, tick counter |
 | RTC | `rtc.c` | MC146818 CMOS time, BCD decode, 12/24-hour handling (PM bit extracted before BCD decode; decoded hours >12 are treated as 24-hour values because some RTCs report unreliable mode bits), Beijing-time conversion assuming the RTC holds UTC, Unix timestamp |
-| Serial | `serial.c` | COM1 polled TX/RX, `serial_printf` family |
+| Serial | `serial.c` | COM1 polled TX/RX for kernel diagnostics (`serial_printf` family); COM3 (`serial3_putchar`/`serial3_print`) mirrors Ring 3 `IO_WRITE` output |
 | VGA | `vga.c` | 80x25 text mode, colors, clear/print helpers |
 | VBE | `vbe.c` | Linear framebuffer from the Multiboot/BIOS info; blue-screen demo |
 | ACPI | `acpi.c` | Power-off and reboot via ACPI PM registers |

@@ -26,7 +26,7 @@ below.
 | Command | Arguments | Description |
 |---|---|---|
 | `time` | `[12\|24]` | Print the current time (RTC, Beijing time) as `YYYY-MM-DD HH:MM:SS`. Defaults to 24-hour format; `time 12` appends `AM`/`PM` and uses 12-hour format, `time 24` is explicit 24-hour. |
-| `echo` | `<text>...` | Print the arguments separated by single spaces to the screen and the COM1 serial port. |
+| `echo` | `<text>...` | Print the arguments separated by single spaces to the screen and the serial port (COM1 for the kernel shell, COM3 for the Ring 3 shell). |
 | `reboot` | — | Reboot the machine through ACPI. |
 | `shutdown` | — | Power off the machine through ACPI. |
 | `help` | — | List all commands with a one-line description. |

@@ -47,6 +47,8 @@ Unix-timestamp helper live here.
 ## Serial (`src/drivers/serial.c`)
 
 COM1 polled output (`serial_print`, `serial_print_hex`,
-`serial_printf`) plus `serial_getchar()` input. Most kernel diagnostics
-dual-write to VGA and serial so QEMU sessions can be scripted over a TCP
+`serial_printf`) plus `serial_getchar()` input; COM3
+(`serial3_putchar`/`serial3_print`) is an additional TX-only port that
+mirrors Ring 3 `IO_WRITE` shell output. Most kernel diagnostics
+dual-write to VGA and COM1 so QEMU sessions can be scripted over a TCP
 socket.

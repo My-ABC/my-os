@@ -36,7 +36,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 
 | Op | Name | Arguments | Returns | Purpose |
 |----|------|-----------|---------|---------|
-| 1 | `IO_WRITE` | `ecx` = `const char *` (NUL-terminated string pointer) | always 0 | Writes a string to VGA and serial (`vga_print` + `serial_print`; no length argument, NUL-terminated). **Output only happens when the caller's PID equals `ring3_foreground_pid()`**; calls from background processes or kernel context are silently dropped. |
+| 1 | `IO_WRITE` | `ecx` = `const char *` (NUL-terminated string pointer) | always 0 | Writes a string to the process's own virtual-terminal screen buffer and mirrors it to COM3 (`vga_print` + `serial3_print`; no length argument, NUL-terminated). **Output only happens when the caller's PID equals `ring3_foreground_pid_vt()` of the caller's vt**; calls from background processes or kernel context are silently dropped. COM1 carries kernel diagnostics only — Ring 3 output no longer appears there. |
 | 2 | `IO_GETCHAR` | none | char | Blocks until a keyboard character is available, looping until a nonzero char; effectively never returns 0. |
 | 3 | `IO_READ` | `ecx` = `char *buf`, `edx` = `size` | always 0 | Reads one line from the keyboard into `buf` (via `gets`, with echo). Writes at most `size-1` chars plus NUL; `size <= 1` produces an empty string. Blocks until a newline arrives. |
 | 4 | `IO_CLEAR` | none | 0 | Clears the screen (`vga_clear`). |

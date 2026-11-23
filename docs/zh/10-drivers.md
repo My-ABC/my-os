@@ -12,7 +12,7 @@
 | PIC | `pic.c` | 8259 主/从重映射与逐线屏蔽辅助函数 |
 | PIT | `pit.c` | 8253 通道 0，`PIT_FREQUENCY` = 100 Hz，tick 计数 |
 | RTC | `rtc.c` | MC146818 CMOS 时间、BCD 解码、12/24 小时制处理（PM 位在 BCD 解码前提取；解码后小时 >12 时按 24 小时时间处理，因为部分 RTC 的模式位不可靠）、假设 RTC 为 UTC 的北京时间换算、Unix 时间戳 |
-| 串口 | `serial.c` | COM1 轮询收发，`serial_printf` 系列 |
+| 串口 | `serial.c` | COM1 轮询收发，用于内核诊断（`serial_printf` 系列）；COM3（`serial3_putchar`/`serial3_print`）镜像 Ring 3 `IO_WRITE` 输出 |
 | VGA | `vga.c` | 80x25 文本模式、颜色、清屏/打印辅助函数 |
 | VBE | `vbe.c` | 来自 Multiboot/BIOS 信息的线性帧缓冲；蓝屏演示 |
 | ACPI | `acpi.c` | 经 ACPI PM 寄存器关机/重启 |

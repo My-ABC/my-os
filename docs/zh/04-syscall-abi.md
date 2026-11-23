@@ -36,7 +36,7 @@ English: [English version](../en/04-syscall-abi.md)
 
 | 子操作 | 名称 | 参数 | 返回 | 职责 |
 |--------|------|------|------|------|
-| 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 恒 0 | 向 VGA 和串口输出字符串（`vga_print` + `serial_print`，无长度参数，按 NUL 结尾）。**仅当调用者 PID 等于 `ring3_foreground_pid()` 时才输出**；后台进程或内核上下文调用被静默丢弃。 |
+| 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 恒 0 | 向进程所属虚拟终端的屏幕缓冲输出字符串，并镜像到 COM3（`vga_print` + `serial3_print`，无长度参数，按 NUL 结尾）。**仅当调用者 PID 等于其 vt 上的 `ring3_foreground_pid_vt()` 时才输出**；后台进程或内核上下文调用被静默丢弃。COM1 只承载内核诊断信息——Ring 3 输出不再出现在 COM1。 |
 | 2 | `IO_GETCHAR` | 无 | 字符 | 阻塞读取单个键盘字符，循环到拿到非 0 字符为止；实际不会返回 0。 |
 | 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 恒 0 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL；`size <= 1` 时只写空串。阻塞直到收到换行。 |
 | 4 | `IO_CLEAR` | 无 | 0 | 清屏（`vga_clear`）。 |

@@ -42,5 +42,6 @@ Unix 时间戳辅助函数也在此。
 ## 串口（`src/drivers/serial.c`）
 
 COM1 轮询收发（`serial_print`、`serial_print_hex`、`serial_printf`）
-以及 `serial_getchar()` 输入。大多数内核诊断同时写 VGA 和串口，无头
-QEMU 会话可通过串口 socket 驱动。
+以及 `serial_getchar()` 输入；COM3（`serial3_putchar`/`serial3_print`）
+是额外的仅发送端口，镜像 Ring 3 `IO_WRITE` 的 shell 输出。大多数内核
+诊断同时写 VGA 和 COM1，无头 QEMU 会话可通过串口 socket 驱动。
