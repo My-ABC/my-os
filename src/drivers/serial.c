@@ -19,15 +19,18 @@ void serial_init(void) {
     outb(SERIAL_COM3 + 4, 0x0B);
 }
 
-static int serial_is_transmit_empty(void) {
-    return inb(SERIAL_COM1 + 5) & 0x20;
-}
+/* Bounded LSR wait: a missing UART must not hang the kernel. ~1M port
+ * reads is far longer than any FIFO drain at 38400 baud. */
+#define SERIAL_TX_TIMEOUT 0x100000U
+
+static int serial3_tx_timeout_warned;
 
 void serial_putchar(char c) {
     if (c == '\n') {
         serial_putchar('\r');
     }
-    while (!serial_is_transmit_empty()) {
+    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+        if (inb(SERIAL_COM1 + 5) & 0x20) break;
     }
     outb(SERIAL_COM1, (uint8_t)c);
 }
@@ -35,12 +38,18 @@ void serial_putchar(char c) {
 void serial3_putchar(char c) {
     if (c == '\n') {
         c = '\r';
-        while (!(inb(SERIAL_COM3 + 5) & 0x20)) {
+        for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+            if (inb(SERIAL_COM3 + 5) & 0x20) break;
         }
         outb(SERIAL_COM3, (uint8_t)c);
         c = '\n';
     }
-    while (!(inb(SERIAL_COM3 + 5) & 0x20)) {
+    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+        if (inb(SERIAL_COM3 + 5) & 0x20) break;
+        if (i + 1U == SERIAL_TX_TIMEOUT && !serial3_tx_timeout_warned) {
+            serial3_tx_timeout_warned = 1;
+            serial_print("[SER] COM3 TX timeout, output dropped\n");
+        }
     }
     outb(SERIAL_COM3, (uint8_t)c);
 }
