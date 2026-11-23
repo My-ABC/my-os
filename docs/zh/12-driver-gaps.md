@@ -12,15 +12,16 @@
 | 驱动 | 能力 | 限制 |
 |---|---|---|
 | ATA PIO（`ata.c`） | 主通道一号盘，LBA28，轮询 PIO 单次读写 ≤255 扇区 | 无 LBA48、无 DMA/UDMA、无写缓存刷新、无 IRQ14、单通道（无从盘/副通道）、无 ATAPI、错误细节不向上传递 |
-| 键盘（`keyboard.c`） | IRQ1，扫描码集 1–2，32 字节环形缓冲，ASCII + Shift/Caps/Num | 方向键/功能键/扩展键未映射，无转义序列，无 UTF-8，Alt/Ctrl 只跟踪未使用，缓冲溢出静默丢键 |
+| 键盘（`keyboard.c`） | IRQ1，扫描码集 1–2，每 vt 256 字节环形缓冲（`VT_COUNT` 槽），ASCII + Shift/Caps/Num，F1/F2 被消费用于 vt 切换，Ctrl+C → SIGINT | F1/F2 之外的方向键/功能键/扩展键未映射，无转义序列，无 UTF-8，Alt/Ctrl 大多未使用，缓冲溢出静默丢键 |
 | PIC（`pic.c`） | 8259A 主/从重映射到 IRQ32+，按线屏蔽，EOI | 无伪中断处理，无优先级/IRR 检查，无中断共享模型 |
 | PIT（`pit.c`） | 8253 通道 0，`PIT_FREQUENCY`（100 Hz），tick 计数，驱动调度器和 VBE 光标闪烁 | 仅通道 0，无回读/延迟测量，时间源精度粗 |
 | RTC（`rtc.c`） | MC146818 CMOS 时间，BCD/12–24 小时制解码，世纪推断，北京时间与 Unix 时间戳辅助 | 无 IRQ8 闹钟/更新结束中断，世纪按范围猜测，无 HPET 兜底 |
-| 串口（`serial.c`） | COM1 + COM3 38400 8N1，两口均轮询发送，COM1 有轮询接收辅助函数（`serial_getchar`/`serial_wait_char`/`serial_gets`） | 接收辅助未被 Shell 使用（键盘是唯一控制台输入），无 IRQ4，COM3 仅作发送镜像，无流控 |
+| 串口（`serial.c`） | COM1 + COM3 38400 8N1，两口均为有上限的轮询发送（约 100 万次 LSR 轮询后丢弃，COM3 超时打一次性警告），COM1 有非阻塞接收 `serial_getchar` | `serial_getchar` 未被 Shell 使用（键盘是唯一控制台输入），无 IRQ4，COM3 仅作发送镜像，无流控 |
 | VGA（`vga.c`） | 80×25 文本模式，16 色，硬件光标，滚屏 | 仅文本模式；有帧缓冲时被 VBE 取代 |
 | VBE（`vbe.c`） | 使用 Multiboot/BIOS 帧缓冲信息（非 VBE BIOS 调用），映射到 `0xE0000000`，支持 8/15/16/24/32 bpp 及各字段掩码，软件 8×8 文本渲染，光标闪烁 | 不设置模式（沿用 GRUB 模式），无双缓冲，无加速，无指针/输入 |
 | ACPI（`acpi.c`） | RSDP 扫描（EBDA + BIOS 区），RSDT/XSDT 遍历找 FADT，FADT 复位寄存器重启，PM1 S5 关机（`_S5_` AML 字节模式 hack），三级兜底（0xCF9、KBC 复位、三重错误） | 只消费 FADT；无 MADT/HPET/MCFG，无通用表注册，无 SDT 长度/校验和校验，无真正的 AML 解释器 |
 | 字体（`ascii_font.c`） | VBE 文本渲染用 8×8 点阵字形 | 纯数据 |
+| 虚拟终端（`vt.c`） | 两个屏幕 tty（F1/F2），VGA cell/VBE 帧缓冲私有备份，每 vt 前台槽，`vt_service()` 延迟切换与 shell 重启 | `VT_COUNT` 固定为 2，无滚动回溯，VBE 备份分配失败仅串口日志、切换失效 |
 
 ## 按总线/设备列出的缺失驱动
 
