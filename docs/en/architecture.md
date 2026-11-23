@@ -28,6 +28,7 @@ Numbered documents cover each subsystem in detail:
 | [12-driver-gaps.md](12-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
 | [13-signals.md](13-signals.md) | Signal numbers, delivery, handlers, restorer trampoline, `SIG_RETURN` |
 | [14-mini-libc.md](14-mini-libc.md) | `mini-libc/` user-space C library, syscall wrappers, build notes |
+| [15-virtual-terminals.md](15-virtual-terminals.md) | F1/F2 virtual terminals, per-vt shells and screen backing stores, vt lifecycle |
 
 Chinese translations live under [../zh/](../zh/).
 

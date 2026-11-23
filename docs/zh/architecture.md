@@ -27,6 +27,7 @@ Shell，以及运行在 ATA 磁盘上的 FAT32 文件系统。
 | [12-driver-gaps.md](12-driver-gaps.md) | 驱动能力盘点、按总线列出的缺失驱动、优先级、QEMU 测试设备 |
 | [13-signals.md](13-signals.md) | 信号编号、投递、处理器、restorer trampoline、`SIG_RETURN` |
 | [14-mini-libc.md](14-mini-libc.md) | `mini-libc/` 用户态 C 库、syscall 封装、构建说明 |
+| [15-virtual-terminals.md](15-virtual-terminals.md) | F1/F2 虚拟终端、每终端 shell 与屏幕备份、vt 生命周期 |
 
 英文版见 [../en/](../en/)。
 

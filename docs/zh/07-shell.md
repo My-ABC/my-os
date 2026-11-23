@@ -82,7 +82,7 @@ Shell，永远看不到内核 Shell。仅当未挂载磁盘或 `shell3.elf` 缺�
 独立的屏幕备份（VGA 字符缓冲或 VBE 帧缓冲副本），切换时保留各
 自画面。内核 Shell 固定在 vt 0，前台归属与 SIGINT 按终端分别
 跟踪，`vt_service()` 在内核空闲循环中负责重启失效终端上的
-shell。最终版通过
+shell。完整 vt 设计见 [15-virtual-terminals.md](15-virtual-terminals.md)。最终版通过
 mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
 `fs.h` 文件命令（`ls`、`cat`、`write`、`cp [-r]`、`mv`、
 `rm [-f]`、`cd`、`mkdir`、`rmdir`）、进程控制（`ps`、`fg`、

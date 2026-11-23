@@ -16,7 +16,7 @@
 /* Offscreen VBE backing stores live in the free kernel-half window
  * between the kernel image (ends ~0xC1000000) and the VBE scanout map
  * at 0xE0000000. The stride is derived from the real mode size at
- * init (1280x1024x32 needs ~5 MiB per terminal). */
+ * init (1280x800x32 scanout is 4,096,000 B -> 4 MiB stride). */
 #define VT_FB_BASE      0xD0000000U
 #define VT_FB_LIMIT     0xE0000000U
 #define VT_FB_ALIGN     0x100000U

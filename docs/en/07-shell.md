@@ -99,7 +99,8 @@ backing store (VGA cell buffer or VBE framebuffer copy) so switching
 preserves each terminal's contents. The kernel shell stays pinned to
 vt 0, foreground ownership and SIGINT are tracked per terminal, and
 `vt_service()` respawns a dead shell on its terminal from the kernel
-idle loop. The final
+idle loop. See [15-virtual-terminals.md](15-virtual-terminals.md)
+for the full vt design. The final
 version implements the full kernel command set through the
 mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
 `write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),
