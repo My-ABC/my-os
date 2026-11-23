@@ -23,9 +23,8 @@ syscalls. Gate descriptors reference the stub addresses exported by
 
 The master/slave 8259 pair is remapped (`pic_remap()`) so IRQ0–15 do not
 collide with CPU exceptions. `pic_set_mask`/`pic_clear_mask` control
-per-line masking; `kmain` unmasks IRQ0 (PIT) and IRQ1 (keyboard) after
-initialization and keeps the rest masked (`pic_set_mask(14)` leaves only
-bit 1 clear at that point in the sequence — see `src/kernel.c`).
+per-line masking; during `kmain` only IRQ0 (PIT) and IRQ1 (keyboard)
+end up unmasked — everything else stays masked.
 
 ## PIT (`src/drivers/pit.c`)
 
@@ -35,8 +34,24 @@ counter (`pit_ticks()`) used by `tick`, scheduling, and tests.
 ## Keyboard (`src/drivers/keyboard.c`)
 
 PS/2 keyboard driver on IRQ1: scancode→ASCII translation with
-configurable scancode set (`SCANCODE_SET` build flag), key events for
-`gets()` in the shell, and `keyboard_wait_key()` for demo paths.
+configurable scancode set (`SCANCODE_SET` build flag). Input goes into
+per-virtual-terminal 256-byte ring buffers (`keyboard_getchar_vt(vt)`);
+the ISR only enqueues keys for the *active* vt, so hidden terminals
+never see keystrokes. F1/F2 make codes (scan set 1 `0x3B`/`0x3C`) are
+consumed by the ISR and turned into deferred `vt_request_switch()`
+calls executed later by `vt_service()` — they never enter the input
+stream. Ctrl+C delivers SIGINT to the active vt's foreground process.
+`keyboard_wait_key()` remains for demo paths.
+
+## Virtual terminals (`src/drivers/vt.c`)
+
+F1 selects vt 0, F2 selects vt 1. Each vt owns a private screen backing
+store (80x25 VGA text cells, or an offscreen VBE framebuffer stride in
+VBE mode) plus its own foreground PID slot. `vt_service()` — polled by
+the kernel idle loop (`shell3_supervisor` or `shell_read_line`,
+mutually exclusive) — performs deferred switches and respawns dead
+`/shell3.elf` instances. See
+[15-virtual-terminals.md](15-virtual-terminals.md).
 
 ## RTC (`src/drivers/rtc.c`)
 
@@ -47,8 +62,11 @@ Unix-timestamp helper live here.
 ## Serial (`src/drivers/serial.c`)
 
 COM1 polled output (`serial_print`, `serial_print_hex`,
-`serial_printf`) plus `serial_getchar()` input; COM3
-(`serial3_putchar`/`serial3_print`) is an additional TX-only port that
-mirrors Ring 3 `IO_WRITE` shell output. Most kernel diagnostics
-dual-write to VGA and COM1 so QEMU sessions can be scripted over a TCP
-socket.
+`serial_printf`) carries kernel-side output — diagnostics plus kernel
+shell commands such as `echo` — plus `serial_getchar()` input. COM3
+(`serial3_putchar`/`serial3_print`) is a TX-only port that mirrors
+Ring 3 `IO_WRITE` output from both virtual terminals (interleaved).
+Both TX paths bound their LSR wait (~1M polls) so a missing UART
+cannot hang the kernel; a COM3 timeout logs one warning on COM1.
+Most kernel diagnostics dual-write to VGA and COM1 so QEMU sessions
+can be scripted over a TCP socket.
