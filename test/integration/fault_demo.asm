@@ -11,8 +11,9 @@ global fault_demo_end
 ;   1 = faultu.elf : print a marker, then touch an unregistered user address
 ;   2 = faultp.elf : print a marker, then write to its own read-only code page
 ;   3 = oom.elf    : exhaust the user heap, then fault until demand mapping fails
-;   4 = kfault.elf : pass an unregistered user pointer to IO_WRITE so the
-;                    kernel faults while dereferencing it (panic demo)
+;   4 = kfault.elf : pass an unregistered user pointer to MEMORY_REALLOC
+;                    so the kernel faults while dereferencing the block
+;                    header (panic demo)
 %ifndef FAULT_MODE
 %define FAULT_MODE 0
 %endif
@@ -26,6 +27,7 @@ global fault_demo_end
 %define SYS_MEMORY   3
 %define IO_WRITE     1
 %define MEMORY_MALLOC 1
+%define MEMORY_REALLOC 3
 
 fault_demo_start:
     db 0x7F, "ELF", 1, 1, 1, 0
@@ -117,11 +119,13 @@ fault_demo_code:
     mov ebx, IO_WRITE
     mov ecx, kfault_msg + VBASE
     int 0x80
-    ; 0x50000000 is a user address outside every registered range; the
-    ; syscall handler dereferences it in kernel mode and must panic.
-    mov eax, SYS_IO
-    mov ebx, IO_WRITE
+    ; 0x50000000 is a user address outside every registered range;
+    ; user_realloc dereferences ptr-sizeof(user_block) in kernel mode
+    ; with no validation and must panic.
+    mov eax, SYS_MEMORY
+    mov ebx, MEMORY_REALLOC
     mov ecx, 0x50000000
+    mov edx, 16
     int 0x80
 %endif
 .halt:
