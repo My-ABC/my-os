@@ -9,6 +9,14 @@ void serial_init(void) {
     outb(SERIAL_COM1 + 3, 0x03);  // 8 位数据, 无校验, 1 位停止位
     outb(SERIAL_COM1 + 2, 0xC7);  // 启用 FIFO, 清空, 14 字节阈值
     outb(SERIAL_COM1 + 4, 0x0B);  // IRQ 使能, RTS/DSR 置位
+
+    outb(SERIAL_COM3 + 1, 0x00);
+    outb(SERIAL_COM3 + 3, 0x80);
+    outb(SERIAL_COM3 + 0, 0x03);
+    outb(SERIAL_COM3 + 1, 0x00);
+    outb(SERIAL_COM3 + 3, 0x03);
+    outb(SERIAL_COM3 + 2, 0xC7);
+    outb(SERIAL_COM3 + 4, 0x0B);
 }
 
 static int serial_is_transmit_empty(void) {
@@ -22,6 +30,25 @@ void serial_putchar(char c) {
     while (!serial_is_transmit_empty()) {
     }
     outb(SERIAL_COM1, (uint8_t)c);
+}
+
+void serial3_putchar(char c) {
+    if (c == '\n') {
+        c = '\r';
+        while (!(inb(SERIAL_COM3 + 5) & 0x20)) {
+        }
+        outb(SERIAL_COM3, (uint8_t)c);
+        c = '\n';
+    }
+    while (!(inb(SERIAL_COM3 + 5) & 0x20)) {
+    }
+    outb(SERIAL_COM3, (uint8_t)c);
+}
+
+void serial3_print(const char* str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        serial3_putchar(str[i]);
+    }
 }
 
 void serial_print(const char* str) {

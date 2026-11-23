@@ -462,7 +462,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     if (pid != 0U &&
                         pid == ring3_foreground_pid_vt((int)ring3_current_vt())) {
                         vga_print((const char *)a1);
-                        serial_print((const char *)a1);
+                        serial3_print((const char *)a1);
                     }
                     return 0;
                 }
