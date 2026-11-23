@@ -36,6 +36,18 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - Shell has 16-entry history (Up/Down) and cursor line editing; quoting via `split_line`/`shell_unescape_arg`. Kernel `echo` dual-writes VGA+COM1; Ring 3 output goes to its vt buffer + COM3.
 - Keep changes surgical. Never hide an error behind a success-shaped fallback.
 
+## History & lessons (why the rules exist)
+
+- `a2ebbbf` — Child `exit` briefly zeroed `foreground_pid`; kernel shell printed its prompt in that window, then the parent reclaimed it → doubled `myos / >`. Fixed by recording `parent_pid` at spawn and auto-falling-back the foreground slot on death.
+- `75d29cb` — `kill <self>` only pended SIGKILL; the process kept running until its next signal check, printing a stray prompt. Fatal signals aimed at the current process are now acted on inside the syscall.
+- `9f6456b` — Parent shell3 was consuming keystrokes meant for a foreground child; kernel shell must not consume keys while a Ring 3 foreground exists.
+- `051c17b` — VBE line editing dropped keys/spammed serial; repaints go through `vga_set_cursor`/`vga_columns` which delegate to VBE cell coords.
+- `bdeabce` — vt.c/F1-F2 terminals. Two hard-won invariants: (1) `sys_keyboard_wait_yield` must yield **unconditionally** — a lone process blocked in `IO_GETCHAR` otherwise starves the kernel idle loop and `vt_service` freezes (vt1 never spawns, F-keys dead); (2) vt spawns (FAT32+ELF load) run with IRQs off — a preempted spawn can get stuck in `kernel_frame`. VBE backing stores are sized from `vbe_scanout_bytes()` (real mode was 1280×800×32 ≈ 5 MB/terminal, not the assumed 640×480).
+- `016bae2` — `shell3_supervisor` in `kernel.c` auto-starts `/shell3.elf` and respawns it. Liveness is polled via `ring3_process_list` pid state — `foreground_pid` proved unreliable as a liveness signal (supervisor once hung in `hlt`).
+- `7809db8` — Serial split: COM1 kernel diagnostics only, COM3 mirrors Ring 3 `IO_WRITE`. Rationale: COM1 interleaved both vts' shell output with kernel logs and confused scripted sessions. COM3 is intentionally a global mirror (vt outputs interleave).
+- Rejected: a serial-terminal architecture (F1→COM2, F2→COM3 interactive shells sharing the process table) was implemented on `feature/serial-terminals`, then deleted at user request — do not reintroduce serial terminals; vt.c is the screen-terminal mechanism.
+- `896fd24` — `feature/disk-shell-autorestart` merged to `main`; `983badd` — PR #7 merged `mini-libc`; tag `v0.6.0` points at `983badd`.
+
 ## Workflow
 
 1. Read the affected implementation, headers, asm entry points, and callers before editing; reuse existing helpers/tests.
