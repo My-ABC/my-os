@@ -110,7 +110,7 @@ English: [English version](../en/04-syscall-abi.md)
 - **路径解析**：所有路径参数都是用户态 NUL 结尾字符串，先按当前工作目录解析并规范化（`fat32_resolve_path`，与 Shell 共用同一个 `g_cwd`，支持相对路径、`.`、`..`），再调用 FAT32。路径最长 127 字符。
 - **文件描述符**：内核维护一张全局 fd 表（`SYSFS_MAX_FDS` = 8 项），fd 是表项下标 0–7。fd 表是全局的、不是每进程独立的；进程退出时**不会**自动关闭其打开的 fd（后续进程可能继承同一文件偏移状态，属已知限制）。
 - **读写语义**：FAT32 层只有整文件读写接口，因此 `FS_READ` 每次调用都重新读取整个文件（≤ `FAT32_MAX_FILE_SIZE` = 1 MiB）到内核缓冲再拷贝偏移处数据；`FS_WRITE` 采用 read-modify-write：读出现有内容、在偏移处覆盖、按 `max(原大小, 偏移+长度)` 整文件写回。大文件/频繁小写性能较差，属已知限制。
-- **用户指针校验**：FS 系列调用和 `TIME_TO` 会用 `sys_user_buffer_ok`/`sys_copy_user_string` 校验指针落在已登记用户范围（ELF 镜像、用户栈、用户堆）内，非法指针返回 -1 而不是 panic；`IO_WRITE`/`IO_READ`/`IO_GETCHAR`/`MEMORY_*` 仍无校验。
+- **用户指针校验**：`IO_WRITE`、`IO_READ`、FS 系列调用和 `TIME_TO` 都会校验指针——`IO_WRITE` 经 `sys_copy_user_string` 拷贝（4096 字节上限），`IO_READ`/FS/`TIME_TO` 用 `sys_user_buffer_ok` 检查；非法指针返回 -1 而不是 panic。校验要求页面在当前 `user_mm` 中*已映射*（`paging_mm_get_phys`），而不仅是落在已登记范围内。`IO_GETCHAR` 无指针参数，`MEMORY_*` 仍直接解引用调用方指针（见已知限制）。
 - **工作目录**：`g_cwd` 存于 `src/fs/fat32.c`，Shell 的 `cd`/提示符与用户态 `FS_GETCWD`/`FS_CHDIR` 共享同一目录。
 
 ## 进程退出（`PROC_EXIT`）
