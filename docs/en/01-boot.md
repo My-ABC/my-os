@@ -39,25 +39,32 @@ loops.
 
 `src/kernel.c:kmain(uint32_t multiboot_info)` performs, in order:
 
-1. `gdt_init()` + `tss_init()` — descriptor tables (GDT must precede
-   everything that uses segments/TSS).
+1. `gdt_init()` + `tss_init()` — descriptor tables.
 2. `serial_init()` — early debug output on COM1.
 3. `pmm_init(multiboot_info)` — bitmap allocator seeded from the Multiboot
    memory map.
 4. `paging_init()` + `tss_update_cr3()` — runtime PAE tables; TSS `esp0`
    follows the new CR3.
 5. Optional `highmem_qemu_test()` under `PMM_QEMU_HIGHMEM_TEST`.
-6. Remaps the Multiboot info page(s) so VBE probing can read them later.
-7. `vbe_initialize(multiboot_info)` (BIOS VBE info captured pre-boot) then
-   `vga_init()`.
-8. `ata_init()` probe; on success calls `cmd_disk()` to mount FAT32.
+6. Remaps the Multiboot info page(s) into the low identity map so VBE
+   probing can read them later.
+7. `vbe_initialize(multiboot_info)` (BIOS VBE info captured pre-boot),
+   then `vga_init()`, then `vt_init()` (per-terminal screen backing
+   stores — see [15-virtual-terminals.md](15-virtual-terminals.md)).
+8. `ata_init()` probe; on success `cmd_disk(1, 0)` mounts FAT32.
 9. `idt_init()` — exception/IRQ/syscall gates.
-10. Heap self-tests (`kmalloc`/`kfree`/`kcalloc`/`krealloc`), a PMM+mapping
-    smoke test at `0x00800000`.
-11. `pic_remap()`, `pit_init(100 Hz)`, `keyboard_init()`, `sti`,
-    `rtc_init()`.
-12. Demo paths under `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO`,
-    otherwise `start_shell()`.
+10. Heap self-tests (`kmalloc`/`kfree`/`kcalloc`/`krealloc`) and a
+    PMM+mapping smoke test at `0x00800000`.
+11. `pic_remap()` (masks IRQ2, keeps IRQ0/1 masked), `pit_init(100 Hz)`,
+    `keyboard_init()`, `sti`, `tsc_init()`, `rtc_init()`.
+12. Boot-time VGA/serial banner output and RTC time display.
+13. Demo paths under `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO`;
+    otherwise `shell3_supervisor()` — which auto-starts `/shell3.elf`
+    on both virtual terminals when the disk image provides it, falls
+    back to the kernel `start_shell()` when no disk is mounted or the
+    file is missing, and keeps respawning dead shells via `vt_service()`.
+    See [07-shell.md](07-shell.md) and
+    [15-virtual-terminals.md](15-virtual-terminals.md).
 
 > Note: `kmain` mixes real init with boot-time self-test logging. The
 > serial markers (`MyOS v0.0.1`, `[HEAP] ...`, `[PAGING] ...`) are part of
