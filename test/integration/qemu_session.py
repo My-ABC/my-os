@@ -224,6 +224,13 @@ class QemuSession:
     def serial_text(self):
         return self.serial_data.decode("ascii", errors="replace")
 
+    def serial_all_text(self):
+        """COM1 + COM3 concatenated. COM1 keeps kernel-side output,
+        COM3 carries Ring 3 IO_WRITE mirrors; each stream stays
+        line-intact but their relative interleaving is lost."""
+        return (bytes(self.serial_data) + b"\n" +
+                bytes(self.serial3_data)).decode("ascii", errors="replace")
+
     @staticmethod
     def pass_check(name):
         print(f"✓ PASS: {name}", flush=True)

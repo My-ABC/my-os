@@ -209,7 +209,7 @@ def run_chunk(session, chunk, results):
                 session.wait_for(b"afail-start", timeout=5)
                 session.send_line("echo afail-shell-alive")
                 session.wait_for(b"afail-shell-alive", timeout=15)
-                seg = session.serial_text()[-3000:]
+                seg = session.serial_all_text()[-3000:]
                 ok = ("afail-unreachable" not in seg
                       and "afail-shell-alive" in seg)
                 results.append((tag, ok, "assert->abort->shell alive"))
@@ -219,13 +219,13 @@ def run_chunk(session, chunk, results):
                   tag, "-", results[-1][2])
             continue
         tag = f"{cat}/{disk_name.split('.')[0]}"
-        before = len(session.serial_text())
+        before = len(session.serial_all_text())
         try:
             session.send_line(f"run {disk_name}")
             # wait for the complete DONE line, not just the tag prefix
             session.wait_for_regex(
                 marker.encode() + rb" fails=\d+", timeout=40)
-            seg = session.serial_text()[before:]
+            seg = session.serial_all_text()[before:]
             tail = seg[seg.rfind(marker):]
             fails_line = [l for l in tail.splitlines() if "fails=" in l]
             fail_lines = [l.strip() for l in seg.splitlines()
