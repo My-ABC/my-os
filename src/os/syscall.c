@@ -467,7 +467,15 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return 0;
                 }
                 case IO_READ: // a1: char *buf, a2: size
-                    sys_gets((char *)a1, a2, frame);
+                    /* a2 arrives as uint32_t; sys_gets takes int, so
+                     * values > INT32_MAX wrap negative. Reject non-
+                     * positive sizes and buffers that are not wholly
+                     * inside permitted user ranges before any write. */
+                    if ((int32_t)a2 <= 0 ||
+                        !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2)) {
+                        return (uint32_t)-1;
+                    }
+                    sys_gets((char *)a1, (int)a2, frame);
                     return 0;
                 case IO_GETCHAR: {
                     int vt = (int)ring3_current_vt();
