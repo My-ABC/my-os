@@ -17,7 +17,9 @@ class QemuSession:
         self.timeout = timeout
         self.deadline = time.monotonic() + timeout
         self.serial_data = bytearray()
+        self.serial3_data = bytearray()  # COM3: Ring 3 IO_WRITE mirror
         self.serial_client = None
+        self.serial3_client = None
         self.monitor = None
         self.process = None
         self.qemu_log = tempfile.TemporaryFile(mode="w+b")
@@ -168,16 +170,20 @@ class QemuSession:
         self.send_text(line + "\n")
 
     def _read_serial_clients(self):
-        """Drain both UART sockets (COM1 diagnostics + COM3 Ring 3
-        mirror) into serial_data. Returns True when any bytes arrived."""
+        """Drain both UART sockets into their own buffers: COM1 kernel
+        diagnostics -> serial_data, COM3 Ring 3 mirror -> serial3_data.
+        Kept separate because the two streams interleave mid-line and
+        would corrupt substring matching if merged. Returns True when
+        any bytes arrived."""
         got = False
-        for client in (self.serial_client, self.serial3_client):
+        for client, buf in ((self.serial_client, self.serial_data),
+                            (self.serial3_client, self.serial3_data)):
             try:
                 chunk = client.recv(65536)
             except BlockingIOError:
                 chunk = b""
             if chunk:
-                self.serial_data.extend(chunk)
+                buf.extend(chunk)
                 got = True
         return got
 
@@ -197,7 +203,7 @@ class QemuSession:
             # consume a chunk that also carries this wait's output, and the
             # guest then goes idle. Re-check every iteration, not only when
             # new bytes arrive.
-            if needle in self.serial_data:
+            if needle in self.serial_data or needle in self.serial3_data:
                 return
             if not self._read_serial_clients():
                 time.sleep(0.01)
@@ -208,7 +214,8 @@ class QemuSession:
         end = min(self.deadline, time.monotonic() + timeout)
         while time.monotonic() < end:
             self.check_running()
-            if expression.search(self.serial_data[start:]):
+            if (expression.search(self.serial_data[start:]) or
+                    expression.search(self.serial3_data)):
                 return
             if not self._read_serial_clients():
                 time.sleep(0.01)
