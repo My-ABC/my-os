@@ -81,11 +81,13 @@ directly (`fat32_*`, `ring3_*`, `vga_*`, `printf`).
 An experimental user-mode port lives in `src/shell/shell_ring3.c`
 (header `include/shell/shell_ring3.h`), built as `build/shell3.elf`
 by `make shell3` and started with `run shell3.elf`. When the mounted
-disk carries `shell3.elf` at its root — e.g. the `disk-shell.img`
-produced by `make disk-shell` — `start_shell()` auto-starts it in the
-foreground before printing the kernel banner, so `make run-disk-shell`
-lands directly in the Ring 3 shell (`exit` returns to the kernel
-shell). The final
+disk carries `shell3.elf` at its root — the `disk.img` produced by
+`make disk` — the kernel supervisor (`shell3_supervisor` in
+`kernel.c`) auto-starts it in the foreground and respawns it every
+time it exits or is killed, so `make run` lands directly in the
+Ring 3 shell and never shows the kernel shell. The kernel shell is
+only reached when no disk is mounted or `shell3.elf` is missing or
+unloadable. The final
 version implements the full kernel command set through the
 mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
 `write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),

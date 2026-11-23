@@ -19,6 +19,8 @@
 #include "heap.h"
 #include "vbe.h"
 #include "ata.h"
+#include "elf.h"
+#include "fat32.h"
 
 #ifdef PMM_QEMU_HIGHMEM_TEST
 static void highmem_qemu_test(void) {
@@ -73,6 +75,57 @@ halt:
     for (;;) __asm__ volatile ("hlt");
 }
 #endif
+
+/* Boot supervisor: when the mounted FAT32 disk carries /shell3.elf,
+ * run it in the foreground and respawn it every time it exits or is
+ * killed, so the Ring 3 shell is always the visible terminal. The
+ * kernel shell is only reached when no disk is mounted or the file
+ * is missing/unloadable. */
+static int shell3_pid_alive(uint32_t pid) {
+    uint32_t pids[RING3_PROCESS_COUNT];
+    uint32_t states[RING3_PROCESS_COUNT];
+    uint32_t count = ring3_process_list(pids, states, RING3_PROCESS_COUNT);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (pids[i] == pid &&
+            (states[i] == RING3_PROCESS_READY ||
+             states[i] == RING3_PROCESS_RUNNING)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void shell3_supervisor(void) {
+    uint8_t *image;
+    uint32_t size;
+    uint32_t pid;
+
+    if (!fat32_mounted()) {
+        start_shell();
+        return;
+    }
+    image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
+    if (image == 0) {
+        start_shell();
+        return;
+    }
+    for (;;) {
+        size = 0U;
+        if (fat32_read_file("/shell3.elf", image, FAT32_MAX_FILE_SIZE,
+                            &size) != 0 ||
+            elf_run(image, size) != 0) {
+            break;
+        }
+        pid = ring3_foreground_pid();
+        serial_print("[SHELL] Auto-started /shell3.elf (Ring 3 shell)\n");
+        while (shell3_pid_alive(pid)) {
+            __asm__ volatile ("hlt");
+        }
+        serial_print("[SHELL] /shell3.elf exited; restarting\n");
+    }
+    kfree(image);
+    start_shell();
+}
 
 void kmain(uint32_t multiboot_info) {
     // 初始化 GDT（必须最先进行）
@@ -258,6 +311,6 @@ void kmain(uint32_t multiboot_info) {
     printf("Halted\n");
     while (1);
 #else
-    start_shell();
+    shell3_supervisor();
 #endif
 }

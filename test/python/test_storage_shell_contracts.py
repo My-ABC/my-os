@@ -72,16 +72,16 @@ class StorageAndShellContractTests(unittest.TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, text)
 
-    def test_run_attaches_only_an_existing_disk_image(self):
+    def test_run_builds_and_attaches_the_shell_disk_image(self):
         makefile = source("Makefile")
-        run_target = makefile.split("\nrun: iso\n", 1)[1].split("\n\n", 1)[0]
-        self.assertIn('if test -f "$(DISK)"', run_target)
+        run_target = makefile.split("\nrun: iso disk\n", 1)[1].split("\n\n", 1)[0]
         self.assertIn("-boot order=d", run_target)
         self.assertIn('-drive file="$(DISK)",format=raw,if=ide', run_target)
-        self.assertIn("booting without an IDE disk", run_target)
-        disk_target = makefile.split("\ndisk:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertNotIn("disk-shell", makefile)
+        disk_target = makefile.split("\ndisk: shell3\n", 1)[1].split("\n\n", 1)[0]
         self.assertIn('truncate -s $(DISK_SIZE) "$(DISK)"', disk_target)
         self.assertIn('mkfs.fat -F 32 -n MYOS "$(DISK)"', disk_target)
+        self.assertIn('add_root_file("$(DISK)", "shell3.elf"', disk_target)
 
     def test_fat32_boot_directory_and_cluster_operations_exist(self):
         text = fat32_source()
