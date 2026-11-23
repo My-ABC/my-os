@@ -21,7 +21,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - `mini-libc/`: MIT-licensed user-space C library (`myos.h` umbrella header; `libmyc.a` via `make libmyc`). **Develop on the `mini-libc` branch**; merge to `main` only at milestones or on request. QEMU suite: `make test-libmyc`.
 - `docs/`: bilingual — `docs/en/` mirrors `docs/zh/` (`01`–`15` numbered chapters + `mini-libc/` per-header API refs). **Every functional change must update both languages in the same change**; syscall ABI or shell changes must update `04-syscall-abi.md` and `08-shell-commands.md`.
 - `test/`: `python/` (host unittest + source-contract checks — contracts assert exact source strings, update them when refactoring), `c/` + `shell/` (host C suites via host `cc`), `integration/` + `support/` (QEMU-only: `run_qemu_integration.py`, scenario modules, `QemuTestCase`). Tests print `PASS`/`FAIL`.
-- `README.md`/`README-zh.md`: repo-page docs, keep aligned. `TODO.md`/`TODO-zh.md`: bilingual roadmap, keep checkboxes in sync. `AUDIT.md`: bug-audit findings report (EN).
+- `README.md`/`README-zh.md`: repo-page docs, keep aligned. `TODO.md`/`TODO-zh.md`: bilingual roadmap, keep checkboxes in sync. `AUDIT.md`: bug-audit findings report (zh).
 - `.github/workflows/`: `pr_hi.yml` (greeting script), `release.yml` (tag/manual builds).
 
 ## Architecture constraints

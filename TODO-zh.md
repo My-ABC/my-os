@@ -9,7 +9,7 @@
 - [x] 建立 32 位 x86 Multiboot/GRUB 启动流程，以及 GDT、IDT、TSS 和基础中断处理。
 - [x] 实现内核分页、PAE 页表和高端物理页映射；PMM 可管理 64 GiB 以下的物理地址，并有 4 GiB 以上页分配的宿主测试；可选的 QEMU `-m 6G` 测试会分配 `0x100000000` 高地址物理页，通过映射校验读写，然后释放并重新分配该页。
 - [x] 实现内核堆分配器及基础用户堆分配接口。
-- [x] 实现基础 Ring 3 进程调度和进程管理命令；目前最多运行两个进程，进程共享地址空间。
+- [x] 实现基础 Ring 3 进程调度和进程管理命令；最多四个并发用户进程（`RING3_PROCESS_COUNT`）。
 - [x] 提供基础系统调用 `IO_WRITE` 和 `PROC_GETPID`。
 - [x] 实现 ELF32 可加载段校验与装载、BSS 清零，以及内置和磁盘 ELF 程序运行。
 - [x] 修复 PAE 更改后 GRUB ISO 启动时可能出现的无限重启；构建依赖自动跟踪头文件，避免 ABI 变更后复用过期对象文件。
@@ -25,18 +25,22 @@
 - [x] 实现 `rmdir -f` 递归删除非空目录，并限制删除当前目录及其父目录。
 - [x] 实现 `cp`/`cp -r`/`mv` 文件和目录操作，按 Linux 语义处理目标已存在的情况。
 - [x] 实现 `run` 命令，从 FAT32 磁盘装载并运行 ELF32 程序。
-- [x] 增加文件系统调用 `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`（`SYS_FS` 子操作 1–10）、`PROC_EXIT`/`PROC_YIELD`（`SYS_PROCESS`）、`TIME_GET`（`SYS_TIME`）以及信号调用 `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN`（`SYS_SIG`）；用户指针按登记范围校验，路径统一走 `fat32_resolve_path`/`g_cwd`。
+- [x] 增加文件系统调用 `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`/`RENAME`/`READDIR`（`SYS_FS` 子操作 1–12）、`PROC_EXIT`/`PROC_YIELD`/`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC`（`SYS_PROCESS`）、`TIME_GET`（`SYS_TIME`）以及信号调用 `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN`（`SYS_SIG`）；用户指针按页映射存在性校验（`sys_user_buffer_ok`），路径统一走 `fat32_resolve_path`/`g_cwd`。
 - [x] 端到端实现信号投递：仅 `SIGINT`/`SIGKILL`，每进程 pending/blocked/handler 状态，Ctrl+C `KEYBOARD_KEY_SIGINT` → 前台 `SIGINT`，默认致命即终止，用户 handler 经每进程私有的 `0x00900000` restorer trampoline + `SIG_RETURN` 恢复上下文执行。
 - [x] 实现 Shell 行编辑：16 条历史（Up/Down）、光标移动（Left/Right）、插入与退格编辑及整行重绘、双引号参数、`\n`/`\\`/`\"` 转义（未知转义告警）、Ctrl+C 回显 `^C` + 丢弃当前行 + 重绘提示符、ELF/`run` 错误信息细分（镜像错误 vs 进程槽满 vs 读文件失败）。
 - [x] `echo` 同时输出屏幕和 COM1 串口，脚本化/无头会话保留串口可见性；移除 `secho` 命令。
 - [x] 新增 unittest 风格 QEMU 集成框架（`QemuTestCase` 及 `assert*` 断言、按方法输出 PASS），与原有有界会话编排并存；检查结果以 `✓ PASS`/`✗ FAIL` 标记。
 - [x] 修复 RTC 12/24 小时制：PM 位在 BCD 解码前提取，解码后小时 >12 时按 24 小时值处理（部分 RTC 模式位不可靠），所有 QEMU 调用统一 `-rtc base=utc` 使客体 RTC 读 UTC 供 UTC→北京时间换算。`time` 支持 `time 12`/`time 24`。
 - [x] 为 `vbe_put_pixel` 增加坐标边界检查（越界像素串口告警，不再间歇性内核 panic）。
+- [x] 实现虚拟终端：F1/F2 切换的两个 tty，各自运行独立的 `shell3.elf` Ring 3 进程并保留各自屏幕；每 vt 独立的键盘缓冲与前台 pid 槽位，经 `vt_service` 延迟切换，VBE 模式下在 `0xD0000000`–`0xE0000000` 窗口分配离屏帧缓冲，并自动重启各终端的 shell。详见 `docs/zh/15-virtual-terminals.md`。
+- [x] 将 Ring 3 `IO_WRITE` 输出镜像到 COM3（单一全局流，COM1 保留内核侧输出），并扩展 QEMU 测试框架分别采集 COM1/COM3 两路串口。
+- [x] 通过 `shell3_supervisor` vt spawner 开机自动启动 `/shell3.elf` 并在每个终端自动重启；仅当未挂载磁盘或 ELF 缺失/无法装载时才回退到内核 shell。
 
 ### 驱动、控制台与电源
 
 - [x] 实现基础平台驱动：PIC 中断控制器初始化、PIT IRQ0 定时器、PS/2 键盘扫描码解码（含 Ctrl+C `KEYBOARD_KEY_SIGINT` 注入）、VGA 文本控制台、基于 GRUB multiboot 信息的 VBE framebuffer 初始化（像素绘制带边界检查）、COM1 串口输出和 RTC。
 - [x] 实现 ACPI 表发现与 FADT 解析，包括经 PM1a 控制块的 S5 关机；表或寄存器不可用时优雅回退。
+- [x] 按 P0–P3 审计报告（`AUDIT.md`）加固系统调用与串口边界：串口 TX 等待加超时（无 UART 硬件时不再永久挂死）、`IO_WRITE` 经 4096 字节有界内核缓冲拷贝用户字符串、`IO_READ` 校验缓冲与长度、用户指针改为按页映射存在性校验（`sys_user_buffer_ok`/`paging_mm_get_phys`）。
 
 ### 项目结构、测试与文档
 
@@ -44,7 +48,7 @@
 - [x] 按用途整理测试目录，将 Python、宿主 C、Shell 启动脚本和 QEMU 集成测试分开放置；新增可选的 `make test-qemu-highmem` 测试，验证真实高地址物理页分配与访问。
 - [x] 建立宿主和 QEMU 集成测试，覆盖 PAE/PMM、高地址物理页分配与访问、FAT32 LFN、Shell 操作、Ring 3 进程及磁盘 ELF 运行。
 - [x] 建立项目级 TODO 路线图，并在中英文 README 和内核 agent 指引中记录维护入口。
-- [x] 在 `docs/en` 和 `docs/zh` 下建立双语架构文档系列（从启动到信号的编号章节、驱动缺口分析及内存隔离章节），语言链接保持同步。
+- [x] 在 `docs/en` 和 `docs/zh` 下建立双语架构文档系列（从启动到虚拟终端的编号章节、驱动缺口分析及内存隔离章节），语言链接保持同步；各章节已在 vt-f1-f2 审计期间对照当前代码逐一核对。
 
 ## 内核、用户态与系统调用
 
@@ -61,9 +65,9 @@
   - [x] 用 QEMU 测试验证亚毫秒级睡眠精度与信号检查。
 - [ ] **完善用户态与系统调用接口**
   - [ ] 定义稳定、版本化的系统调用 ABI、参数约定和错误码。（`eax`/`ebx` 两级大类/子操作号、参数走 `ecx`/`edx`/`esi` 已记录在 `docs/zh/04-syscall-abi.md`；尚无版本机制。）
-  - [ ] 校验用户指针、长度和地址范围，提供安全的用户/内核数据复制。（FS 系列已校验指针；`IO_WRITE`/`IO_READ`/`SYS_MEMORY` 仍直接解引用用户指针。）
-  - [ ] 完善进程创建、退出、等待、信号/事件及资源回收接口。（已有 `PROC_EXIT`、`PROC_YIELD` 和信号集；无 fork/exec/wait 或每进程 fd 表。）
-  - [ ] 增加文件、目录、控制台、时间和设备访问所需的系统调用。（`SYS_FS` 子操作 1–10、`TIME_GET`/`TIME_TO`、控制台读写已有；设备访问仍缺。）
+  - [ ] 校验用户指针、长度和地址范围，提供安全的用户/内核数据复制。（FS 与控制台系统调用已按页映射存在性校验指针（`sys_user_buffer_ok`/`paging_mm_get_phys`）；`MEMORY_REALLOC` 仍无校验解引用块头，保留为 `kfault.elf` panic 演示路径。）
+  - [ ] 完善进程创建、退出、等待、信号/事件及资源回收接口。（已有 `PROC_EXIT`/`PROC_YIELD`/`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC` 和信号集；仍无 fork/wait 或每进程 fd 表。）
+  - [ ] 增加文件、目录、控制台、时间和设备访问所需的系统调用。（`SYS_FS` 子操作 1–12、`TIME_GET`/`TIME_TO`/`TIME_SLEEP`、控制台读写已有；设备访问仍缺。）
   - [ ] 为 ABI 和非法参数处理添加宿主与 QEMU 测试。（QEMU 覆盖正常路径和信号投递；非法参数覆盖不完整。）
 - [ ] **实现信号机制**（目前只有 `SIGINT`/`SIGKILL`；更多信号编号、`sigprocmask` 式屏蔽接口和嵌套投递仍待做）
   - [x] 定义信号编号、投递语义（在 IRQ0/系统调用等待点轮询，而非同步异常）以及每进程的待处理/屏蔽信号状态。
@@ -82,8 +86,13 @@
 - [ ] **将 Shell 完善并迁移到 Ring 3**
   - [x] 将命令解析、交互和内建命令逐步移出内核。（`src/shell/shell_ring3.c` + `include/shell/shell_ring3.h`，`make shell3` 生成 `build/shell3.elf`。）
   - [x] 通过系统调用访问控制台、文件系统、进程和设备。
-  - [ ] 提供命令行编辑、历史记录、错误码和可执行程序搜索等基础体验。（内核 shell：行编辑、16 条历史、`\n`/`\\`/`\"` 转义、ELF 错误细分已完成；可执行程序搜索/PATH 查找未实现。）
-  - [ ] 保持用户 Shell 崩溃或退出时内核仍可恢复控制。
+  - [ ] 提供命令行编辑、历史记录、错误码和可执行程序搜索等基础体验。（两个 shell 均已有行编辑、16 条历史、转义和细分错误信息；可执行程序搜索/PATH 查找未实现。）
+  - [x] 保持用户 Shell 崩溃或退出时内核仍可恢复控制。（vt 层经 `vt_service` 在每个终端自动重启 `shell3.elf`；瞬时拉起失败按约 1 Hz 重试，仅 ELF 加载错误才永久锁存。）
+- [ ] **扩展虚拟终端支持**
+  - [ ] 支持两个以上终端（需同步扩展 vt 数组、每终端前台槽位和 F 键映射）。
+  - [ ] 增加滚动回溯缓冲；目前每个 vt 只保留一屏。
+  - [ ] 将 COM3 全局镜像拆分为按终端的串口流，并让 VBE 备份分配失败不再导致切换永久失效。
+  - 入口：[vt.c](./src/drivers/vt.c)、[15-virtual-terminals.md](./docs/zh/15-virtual-terminals.md)。
 
 ## 进程间通信
 
@@ -99,7 +108,7 @@
 
 - [ ] **完善文件系统与 Shell 存储体验**
   - [ ] 系统化检查 FAT32 路径解析、目录边界、错误传播和磁盘损坏处理。
-  - [ ] 完善文件句柄及打开/关闭/顺序读写接口，供用户态程序使用。
+  - [ ] 完善文件句柄及打开/关闭/顺序读写接口，供用户态程序使用。（`SYS_FS` fd 子操作 1–4 和 mini-libc `fs.h`/`unistd.h` 封装已有；fd 表是全局的，非每进程。）
   - [x] 增加文件复制、移动、重命名等常用操作，并补齐持久化和回归测试。（`cp` 复制文件、`cp -r` 递归复制目录树；`mv` 按 Linux 语义重命名/移动文件和目录——目标为已存在目录时移入其中、目标为已存在文件时替换、禁止目录移入自身子树。）
   - [x] 明确 LFN、短文件名别名和非 ASCII 名称的支持范围及限制。（Shell 创建的目录项总是携带保留大小写的 LFN；查找按 LFN 精确匹配，仅在无 LFN 时回退 8.3 短名。详见 README。）
 - [ ] **实现块缓存**
