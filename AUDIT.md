@@ -36,7 +36,7 @@
 | # | 位置 | 问题 | 触发条件 | 状态 |
 |---|------|------|----------|------|
 | N4 | `serial.c:47-54` | COM3 超时打印 `"output dropped"` 警告后**仍然 `outb` 写出该字符**——警告与行为不符；COM1 超时则完全静默。且超时后每字符仍烧 ~1M 次 port 读。 | 无 COM3 后端的真机/部分 QEMU 配置 | ✅ 已修：抽出 `serial_tx_wait`，超时即丢字符不再写端口；COM3 超时仍只警告一次，COM1 静默丢弃 |
-| N5 | `elf.c:120-124` + `ring3.c:204-221` | **mm 双重释放**：`ring3_schedule_internal` 失败路径已 `paging_mm_release(mm)`（含调用方传入的 mm），`elf_run_vt` 拿到非零返回又 `elf32_release_mm(mm)` 再放一次。两次释放之间 IRQ0 让出的窗口内，若槽位被新进程复用，第二次 release 会拆掉别人的地址空间。 | spawn 失败 + 精确时序 | ⬜ 修法：约定"schedule 失败不释放调用方 mm"或 elf_run_vt 不重复释放 |
+| N5 | `elf.c:120-124` + `ring3.c:204-221` | **mm 双重释放**：`ring3_schedule_internal` 失败路径已 `paging_mm_release(mm)`（含调用方传入的 mm），`elf_run_vt` 拿到非零返回又 `elf32_release_mm(mm)` 再放一次。两次释放之间 IRQ0 让出的窗口内，若槽位被新进程复用，第二次 release 会拆掉别人的地址空间。 | spawn 失败 + 精确时序 | ✅ 已修：约定 `ring3_schedule_mm` 入口即接管 mm 所有权，所有失败路径（含参数校验/槽位满两个早退）统一释放；`elf_run_vt` 与 `cmd_ring3` 删除失败路径的二次释放，`ring3.h` 注释写明契约 |
 | N6 | `syscall.c:301-332` | `sys_user_buffer_ok`/`sys_copy_user_string` 要求**页已映射**，而栈只有栈顶一页预映射、其余靠 isr14 demand-map → `IO_READ`/`IO_WRITE` 对落在未触碰栈页上的缓冲/字符串返回 -1。mini-libc 当前用堆/静态缓冲所以没暴露，属潜伏 ABI 缺口。 | 用户程序把 IO 缓冲放在栈的低地址区 | ⬜ 修法：校验时把"permitted 但未映射"的页视为可 demand-map（调用 isr14 同款分配），或文档明确限制 |
 | N7 | `idt.c:9-15` | 除 #BP(3)/#PF(14) 外所有异常/中断走 `default_handler` = 打一行 VGA 错误后 `cli;hlt` 死循环——#DE/#GP/#SS 等内核异常**静默挂死**，无寄存器转储、无 panic。 | 任意未处理异常 | ⬜ 修法：default_handler 转 `panic_blue_screen`（需要 regs，需 asm 桩配合） |
 | N8 | `trap.c:62-66` | demand-map 的许可范围含 `sys_user_heap_contains`（0x1000000–0x40000000 整段）：访问**已 free 的堆页**（user_free 会 unmap）会被静默 demand-map 成新的零页而不是 fault → 掩盖堆 UAF；且按读写缺页一律给 RW 页。 | 进程读写已释放的堆内存 | ⬜ 修法：demand-map 只对"从未映射过"的页生效（需追踪），或收窄许可范围到栈/镜像 |

@@ -129,7 +129,7 @@ int elf_run_vt(const void *image, uint32_t image_size, int vt) {
     result = ring3_schedule_mm((void (*)(void))loaded.entry, mm,
                                loaded.image_start, loaded.image_end, 1, vt);
     if (result != 0) {
-        elf32_release_mm(mm);
+        /* schedule_mm took ownership of mm and already released it. */
         serial_print("[ELF] Unable to schedule loaded image\n");
         return -8;
     }

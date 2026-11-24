@@ -176,6 +176,9 @@ static int ring3_schedule_internal(void (*func)(void),
            image_end > USER_STACK_TOP_0 - USER_STACK_SIZE) ||
           (image_start < USER_STACK_TOP_1 &&
            image_end > USER_STACK_TOP_1 - USER_STACK_SIZE)))) {
+        /* Ownership of a caller-supplied mm transfers on entry; every
+         * failure path releases it so callers never double-free. */
+        if (mm != 0) paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }
@@ -187,6 +190,7 @@ static int ring3_schedule_internal(void (*func)(void),
         }
     }
     if (i == RING3_PROCESS_COUNT) {
+        if (mm != 0) paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }

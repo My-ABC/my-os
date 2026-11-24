@@ -16,7 +16,9 @@
 - `ring3_schedule(entry)` / `ring3_schedule_mm(...)` /
   `elf_run_vt(image, size, vt)` —— 把入口页映射为
   `USER|WRITABLE|PRESENT`，在指定 vt 上登记进程（子进程继承父 vt）
-  并交给调度器运行。
+  并交给调度器运行。`ring3_schedule_mm` 在入口处接管调用方的 `mm`
+  所有权：成功时归进程槽位所有，任何失败路径都会将其释放，调用方
+  之后不得再释放。
 - `ps` / `fg <pid>` / `bg <pid>` / `kill <pid>` —— Shell 命令，分别封
   装 `ring3_process_list`、`ring3_set_foreground`、
   `ring3_set_background`、`ring3_kill`。

@@ -9,6 +9,8 @@ extern void user_entry(void);
 
 void ring0_to_ring3(uint32_t *ustack_top, void (*func)(void));
 int ring3_schedule(void (*func)(void));
+/* Takes ownership of `mm` on entry: on success the process slot owns it,
+ * on any failure it is released. Callers must not free it afterwards. */
 int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
                       uint32_t image_start, uint32_t image_end,
                       int foreground, int vt);

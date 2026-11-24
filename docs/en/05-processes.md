@@ -18,6 +18,9 @@ the page-fault handler. The foreground PID is tracked **per vt**
   `elf_run_vt(image, size, vt)` — map the entry page
   `USER|WRITABLE|PRESENT`, register the process on the given vt
   (children inherit the parent's vt), and let the scheduler run it.
+  `ring3_schedule_mm` takes ownership of the caller's `mm` on entry:
+  on success the process slot owns it, on any failure it is released,
+  so callers must not free it afterwards.
 - `ps` / `fg <pid>` / `bg <pid>` / `kill <pid>` — shell commands wrapping
   `ring3_process_list`, `ring3_set_foreground`,
   `ring3_set_background`, `ring3_kill`.

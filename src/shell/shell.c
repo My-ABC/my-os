@@ -262,7 +262,7 @@ int cmd_ring3(int argc, char *argv[]) {
     serial_print_hex((uint32_t)user_entry);
     serial_print("\n");
     if (ring3_schedule_mm(user_entry, mm, 0U, 0U, 1, VT_FALLBACK) != 0) {
-        paging_mm_release(mm);
+        /* schedule_mm took ownership of mm and already released it. */
         printf("Unable to start a Ring 3 process (slots full or out of memory)\n");
         return -1;
     }
