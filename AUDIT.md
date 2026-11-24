@@ -1,7 +1,7 @@
 # MyOS 代码审计报告（P0–P3）
 
 审计范围：`src/`、`boot/`、`include/` 全量重读（约 1.2 万行）。mini-libc 按约定不在本次范围。
-行号基于 `feature/vt-f1-f2` 分支 HEAD（`e03d9b7` 之后）。
+行号基于 `feature/vt-f1-f2` 分支 HEAD（`46e91dd`）。
 
 严重度定义：**P0** 必坏 / **P1** 可能坏 / **P2** 隐患 / **P3** 风格。
 状态：✅ = 已修复；⬜ = 未修复（文档已记录或待后续 PR）。
@@ -27,8 +27,9 @@
 | 2 | `syscall.c` IO_READ | `sys_gets` 无指针/size 校验 | ✅ `size<=0` 或 `sys_user_buffer_ok` 失败返回 -1 |
 | 3 | `syscall.c` 校验判据 | 初版用 range-permitted 判定，漏映射页 | ✅ `ac88eac`：改 `paging_mm_get_phys` 判定实际映射 |
 | 4 | `syscall.c` `user_realloc` | `ptr-20` 无范围校验直接解引用 → 内核 panic | ⬜ 保留为 `kfault.elf` panic 演示路径；正式修法见 #22 |
-| 8 | `vt.c` `spawn_failed` | 瞬时故障永久锁存 | ✅ `VT_SPAWN_RETRY` 可重试（~1Hz），ELF 错误才锁存 |
+| 8 | `vt.c` `spawn_failed` | 瞬时故障永久锁存 | ✅ `VT_SPAWN_RETRY` 可重试（~1Hz），ELF 错误才锁存；后续又加了每 vt 独立计数、5 次耗尽后 `switch_enabled=0` 禁 F 键、vt0 永久失败时 supervisor 回退 ring0 `start_shell()`（单向，需重启才能回 shell3）（`e15c148`/`9978b0a`） |
 | 13 | `serial.c` TX 等待 | 死等 LSR bit5 无超时 | ✅ `SERIAL_TX_TIMEOUT` 有界等待 |
+| 14 | `vt.c` F 键切换 | vt1 无 shell 时按 F2 显示黑屏，用户误以为死机 | ✅ `switch_enabled` 初始 0、首次 spawn 成功才置 1；`spawn_failed` 清零；vt0 F1 恒可用作 ring0 兜底（`9296cfb`，曾短暂用 placeholder 文案方案后被否决） |
 
 ## 三、P2 — 隐患
 
@@ -86,6 +87,7 @@
 | T1 | `test/integration/qemu_session.py` | COM3 迁移后三次修复：加 COM3 后端 → wait_for 双 buffer → COM1/COM3 分缓冲防行内交错 | ✅ |
 | T2 | `fault_demo.asm` + `page_fault_scenarios.py` | kfault 前提失效后改用 `MEMORY_REALLOC` 坏指针 | ✅ |
 | T3 | `test/mini-libc/run_tests.py` | `serial_text()` 只读 COM1，Ring3 DONE 行在 COM3 → 全部误报 "no DONE line" | ✅ `e03d9b7`：新增 `serial_all_text()` |
+| T4 | `Makefile` `disk` 目标 + `fat32_image.py` | 仅时间戳判断镜像新鲜度：disk.img 里 shell3.elf 目录项被标删（0xE5）后仍判定"已存在"→ vt spawn 永远 RETRY、F2 死 | ✅ `665636d`：新增 `root_file_present()` 校验根目录 8.3 项，缺失/损坏强制重建；另有 `check_vt_spawn_exhaustion` QEMU 场景（`ad51b42`） |
 
 ## 验证状态
 
@@ -96,8 +98,8 @@
 
 ## 建议修复顺序
 
-1. **N1**（VT_FB_BASE 搬到 0xE8000000）——一行常量改动，消除 VBE 模式下的堆/帧缓冲互踩
-2. **N2**（heap_split 用 heap_insert_free）——修复堆空闲链表截断
-3. **N3**（fat32_write_file 先写新后放旧）——修复覆盖写数据丢失
-4. N4、N5、N9、N11——小改动顺手清
-5. N6/N7/N8 涉及 ABI/异常框架语义，建议单独 PR 讨论
+1. ~~N1/N2/N3~~ ✅ 已全部修复
+2. **N11**（krealloc 补范围/magic 校验）、**N4**（COM3 超时真正 drop 或改文案）、**N9**（`paging_map_page` 拒绝覆盖已存在 PTE/大页）、**N16**（`paging_mm_create` 失败返回 NULL）、**N12/N14**（fat32 move/delete 先提交后清理）、shell_ring3 `cmd_write`/`parse_pid`——小改动一批清
+3. N5（mm 双重释放约定）、N6/N8（demand-map 与 ABI 语义）、N7（IDT default → panic）涉及框架语义，建议单独 PR
+4. N13（FAT32 簇分配 O(n²)）、N10（fd 表架构）工作量大，单独立项
+5. #28/#29/#30（ACPI、kernel shell、boot asm）建议单独审计
