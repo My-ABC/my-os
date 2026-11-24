@@ -91,8 +91,10 @@ disk carries `shell3.elf` at its root — the `disk.img` produced by
 `kernel.c`) auto-starts it in the foreground and respawns it every
 time it exits or is killed, so `make run` lands directly in the
 Ring 3 shell and never shows the kernel shell. The kernel shell is
-only reached when no disk is mounted or `shell3.elf` is missing or
-unloadable. Two virtual terminals (ttys) are provided by
+reached whenever vt 0 cannot host shell3 — no disk mounted,
+`shell3.elf` missing or unloadable, or vt 0's spawn permanently
+failing after retries are exhausted (see
+[15-virtual-terminals.md](15-virtual-terminals.md)). Two virtual terminals (ttys) are provided by
 `src/drivers/vt.c`: F1 selects vt 0 and F2 selects vt 1, each running
 its own `shell3.elf` instance concurrently. Only the visible terminal
 receives keyboard input; every terminal keeps a private screen

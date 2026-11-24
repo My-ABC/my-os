@@ -67,6 +67,7 @@ shell commands such as `echo` — plus `serial_getchar()` input. COM3
 (`serial3_putchar`/`serial3_print`) is a TX-only port that mirrors
 Ring 3 `IO_WRITE` output from both virtual terminals (interleaved).
 Both TX paths bound their LSR wait (~1M polls) so a missing UART
-cannot hang the kernel; a COM3 timeout logs one warning on COM1.
+cannot hang the kernel; on timeout the pending character is dropped
+and COM3 logs one warning on COM1.
 Most kernel diagnostics dual-write to VGA and COM1 so QEMU sessions
 can be scripted over a TCP socket.

@@ -58,5 +58,5 @@ COM1 轮询输出（`serial_print`、`serial_print_hex`、`serial_printf`）
 `serial_getchar()` 输入。COM3（`serial3_putchar`/`serial3_print`）是
 仅发送端口，镜像两个虚拟终端的 Ring 3 `IO_WRITE` 输出（相互交错）。
 两条 TX 路径的 LSR 等待都有上限（约 100 万次轮询），缺失 UART 不会
-挂死内核；COM3 超时会在 COM1 上打一条一次性警告。大多数内核诊断同
+挂死内核；超时的字符会被丢弃，COM3 并在 COM1 上打一条一次性警告。大多数内核诊断同
 时写 VGA 和 COM1，无头 QEMU 会话可通过串口 socket 驱动。
