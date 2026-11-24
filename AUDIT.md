@@ -35,7 +35,7 @@
 
 | # | 位置 | 问题 | 触发条件 | 状态 |
 |---|------|------|----------|------|
-| N4 | `serial.c:47-54` | COM3 超时打印 `"output dropped"` 警告后**仍然 `outb` 写出该字符**——警告与行为不符；COM1 超时则完全静默。且超时后每字符仍烧 ~1M 次 port 读。 | 无 COM3 后端的真机/部分 QEMU 配置 | ⬜ 二选一：超时后真正 drop（return），或改警告文案 |
+| N4 | `serial.c:47-54` | COM3 超时打印 `"output dropped"` 警告后**仍然 `outb` 写出该字符**——警告与行为不符；COM1 超时则完全静默。且超时后每字符仍烧 ~1M 次 port 读。 | 无 COM3 后端的真机/部分 QEMU 配置 | ✅ 已修：抽出 `serial_tx_wait`，超时即丢字符不再写端口；COM3 超时仍只警告一次，COM1 静默丢弃 |
 | N5 | `elf.c:120-124` + `ring3.c:204-221` | **mm 双重释放**：`ring3_schedule_internal` 失败路径已 `paging_mm_release(mm)`（含调用方传入的 mm），`elf_run_vt` 拿到非零返回又 `elf32_release_mm(mm)` 再放一次。两次释放之间 IRQ0 让出的窗口内，若槽位被新进程复用，第二次 release 会拆掉别人的地址空间。 | spawn 失败 + 精确时序 | ⬜ 修法：约定"schedule 失败不释放调用方 mm"或 elf_run_vt 不重复释放 |
 | N6 | `syscall.c:301-332` | `sys_user_buffer_ok`/`sys_copy_user_string` 要求**页已映射**，而栈只有栈顶一页预映射、其余靠 isr14 demand-map → `IO_READ`/`IO_WRITE` 对落在未触碰栈页上的缓冲/字符串返回 -1。mini-libc 当前用堆/静态缓冲所以没暴露，属潜伏 ABI 缺口。 | 用户程序把 IO 缓冲放在栈的低地址区 | ⬜ 修法：校验时把"permitted 但未映射"的页视为可 demand-map（调用 isr14 同款分配），或文档明确限制 |
 | N7 | `idt.c:9-15` | 除 #BP(3)/#PF(14) 外所有异常/中断走 `default_handler` = 打一行 VGA 错误后 `cli;hlt` 死循环——#DE/#GP/#SS 等内核异常**静默挂死**，无寄存器转储、无 panic。 | 任意未处理异常 | ⬜ 修法：default_handler 转 `panic_blue_screen`（需要 regs，需 asm 桩配合） |
@@ -75,7 +75,7 @@
 | 31 | `drivers/vbe.c:125-133` | `vbe_map_framebuffer` 无上限检查：超大模式 pitch*height 可顶到 KMAP 窗口 0xF0000000 | P3 ⬜ |
 | 32 | `drivers/vbe.c` | 非活跃 vt 光标像素冻结在 backing store（外观问题，切回后重画） | P3 ⬜ |
 | 33 | `shell_ring3.c:157-166` `parse_pid` | pid 解析 `pid*10` 无溢出检查，超长数字回绕后可能命中真实 pid → kill/fg 错进程 | P3 ⬜ |
-| 34 | `shell_ring3.c:807` `cmd_write` | 先 `fs_unlink` 再 `fs_open`：open 失败则原文件已丢 | P3 ⬜ |
+| 34 | `shell_ring3.c:807` `cmd_write` | 先 `fs_unlink` 再 `fs_open`：open 失败则原文件已丢 | P3 ✅ 已修：改为先 `fs_open`（fd 存路径）再 `fs_unlink`，open 失败不再破坏原文件 |
 | 35 | `shell_ring3.c:68-94` `split_line` | 未闭合引号落入普通分支，引号字符原样进入 argv | P3 ⬜ |
 | 36 | `syscall.c:334-379` `sysfs_readdir_ctx`/`sys_user_buffer_ok` | readdir 用静态 ctx（单核 OK）；buffer_ok 逐页 `paging_mm_get_phys`（每页一次 KMAP cli/sti），大 len 参数可被用户用于拖慢内核 | P3 ⬜ |
 | 37 | `serial.c:95-105` `serial_getchar` | COM1 RX 非阻塞读取，当前无内核调用方（保留备用） | P3 ⬜ |

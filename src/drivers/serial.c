@@ -25,33 +25,37 @@ void serial_init(void) {
 
 static int serial3_tx_timeout_warned;
 
+/* Returns 1 when the THR is ready, 0 on timeout (caller drops). */
+static int serial_tx_wait(uint16_t lsr_port) {
+    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+        if (inb(lsr_port) & 0x20) return 1;
+    }
+    return 0;
+}
+
 void serial_putchar(char c) {
     if (c == '\n') {
         serial_putchar('\r');
     }
-    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
-        if (inb(SERIAL_COM1 + 5) & 0x20) break;
-    }
+    if (!serial_tx_wait(SERIAL_COM1 + 5)) return;
     outb(SERIAL_COM1, (uint8_t)c);
 }
 
 void serial3_putchar(char c) {
     if (c == '\n') {
         c = '\r';
-        for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
-            if (inb(SERIAL_COM3 + 5) & 0x20) break;
-        }
+        if (!serial_tx_wait(SERIAL_COM3 + 5)) goto dropped;
         outb(SERIAL_COM3, (uint8_t)c);
         c = '\n';
     }
-    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
-        if (inb(SERIAL_COM3 + 5) & 0x20) break;
-        if (i + 1U == SERIAL_TX_TIMEOUT && !serial3_tx_timeout_warned) {
-            serial3_tx_timeout_warned = 1;
-            serial_print("[SER] COM3 TX timeout, output dropped\n");
-        }
-    }
+    if (!serial_tx_wait(SERIAL_COM3 + 5)) goto dropped;
     outb(SERIAL_COM3, (uint8_t)c);
+    return;
+dropped:
+    if (!serial3_tx_timeout_warned) {
+        serial3_tx_timeout_warned = 1;
+        serial_print("[SER] COM3 TX timeout, output dropped\n");
+    }
 }
 
 void serial3_print(const char* str) {
