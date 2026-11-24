@@ -107,17 +107,11 @@ static void heap_split(struct heap_block *block, uint32_t pages) {
     remainder->magic = HEAP_BLOCK_MAGIC;
     remainder->size = remaining * PAGE_SIZE - sizeof(struct heap_block);
     remainder->pages = remaining;
-    remainder->free = 1;
-    remainder->prev = block->prev;
-    remainder->next = block->next;
-    if (remainder->prev != 0) {
-        remainder->prev->next = remainder;
-    } else {
-        free_list = remainder;
-    }
-    if (remainder->next != 0) {
-        remainder->next->prev = remainder;
-    }
+    /* The allocated block was already unlinked by heap_remove_free, so
+     * its prev/next are zero — inheriting them would truncate the free
+     * list to just this remainder and orphan every other free block.
+     * Reinsert sorted instead. */
+    heap_insert_free(remainder);
     block->pages = pages;
     block->prev = 0;
     block->next = 0;
