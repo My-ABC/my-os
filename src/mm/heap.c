@@ -219,8 +219,16 @@ void *krealloc(void *ptr, size_t size) {
         return 0;
     }
 
-    struct heap_block *block = (struct heap_block *)((uint32_t)ptr - sizeof(struct heap_block));
-    if (block->magic != HEAP_BLOCK_MAGIC || block->free != 0U) {
+    uint32_t address = (uint32_t)ptr;
+    if (address < KERNEL_HEAP_START + sizeof(struct heap_block) ||
+        address >= KERNEL_HEAP_END) {
+        serial_print("[HEAP] Invalid pointer passed to krealloc\n");
+        return 0;
+    }
+
+    struct heap_block *block = (struct heap_block *)(address - sizeof(struct heap_block));
+    if (block->magic != HEAP_BLOCK_MAGIC || block->pages == 0U || block->free != 0U) {
+        serial_print("[HEAP] Invalid allocation passed to krealloc\n");
         return 0;
     }
 

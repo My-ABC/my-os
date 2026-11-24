@@ -42,7 +42,7 @@
 | N8 | `trap.c:62-66` | demand-map 的许可范围含 `sys_user_heap_contains`（0x1000000–0x40000000 整段）：访问**已 free 的堆页**（user_free 会 unmap）会被静默 demand-map 成新的零页而不是 fault → 掩盖堆 UAF；且按读写缺页一律给 RW 页。 | 进程读写已释放的堆内存 | ⬜ 修法：demand-map 只对"从未映射过"的页生效（需追踪），或收窄许可范围到栈/镜像 |
 | N9 | `paging.c:138-186` | `paging_map_page` 对已存在 PTE **静默覆盖**（旧物理页泄漏）——N1 的直接成因；且不检查 `PAE_PAGE_SIZE`，若某级是大页会把页表指针当物理页写 → 破坏任意内存（当前无大页，属潜伏）。 | 重复映射同一虚拟地址 | ⬜ 修法：映射前查旧 PTE，存在则拒绝或先 unmap；大页显式拒绝 |
 | N10 | `syscall.c` fd 表 / FS_READDIR | fd 表全局共享、进程退出不回收（上轮 #7 保留）；`FS_READDIR` 内核缓冲固定 4096，目录更大时**静默截断**返回成功。 | 多进程共用 fd；大目录 | ⬜ 文档已载 fd 限制；READDIR 截断建议返回已写字节数+截断标志或文档注明 |
-| N11 | `heap.c:218-275` `krealloc` | 与 `kfree` 不同，**没有堆范围/magic 边界校验**：`ptr` 任意值时 `block->magic` 读的是任意内核地址，碰巧匹配 `0x48454150` 则后续写 remainder 头 → 内存破坏。当前调用方都是可信内部代码。 | 未来出现不可信调用方 | ⬜ 修法：补 `kfree` 同款范围检查 |
+| N11 | `heap.c:218-275` `krealloc` | 与 `kfree` 不同，**没有堆范围/magic 边界校验**：`ptr` 任意值时 `block->magic` 读的是任意内核地址，碰巧匹配 `0x48454150` 则后续写 remainder 头 → 内存破坏。当前调用方都是可信内部代码。 | 未来出现不可信调用方 | ✅ 已修：补 `kfree` 同款范围 + magic/pages/free 校验，非法输入打印告警并返回 0 |
 | N12 | `fat32.c:228-237` `fat32_move` | 目标已存在时**先删 dst 再 insert**：insert 失败（目录满/短名冲突）→ dst 文件已丢。与 N3 同类"先破坏后提交"。 | mv 覆盖已存在文件且 insert 失败 | ⬜ 修法：insert 成功后再删旧 dst（需要两步提交或回滚） |
 | N13 | `fat32_core.c:86-101` `allocate_cluster` | 从簇 2 起线性扫描，每个候选簇都 `fat_next_cluster` → **每簇一次磁盘扇区读**，大盘分配是 O(n²) I/O。64MiB 测试盘无感，真实大盘会很慢。 | 大容量 FAT32 卷频繁写文件 | ⬜ 修法：扫描 FAT 扇区缓存/free-run 提示，或从上次分配点续扫 |
 | N14 | `fat32.c:104-118` `free_cluster_chain` / `fat32_delete_file` | 先 `free_cluster_chain` 后 `mark_entry_deleted`：mark 失败 → 目录项指向已释放簇（与 N3 同类，概率低）。 | mark 写盘失败 | ⬜ 低概率，记录 |
