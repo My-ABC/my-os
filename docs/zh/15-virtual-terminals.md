@@ -114,6 +114,15 @@ supervisor 退出 `vt_service` 循环改跑 ring0 内核 shell（`start_shell`�
   保存的 `eip` 2 字节使 `int 0x80` 重启）。否则单个阻塞在
   `IO_GETCHAR` 的进程会饿死内核空闲循环，`vt_service` 完全冻结。
 
+## 切换到无 shell 的终端
+
+`vt_do_switch` 在目标终端可见之前会重绘其备份屏幕：若目标 vt 没有
+存活的 shell3（`vt_shell_alive` 为假），就在该 vt 屏幕上居中绘制
+`[ waiting for shell3... ]` 提示（VGA 文本单元格，或经
+`vbe_vt_message` 绘制像素），而不是显示一帧陈旧/全黑画面让人误以为
+死机。vt 0 在回退到 ring0 内核 shell 后豁免——那块屏幕属于内核
+shell。shell3 重启并绘制后提示会被正常覆盖。
+
 ## 串口输出
 
 Ring 3 `IO_WRITE` 渲染到进程所属 vt 的缓冲，并把字符串镜像到

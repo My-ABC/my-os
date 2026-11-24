@@ -131,6 +131,17 @@ Two invariants keep this reliable:
   restarts). A lone process blocked in `IO_GETCHAR` would otherwise
   starve the kernel idle loop and freeze `vt_service` entirely.
 
+## Switching to a shell-less terminal
+
+`vt_do_switch` repaints the target's backing store before it becomes
+visible: if the target vt has no live shell3 (`vt_shell_alive` false),
+a centered `[ waiting for shell3... ]` notice is drawn into that vt's
+screen (VGA text cells, or pixels via `vbe_vt_message`) instead of
+showing a stale/blank frame that looks like a hang. vt 0 is exempt
+once it has fallen back to the ring0 kernel shell — that screen belongs
+to the kernel shell. Once shell3 respawns and draws, the notice is
+overwritten normally.
+
 ## Serial output
 
 Ring 3 `IO_WRITE` renders to the process's own vt buffer and mirrors

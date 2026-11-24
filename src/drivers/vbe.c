@@ -302,14 +302,10 @@ void vbe_set_color(uint8_t foreground, uint8_t background) {
     vbe_cur->background = vbe_palette_color(background);
 }
 
-void vbe_clear(void) {
+static void vbe_clear_selected(void) {
     uint32_t encoded_color;
     volatile uint8_t *framebuffer;
 
-    if (!vbe_available()) {
-        return;
-    }
-    vbe_select(vt_render_index());
     if (vbe_target == 0) return;
 
     encoded_color = vbe_encode_color(vbe_cur->background);
@@ -352,6 +348,47 @@ void vbe_clear(void) {
     vbe_cur->cursor_y = 0;
     vbe_cur->cursor_blink_ticks = 0;
     vbe_draw_cursor();
+}
+
+void vbe_clear(void) {
+    if (!vbe_available()) {
+        return;
+    }
+    vbe_select(vt_render_index());
+    vbe_clear_selected();
+}
+
+/* Paint a one-line notice into terminal `vt`'s own backing store.
+ * Used by vt.c when a switch lands on a terminal whose shell3 has not
+ * drawn anything yet, so the screen shows a message instead of black. */
+void vbe_vt_message(int vt, const char *msg) {
+    uint32_t columns;
+    uint32_t length = 0U;
+    uint32_t col;
+    uint32_t i;
+
+    if (!vbe_available() || msg == 0) {
+        return;
+    }
+    while (msg[length] != '\0') ++length;
+    vbe_select(vt);
+    vbe_clear_selected();
+    vbe_erase_cursor();
+    columns = vbe_state.width / ASCII_FONT_WIDTH;
+    col = length < columns ? (columns - length) / 2U : 0U;
+    for (i = 0; i < length; ++i) {
+        uint8_t index = (uint8_t)msg[i] & 0x7FU;
+        const uint8_t *glyph = ascii_font[index];
+        if (index != ' ' && glyph[0] == 0 && glyph[1] == 0 && glyph[2] == 0 &&
+            glyph[3] == 0 && glyph[4] == 0 && glyph[5] == 0 &&
+            glyph[6] == 0 && glyph[7] == 0) {
+            glyph = ascii_font['?'];
+        }
+        vbe_draw_glyph(glyph, col + i, 0U);
+    }
+    vbe_cur->cursor_x = 0U;
+    vbe_cur->cursor_y = 0U;
+    vbe_cur->cursor_blink_ticks = 0U;
 }
 
 void vbe_putchar(char c) {
