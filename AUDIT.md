@@ -1,105 +1,194 @@
 # MyOS 代码审计报告（P0–P3）
 
-审计范围：`src/`、`boot/`、`include/` 全量重读（约 1.2 万行）。mini-libc 按约定不在本次范围。
-行号基于 `feature/vt-f1-f2` 分支（最近复核 `c93278a`）。
+- 审计基线：`feature/vt-f1-f2` @ `b1989bf`（工作区干净，未新建 feature 分支）
+- 范围：`src/`、`include/`、`boot/` 全量重读（约 1.14 万行：boot 汇编入口、全部头文件、内核/内存/中断/Ring3/syscall/ELF/FAT32/驱动/串口/ACPI/VBE/VGA/VT/双 shell）
+- 方法：按 `.github/agents/my-os-kernel.agent.md` 的架构约束逐文件核对；对照 `regs.h`/`interrupt.asm`/`idt.c` 栈帧契约、VT/串口/KMAP/PDE 复用/内存所有权/syscall 用户指针边界逐项验证
+- 验证：本轮为文档审计，未改代码；已运行 `make build`（通过）与 `make test`（45 项通过）。未运行 `make test-qemu`
 
-严重度定义：**P0** 必坏 / **P1** 可能坏 / **P2** 隐患 / **P3** 风格。
-状态：✅ = 已修复；⬜ = 未修复（文档已记录或待后续 PR）。
+## 严重度定义
 
-本轮相对上一版的变化：完成了 mm/fs/acpi-adjacent/shell_ring3/trap/idt 的逐行审计，
-新发现 3 个 P1（虚拟地址冲突、堆空闲链表截断、FAT32 写路径数据丢失）和一批 P2/P3。
+- **P0 必坏**：现有正常路径必然损坏/死机。
+- **P1 可能坏**：特定但合法/可达输入会损坏、泄漏内核信息或 panic。
+- **P2 隐患**：正确性/一致性/可维护性风险，当前测试未覆盖或需要边界条件触发。
+- **P3 风格**：健壮性、命名、注释、非关键边界。
+
+状态：✅ 已修复 / ⬜ 未修复。
 
 ---
 
-## 一、P1 — 可能坏（本轮新发现）
+## P0
 
-| # | 位置 | 问题 | 触发条件 | 状态 |
-|---|------|------|----------|------|
-| N1 | `src/drivers/vt.c:21` vs `src/mm/heap.c:7` | **`VT_FB_BASE = 0xD0000000` 与 `KERNEL_HEAP_START = 0xD0000000` 完全重叠。** VBE 模式下 `vt_init` 先把两个终端的离屏帧缓冲映射到 0xD0000000 起；随后任何 `kmalloc`（`heap_next` 同样从 0xD0000000 起）通过 `paging_map_page` **无条件覆盖同一批 PTE**——fb 物理页被挤出映射（泄漏），堆块头写进帧缓冲区域，vt 切换时 memcpy 出来的是堆数据。kmain 的 heap 自检（kmalloc(100)）就足以触发。 | 任何 GRUB/VBE 启动 + 首次内核堆分配 | ✅ 已修（`018c4e0`+`a209efe`/`9fa802a`）：最终 `VT_FB_BASE=0xE8000000`、`VT_FB_LIMIT=0xF0000000`——位于堆窗口（0xD0000000–0xE0000000）与 ~4MiB scanout 之上、KMAP 槽位之下，内核镜像 headroom ~740MiB（0xD8000000 落在堆窗口内被否决；0xE8000000 方案曾撤回后又按用户决定恢复） |
-| N2 | `src/mm/heap.c:100-124` + `kmalloc:175-176` | **`heap_split` 摘除空闲块后继承的是已清零的 prev/next**：`heap_remove_free` 把 `block->next/prev` 置 0，`heap_split` 让 remainder 继承这两个 0，于是 `free_list = remainder`——**其他所有空闲块被孤立**（free=1 但不在链表上），永久泄漏 + 无法合并 → 堆随碎片化最终 OOM。仅当"拆分"发生（free block 比请求大）且链表中还有别的空闲块时触发；整块分配（remaining==0）不触发。 | 释放多个不同大小块后再次 kmalloc | ✅ 已修（`222ff5d`）：remainder 改走 `heap_insert_free` 有序重插 |
-| N3 | `src/fs/fat32.c:76-102` | **`fat32_write_file` 先 `free_cluster_chain(old)` 再分配/写新簇**：磁盘满（`allocate_cluster` 失败）或 `write_cluster` 中途失败时直接 return -1，但目录项仍指向**已被释放的旧簇** → 已有文件内容被毁（读到的是空闲簇/新文件数据）。 | 覆盖写一个已存在文件且磁盘空间不足 | ✅ 已修（`183752b`）：新簇链写完且目录项更新成功后才释放旧链 |
+无。未发现“正常使用必然损坏”的缺陷。
 
-## 二、P1 — 上轮已修（保持记录）
+---
 
-| # | 位置 | 问题 | 状态 |
-|---|------|------|------|
-| 1 | `syscall.c` IO_WRITE | 用户字符串指针未校验 → 内核 panic | ✅ `sys_copy_user_string` + 4096 上限，失败返回 -1 |
-| 2 | `syscall.c` IO_READ | `sys_gets` 无指针/size 校验 | ✅ `size<=0` 或 `sys_user_buffer_ok` 失败返回 -1 |
-| 3 | `syscall.c` 校验判据 | 初版用 range-permitted 判定，漏映射页 | ✅ `ac88eac`：改 `paging_mm_get_phys` 判定实际映射 |
-| 4 | `syscall.c` `user_realloc` | `ptr-20` 无范围校验直接解引用 → 内核 panic | ⬜ 保留为 `kfault.elf` panic 演示路径；正式修法见 #22 |
-| 8 | `vt.c` `spawn_failed` | 瞬时故障永久锁存 | ✅ `VT_SPAWN_RETRY` 可重试（~1Hz），ELF 错误才锁存；后续又加了每 vt 独立计数、5 次耗尽后 `switch_enabled=0` 禁 F 键、vt0 永久失败时 supervisor 回退 ring0 `start_shell()`（单向，需重启才能回 shell3）（`e15c148`/`9978b0a`） |
-| 13 | `serial.c` TX 等待 | 死等 LSR bit5 无超时 | ✅ `SERIAL_TX_TIMEOUT` 有界等待 |
-| 14 | `vt.c` F 键切换 | vt1 无 shell 时按 F2 显示黑屏，用户误以为死机 | ✅ `switch_enabled` 初始 0、首次 spawn 成功才置 1；`spawn_failed` 清零；vt0 F1 恒可用作 ring0 兜底（`9296cfb`，曾短暂用 placeholder 文案方案后被否决） |
+## P1（可能坏）
 
-## 三、P2 — 隐患
+### P1-1 用户堆元数据全局共享，但虚拟地址空间是每进程私有的 ⬜
 
-| # | 位置 | 问题 | 触发条件 | 状态 |
-|---|------|------|----------|------|
-| N4 | `serial.c:47-54` | COM3 超时打印 `"output dropped"` 警告后**仍然 `outb` 写出该字符**——警告与行为不符；COM1 超时则完全静默。且超时后每字符仍烧 ~1M 次 port 读。 | 无 COM3 后端的真机/部分 QEMU 配置 | ✅ 已修：抽出 `serial_tx_wait`，超时即丢字符不再写端口；COM3 超时仍只警告一次，COM1 静默丢弃 |
-| N5 | `elf.c:120-124` + `ring3.c:204-221` | **mm 双重释放**：`ring3_schedule_internal` 失败路径已 `paging_mm_release(mm)`（含调用方传入的 mm），`elf_run_vt` 拿到非零返回又 `elf32_release_mm(mm)` 再放一次。两次释放之间 IRQ0 让出的窗口内，若槽位被新进程复用，第二次 release 会拆掉别人的地址空间。 | spawn 失败 + 精确时序 | ✅ 已修：约定 `ring3_schedule_mm` 入口即接管 mm 所有权，所有失败路径（含参数校验/槽位满两个早退）统一释放；`elf_run_vt` 与 `cmd_ring3` 删除失败路径的二次释放，`ring3.h` 注释写明契约 |
-| N6 | `syscall.c:301-332` | `sys_user_buffer_ok`/`sys_copy_user_string` 要求**页已映射**，而栈只有栈顶一页预映射、其余靠 isr14 demand-map → `IO_READ`/`IO_WRITE` 对落在未触碰栈页上的缓冲/字符串返回 -1。mini-libc 当前用堆/静态缓冲所以没暴露，属潜伏 ABI 缺口。 | 用户程序把 IO 缓冲放在栈的低地址区 | ⬜ 修法：校验时把"permitted 但未映射"的页视为可 demand-map（调用 isr14 同款分配），或文档明确限制 |
-| N7 | `idt.c:9-15` | 除 #BP(3)/#PF(14) 外所有异常/中断走 `default_handler` = 打一行 VGA 错误后 `cli;hlt` 死循环——#DE/#GP/#SS 等内核异常**静默挂死**，无寄存器转储、无 panic。 | 任意未处理异常 | ⬜ 修法：default_handler 转 `panic_blue_screen`（需要 regs，需 asm 桩配合） |
-| N8 | `trap.c:62-66` | demand-map 的许可范围含 `sys_user_heap_contains`（0x1000000–0x40000000 整段）：访问**已 free 的堆页**（user_free 会 unmap）会被静默 demand-map 成新的零页而不是 fault → 掩盖堆 UAF；且按读写缺页一律给 RW 页。 | 进程读写已释放的堆内存 | ⬜ 修法：demand-map 只对"从未映射过"的页生效（需追踪），或收窄许可范围到栈/镜像 |
-| N9 | `paging.c:138-186` | `paging_map_page` 对已存在 PTE **静默覆盖**（旧物理页泄漏）——N1 的直接成因；且不检查 `PAE_PAGE_SIZE`，若某级是大页会把页表指针当物理页写 → 破坏任意内存（当前无大页，属潜伏）。 | 重复映射同一虚拟地址 | ⬜ 修法：映射前查旧 PTE，存在则拒绝或先 unmap；大页显式拒绝 |
-| N10 | `syscall.c` fd 表 / FS_READDIR | fd 表全局共享、进程退出不回收（上轮 #7 保留）；`FS_READDIR` 内核缓冲固定 4096，目录更大时**静默截断**返回成功。 | 多进程共用 fd；大目录 | ⬜ 文档已载 fd 限制；READDIR 截断建议返回已写字节数+截断标志或文档注明 |
-| N11 | `heap.c:218-275` `krealloc` | 与 `kfree` 不同，**没有堆范围/magic 边界校验**：`ptr` 任意值时 `block->magic` 读的是任意内核地址，碰巧匹配 `0x48454150` 则后续写 remainder 头 → 内存破坏。当前调用方都是可信内部代码。 | 未来出现不可信调用方 | ✅ 已修：补 `kfree` 同款范围 + magic/pages/free 校验，非法输入打印告警并返回 0 |
-| N12 | `fat32.c:228-237` `fat32_move` | 目标已存在时**先删 dst 再 insert**：insert 失败（目录满/短名冲突）→ dst 文件已丢。与 N3 同类"先破坏后提交"。 | mv 覆盖已存在文件且 insert 失败 | ⬜ 修法：insert 成功后再删旧 dst（需要两步提交或回滚） |
-| N13 | `fat32_core.c:86-101` `allocate_cluster` | 从簇 2 起线性扫描，每个候选簇都 `fat_next_cluster` → **每簇一次磁盘扇区读**，大盘分配是 O(n²) I/O。64MiB 测试盘无感，真实大盘会很慢。 | 大容量 FAT32 卷频繁写文件 | ⬜ 修法：扫描 FAT 扇区缓存/free-run 提示，或从上次分配点续扫 |
-| N14 | `fat32.c:104-118` `free_cluster_chain` / `fat32_delete_file` | 先 `free_cluster_chain` 后 `mark_entry_deleted`：mark 失败 → 目录项指向已释放簇（与 N3 同类，概率低）。 | mark 写盘失败 | ⬜ 低概率，记录 |
-| N15 | `stdio.c:264` `sprintf` | **完全无边界检查**（`vsprintf_helper` 往 `str` 无限写）。内核内部调用方需自觉；`gets`（内核 shell 用）同样无信号/让出。 | 误用 sprintf 到小缓冲 | ⬜ 内部函数，建议加注释或换 snprintf |
-| N16 | `paging.c:257-292` `paging_mm_create` | `mm_ensure_pt` 失败时 `continue` 仍返回 mm——低 4MiB 只映一半，进程带"残缺"地址空间运行。 | PMM 耗尽时 spawn | ⬜ 概率低；可改为失败即释放槽位返回 NULL |
-| N17 | `trap.c:18-37` `isr14_demand_map` | `memset((void*)page)` 通过**当前 CR3** 写用户页——依赖"缺页进程必为当前进程"（单核下成立）；且对镜像范围内的缺页也给 RW 页（镜像页本应按段权限，实际加载时已映射，属死代码路径）。 | 未来 SMP/嵌套 fault | ⬜ 单核下正确，记录不变量 |
-| N18 | `fat32_dir.c` 回调约束 | `fat32_list_directory` 用共享静态 cluster 缓冲，回调内禁止文件 I/O——`sysfs_readdir_cb` 已遵守，但属易碎约束。 | 未来回调里加文件操作 | ⬜ 架构约束，文档已载 |
+`src/os/syscall.c:126-285`：`user_heap_next` 与 `user_free_list` 是全局变量，而 `user_alloc/user_free/user_realloc` 使用的是 `ring3_current_mm()` 的私有 `user_mm`。
 
-## 四、P2/P3 — 其余记录项（合并上轮未修项）
+- 进程 A `MEMORY_FREE` 后，`user_free_list` 指向 A 地址空间中的 `user_block`；进程 B `MEMORY_MALLOC` 复用时，`user_find_free/user_restore_pages` 在 B 的 CR3 下解引用该用户虚拟地址。若 B 未映射同一 VA，会被 `isr14` demand-map 成全零页（`src/os/trap.c`），读到 `pages=0,next=0`；若 B 恰好映射了同 VA，则读到无关数据。
+- `user_heap_next` 全局递增使各进程堆 VA 不复用，浪费 1 GiB 用户地址空间；但真正危险是 free list 跨 mm。
+- `user_free` 只校验 `magic/free`，不校验 `block->pages` 上界、`address+pages*PAGE_SIZE<=USER_HEAP_END`，也不校验页是否属于该 block；`paging_mm_unmap`（`src/mm/paging.c`）未像 `paging_mm_get_phys` 那样检查 `USER_MM_SPACE_LIMIT`，对 `>=0x40000000` 的地址会按 `&0x1FF` 回绕到 pd0/pt0，可能误清低地址映射。
 
-| # | 位置 | 问题 | 级别 |
-|---|------|------|------|
-| 5 | `syscall.c` IO_READ/IO_GETCHAR | 无前台检查，后台进程可抢按键 | P2 ⬜ 文档已载 |
-| 6 | `syscall.c` `sys_gets` | 方向键控制字节 0x01–0x04 原样入缓冲并回显 | P3 ⬜ 文档已载 |
-| 9 | `vt.c` `vt_do_switch` | 任一侧 fb 缺失拒绝切换，仅串口日志 | P2 ⬜ 文档已载 |
-| 10 | `vt.c` `vt_alloc_fb` | 中途失败泄漏已映射页（叠加 N1 更严重） | P2 ⬜ 文档已载 |
-| 11 | `vt.c` `vt_pending` / `ring3.c` `foreground_pid` | ISR 写/服务读非原子，单核窗口极窄 | P3 ⬜ 文档已载 |
-| 12 | `vt.c` `vt_spawn_shell` | spawner 全程关中断（有意为之） | P3 ⬜ |
-| 15 | `keyboard.c` | F1/F2 只认 scan set 1；E1 前缀（Pause）未处理会被当普通扫描码 | P3 ⬜ |
-| 17 | `vga.c`/`vbe.c` | 后台进程 IO_CLEAR/光标操作作用于自己 vt 缓冲（正确但无前台检查） | P3 ⬜ |
-| 19 | `ring3.c` `ring3_kill` | 对 current 只标 DEAD，回收靠下个 tick | P3 ⬜ |
-| 20 | `elf.c` `elf_run` | `image_start/end=0` 调用方（内嵌 demo/PROC_RUN_USERCODE）不注册用户范围，demand-map/保护检查对其部分失效 | P2 ⬜ |
-| 22 | `paging.c` `paging_mm_unmap`/`paging_try_reclaim_page_table` | 回收 PT 后 `paging_flush_tlb(0)` 只刷 VA 0 一个 TLB 项；单核无 PCID 时 CR3 切换即全刷，实际无害但写法误导 | P3 ⬜ |
-| 24 | `pmm.c:217-225` | `pmm_alloc_page_at_or_above`（仅 `PMM_QEMU_HIGHMEM_TEST`）非 wrap 模式下 `frame>=total→0` 回绕后仍按 limit 扫描，可能分配到低于 minimum 的帧 | P3 ⬜ 测试专用 |
-| 26 | `fat32.c` `fat32_read_file` | `*size` 截断到 buffer_size 且返回 0（成功）——>1MiB 文件被静默截断；write 路径有 `FAT32_MAX_FILE_SIZE` 检查拒绝超限 | P3 ⬜ 调用方需自行判断 |
-| 27 | `stdio.c` `gets`/`sprintf` | 内核侧无校验/无界（见 N15） | P3 ⬜ |
-| 28 | `drivers/acpi.c` | 553 行 ACPI 解析本轮只做了 grep 级排查，未逐行审计 | P2 ⬜ 建议单独审计 |
-| 29 | `shell/shell.c` | 内核 shell 行编辑与 shell_ring3 同构，本轮未逐行重读（shell_ring3 已读） | P2 ⬜ |
-| 30 | `boot/*.asm` + `interrupt.asm` | 中断帧/TSS/trap gate 合约靠 QEMU 集成测试背书，未逐指令复核 | P2 ⬜ |
-| 31 | `drivers/vbe.c:125-133` | `vbe_map_framebuffer` 无上限检查：超大模式 pitch*height 可顶到 KMAP 窗口 0xF0000000 | P3 ⬜ |
-| 32 | `drivers/vbe.c` | 非活跃 vt 光标像素冻结在 backing store（外观问题，切回后重画） | P3 ⬜ |
-| 33 | `shell_ring3.c:157-166` `parse_pid` | pid 解析 `pid*10` 无溢出检查，超长数字回绕后可能命中真实 pid → kill/fg 错进程 | P3 ⬜ |
-| 34 | `shell_ring3.c:807` `cmd_write` | 先 `fs_unlink` 再 `fs_open`：open 失败则原文件已丢 | P3 ✅ 已修：改为先 `fs_open`（fd 存路径）再 `fs_unlink`，open 失败不再破坏原文件 |
-| 35 | `shell_ring3.c:68-94` `split_line` | 未闭合引号落入普通分支，引号字符原样进入 argv | P3 ⬜ |
-| 36 | `syscall.c:334-379` `sysfs_readdir_ctx`/`sys_user_buffer_ok` | readdir 用静态 ctx（单核 OK）；buffer_ok 逐页 `paging_mm_get_phys`（每页一次 KMAP cli/sti），大 len 参数可被用户用于拖慢内核 | P3 ⬜ |
-| 37 | `serial.c:95-105` `serial_getchar` | COM1 RX 非阻塞读取，当前无内核调用方（保留备用） | P3 ⬜ |
+影响：多 Ring3 进程同时使用 mini-libc 堆时可能映射错误页、泄漏 PMM 页或破坏其它进程堆。建议：把 user heap free list/next 放进 `struct user_mm`（或按 mm 分链），并在 `user_free/user_realloc` 校验 block 范围、pages 上界与 `USER_HEAP_END`，同时给 `paging_mm_unmap` 补 `virtual_addr < USER_MM_SPACE_LIMIT` 检查。
 
-## 五、测试基建修复记录
+### P1-2 `user_realloc` 在校验前解引用用户可控指针 ⬜
 
-| # | 位置 | 问题 | 状态 |
-|---|------|------|------|
-| T1 | `test/integration/qemu_session.py` | COM3 迁移后三次修复：加 COM3 后端 → wait_for 双 buffer → COM1/COM3 分缓冲防行内交错 | ✅ |
-| T2 | `fault_demo.asm` + `page_fault_scenarios.py` | kfault 前提失效后改用 `MEMORY_REALLOC` 坏指针 | ✅ |
-| T3 | `test/mini-libc/run_tests.py` | `serial_text()` 只读 COM1，Ring3 DONE 行在 COM3 → 全部误报 "no DONE line" | ✅ `e03d9b7`：新增 `serial_all_text()` |
-| T4 | `Makefile` `disk` 目标 + `fat32_image.py` | 仅时间戳判断镜像新鲜度：disk.img 里 shell3.elf 目录项被标删（0xE5）后仍判定"已存在"→ vt spawn 永远 RETRY、F2 死 | ✅ `665636d`：新增 `root_file_present()` 校验根目录 8.3 项，缺失/损坏强制重建；另有 `check_vt_spawn_exhaustion` QEMU 场景（`ad51b42`） |
+`src/os/syscall.c:258-270`：`user_realloc(ptr,size)` 直接计算 `block=ptr-sizeof(struct user_block)` 并读取 `block->magic/block->free`，没有先做 `user_free` 同款的 `USER_HEAP_START..USER_HEAP_END` 范围检查。`MEMORY_REALLOC` 的 `a1` 完全由用户控制；`kfault` 仍保留 `MEMORY_REALLOC` 坏指针作为 panic demo。
 
-## 验证状态
+- 指向未映射地址 → 内核页错误 panic；指向可控用户内存且伪造 `USER_BLOCK_MAGIC` → 可能让 `memcpy(new_ptr, ptr, copy_size)` 从任意地址复制到用户（信息泄漏）或误释放。
+- 这是 syscall ABI 边界缺陷，不只是演示路径。建议：与 `user_free` 一致先做范围检查，再校验 magic/free；demo 另找稳定触发方式。
 
-- `make build` ✓、`make test` 45 项 OK
-- `make test-qemu`：主套件全 ✓ PASS（最后一轮 kfault 场景在 T2 修复后通过）
-- `make test-libmyc`：**18/18 suites ALL PASS**（T3 修复后实测）
-- mini-libc：按约定未审计
+### P1-3 `krealloc` 缺少与 `kmalloc` 相同的 `size` 上限检查，可回绕出巨大 `block->size` ⬜
+
+`src/mm/heap.c:157-163` `kmalloc` 有 `requested > 0xFFFFFFFFU - sizeof(struct heap_block)` 保护；`src/mm/heap.c:212-235` `krealloc` 在 `requested != 0` 后直接 `heap_pages_for_size(requested)`，没有该上限。
+
+- `requested` 接近 `0xFFFFFFFF` 时，`heap_pages_for_size` 内部 `size + sizeof(struct heap_block)` 回绕，`new_pages` 可能很小；若 `new_pages <= block->pages`，走 `block->size = requested` 的收缩分支并返回原指针。此后 `copy_size = min(block->size, requested)` 可把 `requested` 当作有效大小，后续 `krealloc`/`memcpy` 会按远超实际分配的大小读写内核堆。
+- 当前调用方可信，属于潜在内核堆溢出。建议：`krealloc` 入口复用 `kmalloc` 的上限判断，或让 `heap_pages_for_size` 返回 0/失败。
+
+### P1-4 ELF 装载把合法 `PT_LOAD` 接受到 3 GiB，但 `user_mm` 只映射低 1 GiB，段 `>=0x40000000` 会在切 CR3 后 memset 触发内核保护错误 ⬜
+
+`src/os/elf.c:41-49` 用 `USER_SPACE_END`（`0xC0000000`）校验 `vaddr/memsz`；`src/mm/paging.c` 的 `paging_mm_map` 对 `virtual_addr >= USER_MM_SPACE_LIMIT`（`0x40000000`）直接拒绝映射，但 `elf32_load` 不检查每页 `paging_mm_map` 是否成功。
+
+- 恶意/畸形 ELF 只要 `PT_LOAD.vaddr` 落在 `[0x40000000,0xC0000000)`，`image_start..image_end` 会包含未映射页；`elf32_load` 切到目标 CR3 后 `memset`（`src/os/elf.c:81-85`）以 CPL0 访问未映射用户页，`isr14` 判为非法内核访问并 `panic_blue_screen`。
+- 跨 `0x40000000` 边界的镜像同样会在高半段 memset 时 panic。建议：ELF 校验与 `ring3_user_range_permitted` 统一使用 `USER_MM_SPACE_LIMIT`，并逐页确认 `paging_mm_map` 成功。
+
+### P1-5 FAT32/ATA 全局缓冲与 fd 表非重入，IRQ0 可在 kernel shell FAT 操作中途切到 Ring3 进程再进入 FAT32 ⬜
+
+`src/fs/fat32_core.c:6-8`：`g_sector/g_cluster/g_fs` 是全局静态缓冲；`src/os/syscall.c:108-116` `sysfs_fds` 也是全局 fd 表；`g_cwd`/FAT32 路径状态同样全局共享。
+
+- 用户态 FAT32 syscall 期间，IRQ0 打断的是内核态 syscall 代码，其 IRQ0 `frame->cs` 为内核 CS，`ring3_timer_switch` 会原地返回、不会切走；但 **kernel shell / supervisor 上下文**（`current_process < 0`）执行 `cmd_ls/cat/cp/run/disk` 时，IRQ0 可以切到 READY 的 Ring3 进程。该进程随后可通过 syscall 再进入 FAT32，覆盖 `g_sector/g_cluster/g_fs/g_cwd/sysfs_fds`；回到被抢占的 kernel shell 后继续使用已被覆盖的簇缓冲/目录状态。
+- 触发条件不是理论性的：vt0 回退到 ring0 shell 时，vt1 的 shell3 仍可能 READY/RUNNING；或 supervisor 空闲时其它 vt 有活动进程。`vt_spawn_shell` 已特意关中断规避同类问题（`src/drivers/vt.c:149-158`），但 kernel shell 的 FAT32 命令没有等价保护。
+- 建议：给 FAT32/ATA 操作加“非重入”保护（如全局 FS 锁 + IRQ 关闭临界区），或把 `g_sector/g_cluster` 改为调用方提供的缓冲；至少在 kernel shell 的 FAT32 命令入口保存/恢复共享状态并关中断。
+
+---
+
+## P2（隐患）
+
+### P2-1 `IO_READ/IO_WRITE` 只接受“已映射”页，未 demand-map 的用户栈页会被拒绝 ⬜
+
+`src/os/syscall.c:291-332`：`sys_user_buffer_ok/sys_copy_user_string` 用 `paging_mm_get_phys` 实际映射检查，而不是 range permission。Ring3 栈只预映射顶页（`src/os/ring3.c` schedule 路径），更低栈页靠 `isr14` demand-map。结果：指向合法但尚未触碰的栈缓冲区会返回 `-1`，而不是先 fault-in。
+
+建议：要么文档化“syscall buffer 必须已提交”，要么在 buffer 校验中允许 `ring3_user_range_permitted` 的栈/镜像页并由复制路径处理缺页（注意不能在内核态 memcpy 缺页）。
+
+### P2-2 未注册异常仍 `cli/hlt`，不走 `panic_blue_screen` ⬜
+
+`src/arch/x86/idt.c:9-15`：默认 handler 对未单独实现的异常/IRQ 直接停机；`isr14` 非法内核访问会 panic，但 `#GP/#UD/#NM` 等仍静默挂起。调试时难以区分“死机”与“panic”。
+
+建议：默认 handler 至少 `panic_blue_screen`（或记录寄存器后 panic），保持 boot/IDT 契约测试同步。
+
+### P2-3 `isr14` demand-map 对整个用户堆区一律 RW 映射，掩盖 UAF/野指针 ⬜
+
+`src/os/trap.c`/`src/mm/paging.c`：`sys_user_heap_contains` 命中 `0x1000000..0x40000000` 即分配并映射 RW 用户页，不区分该 VA 是否由 `user_alloc` 分配、是否属于当前 block、是否应为只读。后果：
+
+- 对已释放/未分配堆 VA 的访问不会 fault，破坏 `free=1` 语义；
+- 读错误用 `MEMORY_*` 前先 fault-in 的零页会通过 `sys_user_buffer_ok`，把“未提交”变成“已映射”；
+- 与 P1-1 叠加，跨进程 free list 解引用会静默建零页。
+
+建议：demand-map 至少区分 stack/image/heap subrange，或记录“已提交堆页”位图，仅允许已分配页 fault-in。
+
+### P2-4 `paging_map_page`/`paging_mm_map` 无条件覆盖已有 PTE，且不拒绝 2 MiB 大页 ⬜
+
+`src/mm/paging.c`：内核 `paging_map_page` 与用户 `paging_mm_map` 都直接写 `pt->entries[pt_index]`，不检查旧 PTE；当 PDE 已是 `PAE_PAGE_SIZE` 大页时，`paging_map_page` 会把 PDE 值当 PT 物理地址写 PTE，破坏映射。当前多数调用点依赖“新地址未映射”约定，缺少防御。
+
+建议：映射前检查 `paging_mm_get_phys/paging_get_page_physical`；对已存在映射返回错误或要求先 unmap；对大页 PDE 拒绝或先 split。
+
+### P2-5 全局 `sysfs_fds` 不回收、`FS_READDIR` 4 KiB staging 截断、`FS_READ/FS_WRITE` 每次整文件重读 ⬜
+
+`src/os/syscall.c:108-116,334-453`：
+
+- fd 表只有 8 项且进程退出不清理（`release_process_resources` 未见关闭 fd）；fd 号在进程间共享，PID 复用/多进程会看到彼此 fd。
+- `FS_READDIR` 用固定 `kmalloc(4096)` staging，目录列表超长时 `sysfs_readdir_cb` 静默丢弃尾部记录（`ctx->len+need>cap` 直接 return），调用方无法区分“目录结束”与“被截断”。
+- `sysfs_fread` 每次 `FS_READ` 都 `fat32_read_file` 整文件到 1 MiB 内核缓冲再拷贝 chunk；`sysfs_fwrite` 每次都整文件读出-拼接-整文件写回。chunked I/O 是 O(file_size) 每次，`cat`/`write` 大文件退化为 O(n²) 磁盘 IO。
+
+建议：fd 表挂到 `user_mm`/进程并在 release 时关闭；readdir 返回“是否截断”；read/write 维护文件偏移的流式路径或缓存簇链。
+
+### P2-6 FAT32 move/delete 仍先释放簇链再删目录项，失败会留下悬空目录项 ⬜
+
+`src/fs/fat32.c`/`src/fs/fat32_dir.c`：`fat32_move` 删除目标项后再插入源项；`fat32_delete_file`/`fat32_remove_directory_internal` 先 `free_cluster_chain` 再 `mark_entry_*_deleted`。若目录项更新失败（FAT 写错、目录满、断电窗口），目录项仍指向已释放簇，后续访问得到 BAD/FREE 链。
+
+N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍是非事务性的。建议：删除路径改为“先标记删除/改名，成功后释放簇链”，或失败时回滚 FAT 项。
+
+### P2-7 `allocate_cluster` 对每个候选簇都重读 FAT，整体 O(n²) ⬜
+
+`src/fs/fat32_core.c:86-100`：线性扫描 + 每簇 `fat_next_cluster`（读一个 FAT 扇区）+ `fat_set_cluster`（再读写 FAT/备份）。大 FAT32 卷分配/扩容会非常慢。
+
+建议：缓存 FAT 空闲提示/按 FAT sector 缓存扫描，避免每簇重复读盘。
+
+### P2-8 `paging_mm_create` 对低 4 MiB borrowed 页建立失败时静默 `continue`，返回不完整 mm ⬜
+
+`src/mm/paging.c`：创建用户 mm 时复制低身份页为 borrowed；`mm_ensure_pt` 失败只 `continue`，最终仍返回 `mm`。结果 mm 缺低半映射但 `in_use=1`，后续 `elf32_load/ring3_schedule` 可能在缺页地址上跑，或把缺页误判为“镜像未占用”。
+
+建议：任一必要 pt 分配失败应释放已分配页表并返回 NULL，或至少记录失败位。
+
+### P2-9 `vt_alloc_fb` 中途 `pmm_alloc_page` 失败会泄漏已映射页，且 `fb_ready` 仍可能置位 ⬜
+
+`src/drivers/vt.c:262-278`：循环映射 backing store 时，失败直接 `return -1`，已映射的物理页既未记录也未回收；`vts[vt].fb_ready` 只在全部成功后置 1，但部分映射页仍留在页表中成为无主内存。
+
+建议：失败路径按已映射页数 unmap+free；或先按 `pages` 预留/提交成功再置 `fb_ready`。
+
+### P2-10 扫描码集 2 的修饰/锁定键释放处理顺序错误 ⬜
+
+`src/drivers/keyboard.c:196-264`：`0xF0` 只置 `release=1` 后 return；下一字节若是 Shift `0x2A/0x36`、Caps `0x3A`、Num `0x45`、Ctrl `0x14`，会先命中“按下/切换”分支并 `return`，根本走不到 `current_scancode_set==2 && release` 的丢弃逻辑。结果：set2 下松开 Shift 会把 `shift_pressed` 再置 1（卡住），Caps/Num Lock 断码会再次翻转。
+
+默认 set1 不受影响；启用 `SCANCODE_SET=2` 时输入状态损坏。建议：在处理任何 set2 断码前先检查 `release` 前缀并消费整组断码。
+
+### P2-11 `sysfs_fwrite` 的 `fd->offset` 与全局文件大小语义在多进程/多 fd 下不一致 ⬜
+
+`src/os/syscall.c:422-453`：`FD` 只存 `offset/size/path`，`FS_WRITE` 永远“读整文件-按 offset 拼接-写整文件”。两个 fd 指向同一文件、或文件被其它进程改写后，`old_size/needed` 会按当前文件而非打开时快照计算，可能覆盖并发写入；`fd->size` 在 `FS_READ` 后被更新但 `FS_WRITE` 不用它判断 EOF/截断。
+
+与 P2-5 的全局 fd 表叠加，属于一致性风险。建议：fd 增加 open 时 size/flags 快照或改为真正的文件偏移写路径。
+
+---
+
+## P3（风格/次要健壮性）
+
+1. `src/drivers/serial.c:44-59`：COM3 `serial3_putchar('\n')` 分两次等 THR，第一次成功第二次超时时会留下孤立 `\r`；影响仅是输出美观。
+2. `src/lib/stdio.c`：`sprintf` 无界写入调用方 buffer；`int_to_str/int_to_str_padded` 对 `INT_MIN` 的 `-value` 有 UB 风险；内核 `gets` 走 `keyboard_wait_key` 不经过 `sys_keyboard_wait_yield` 的让出路径（仅 kernel shell 使用）。
+3. `src/drivers/keyboard.c`：`alt_pressed` 声明后未使用；set1 `apply_modifiers` 对 Caps+Shift 仍输出大写；`keyboard_send_command_with_response` 未使用（编译警告）。
+4. `src/shell/shell.c`/`shell_ring3.c`：`split_line` 未闭合引号按字面量处理（与注释一致但仍是边界）；`parse_pid`/PID 解析在 `shell.c` 有溢出保护而 `shell_ring3.c:157-166` 的 `parse_pid` 未做 `pid*10` 溢出检查；`shell_ring3 cmd_bg` 不校验 pid 是否存在/是否真为后台，`bg <bad>` 也打印成功。
+5. `src/fs/fat32_name.c`：LFN 只支持 ASCII，非 ASCII UTF-16 会折叠成 `?`，可能造成不同长名映射到同一短名/同一显示名。
+6. `src/fs/fat32.c`：`fat32_read_file` 在 buffer 不足时返回成功并把 `*size` 截断为实际复制长度；调用方若不比较 size 与文件长度会静默截断（`cmd_cat` 64 KiB buffer 即如此）。
+7. `src/drivers/vbe.c:125-133`：`vbe_map_framebuffer` 按 `pitch*height` 映射到 `0xE0000000`，无上限/重叠检查；极端模式可能覆盖 `0xE8000000` VT backing 或 `0xF0000000` KMAP。`pitch*height` 也可能 32-bit 回绕。
+8. `src/drivers/vt.c`：`vt_fb_stride` 计算失败只打印日志，已 spawn 的 vt 仍会置 `switch_enabled`，F 键请求会被接受但 `vt_do_switch` 因 backing 缺失拒绝，用户只看到 serial 日志。
+9. `src/mm/paging.c`：`paging_try_reclaim_page_table` 回收页表后只 `flush_tlb(0)`，未按需刷其它地址；`paging_mm_unmap` 缺 `USER_MM_SPACE_LIMIT` 检查（与 P1-1 相关）。
+10. `src/mm/pmm.c`：`pmm_get_free_frames` 每次 O(位图全扫)，`g_pmm.used_frames` 维护但未被查询路径使用；高位 `pmm_alloc_page_at_or_above` 只在测试宏路径验证。
+11. `src/drivers/acpi.c`：已全量重读。RSDP/FADT/DSDT 定位依赖固件表长度与签名，AML `_S5` 解析是启发式且未做完整 AML 边界校验；reset/shutdown 走多级 fallback，失败最终 `hlt`。固件可信前提下可接受，建议后续加表长度/checksum 复核。
+12. `src/drivers/rtc.c`：`rtc_read_time` 未校验 month/day 范围；`rtc_convert_timezone` 对极大 `offset_seconds` 会长循环；`rtc_to_unix_timestamp` 在 RTC 年份 <1970 时结果不可靠。
+13. `src/os/panic.c`/`panic_blue_screen`：倒计时会 `sti` 等 PIT；若 panic 发生在 `current_process<0` 且仍有 READY Ring3 进程，IRQ0 理论上可切走显示 panic 的上下文。边界场景，建议 panic 路径关中断 busy-wait 或屏蔽调度。
+14. `boot/*.asm`/`gdt/idt`：32-bit protected mode 下 TSS 描述符为 8 字节，DF TSS(0x30) 与普通 TSS(0x28) 不重叠；`regs.h` 与 `interrupt.asm` 栈帧契约有 host 侧测试覆盖。无新增 P0-P2。
+
+---
+
+## 已复核为已修复/不再成立的历史项
+
+以下条目本轮对照当前源码确认状态，不再按未修复重复计入：
+
+- N1 VT framebuffer 与内核堆重叠：已修，`VT_FB_BASE=0xE8000000` 且有 `#error` 约束（`src/drivers/vt.c:17-32`）。✅
+- N2 `heap_split` 截断 free list：已修，remainder 走 `heap_insert_free` 有序重插（`src/mm/heap.c:100-118`）。✅
+- N3 FAT32 覆盖写先放旧链：已修，`fat32_write_file` 先写新链/更新目录项再释放旧链（`src/fs/fat32.c`）。✅
+- `IO_WRITE/IO_READ` 用户指针：已修，`sys_copy_user_string`/`sys_user_buffer_ok` 有界校验（`src/os/syscall.c:291-332,468-499`）。✅
+- `user_realloc`/`krealloc` 的“完全无校验”：`kfree/krealloc` 已加范围+magic+pages+free 检查（`src/mm/heap.c:176-195,222-233`）；但 `user_realloc` 仍缺入口范围检查，见 P1-2，`krealloc` 仍缺 size 上限，见 P1-3。⬜（部分）
+- VT spawn 失败/重试/vt0 回退：已实现 `VT_SPAWN_RETRY`、重试上限、永久失败关 F 键、vt0 回退 ring0 shell（`src/drivers/vt.c`）。✅
+- shell3 `cmd_write` 先 unlink 后 open：已修为先 open 再 unlink（`src/shell/shell_ring3.c:807-820`）。✅
+- serial TX timeout 仍写：已修，超时丢弃并只告警一次（`src/drivers/serial.c:24-59`）。✅
+- `ring3_schedule_mm` mm 双重释放：已修，schedule 接管所有权，失败路径已释放（`src/os/ring3.c`/`src/os/elf.c:129-135`）。✅
+- `sys_keyboard_wait_yield` 饿死 `vt_service`：已修，无条件让出到 kernel idle frame（`src/os/syscall.c:56-67`）。✅
+- COM1/COM3 职责混用：COM1 诊断/kernel shell，COM3 镜像 `IO_WRITE`，保持分离（`src/drivers/serial.c`/`syscall.c:485-487`）。✅
+
+---
 
 ## 建议修复顺序
 
-1. ~~N1/N2/N3~~ ✅ 已全部修复
-2. **N11**（krealloc 补范围/magic 校验）、**N4**（COM3 超时真正 drop 或改文案）、**N9**（`paging_map_page` 拒绝覆盖已存在 PTE/大页）、**N16**（`paging_mm_create` 失败返回 NULL）、**N12/N14**（fat32 move/delete 先提交后清理）、shell_ring3 `cmd_write`/`parse_pid`——小改动一批清
-3. N5（mm 双重释放约定）、N6/N8（demand-map 与 ABI 语义）、N7（IDT default → panic）涉及框架语义，建议单独 PR
-4. N13（FAT32 簇分配 O(n²)）、N10（fd 表架构）工作量大，单独立项
-5. #28/#29/#30（ACPI、kernel shell、boot asm）建议单独审计
+1. **P1-4 ELF 上限**：把 ELF 段校验收敛到 `USER_MM_SPACE_LIMIT` 并逐页检查 `paging_mm_map`，否则畸形镜像可稳定 panic。
+2. **P1-1/P1-2 用户堆**：user heap 元数据按 mm 隔离 + `user_free/user_realloc` 完整范围/pages 校验 + `paging_mm_unmap` 上限检查。
+3. **P1-3 `krealloc` size 上限**：与 `kmalloc` 对齐，消除回绕。
+4. **P1-5 FAT32/ATA 重入**：为 kernel shell 与 Ring3 并发 FS 加临界区/缓冲隔离。
+5. **P2-1/P2-3 syscall buffer 与 demand-map**：明确“已提交页”语义，避免栈页误拒与堆 UAF 被掩盖。
+6. **P2-4 页表覆盖**：`paging_map_page/paging_mm_map` 增加冲突检测。
+7. **P2-5/P2-11 fd/FS 语义**：fd 随进程回收，readdir/report 截断，read/write 偏移语义。
+8. **P2-6 FAT32 事务顺序**：delete/move 改为“先提交目录项、后释放簇链”。
+9. **P2-7/P2-8/P2-9/P2-10**：FAT 分配性能、mm 创建失败原子性、VT backing 泄漏、set2 键盘状态。
+10. **P3**：按上表逐项清理；ACPI/RTC 固件解析加固可随后续硬件兼容工作一起做。
