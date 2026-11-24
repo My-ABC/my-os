@@ -91,10 +91,15 @@ stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
 拉起。内核 shell 固定在 vt 0，仅当未挂载磁盘或 `shell3.elf` 缺失
 时才可达。
 
-spawner 的失败按返回码分类：`VT_SPAWN_RETRY`（磁盘未挂载、文件缺
-失、内存分配压力、进程表已满）按 PIT tick 至多每秒重试一次且不锁
-存；其他任何非零返回（ELF 解析/加载错误）置 `spawn_failed`，永久
-停止该 vt 的重启尝试。
+spawner 的失败按返回码分类，**每个 vt 独立计数**：`VT_SPAWN_RETRY`
+（磁盘未挂载、文件缺失、内存分配压力、进程表已满）按 PIT tick 每秒
+重试一次；连续 `VT_MAX_SPAWN_RETRIES`（5）次瞬时失败后该 vt 放弃——
+`spawn_failed` 锁存、停止重启，且 F 键切换被禁用
+（`switch_enabled = 0`，`vt_request_switch` 会丢弃对该终端的请求）。
+其他任何非零返回（ELF 解析/加载错误，或拉起后没有前台 pid）同样
+立即锁存 `spawn_failed`、禁用 F 键并永久停止该 vt 的重启。拉起
+成功会清零重试计数。vt 0 放弃后，vt 0 上的 ring0 内核 shell 作为
+回退继续可用。
 
 两条不变量保证其可靠：
 

@@ -102,11 +102,18 @@ a terminal's tracked shell pid dies or disappears, `vt_service`
 respawns it on that vt. The kernel shell stays pinned to vt 0 and is
 only reachable when no disk is mounted or `shell3.elf` is missing.
 
-Spawner failures are classified by return code: `VT_SPAWN_RETRY`
-(disk not mounted, file missing, allocation pressure, process-table
-full) is retried at most once per ~1 s of PIT ticks without latching;
-any other nonzero return (ELF parse/load errors) sets `spawn_failed`
-and permanently stops respawn attempts for that vt.
+Spawner failures are classified by return code, counted **per vt**:
+`VT_SPAWN_RETRY` (disk not mounted, file missing, allocation pressure,
+process-table full) is retried once per ~1 s of PIT ticks; after
+`VT_MAX_SPAWN_RETRIES` (5) consecutive transient failures the vt gives
+up — `spawn_failed` latches, respawn stops, and its F-key switch is
+disabled (`switch_enabled = 0`, so F1/F2 requests for that terminal are
+dropped in `vt_request_switch`). Any other nonzero return (ELF
+parse/load errors, or a spawn that produced no foreground pid) also
+latches `spawn_failed`, disables the F-key immediately, and permanently
+stops respawn attempts for that vt. A successful spawn resets the
+retry counter. When vt 0 gives up, the ring0 kernel shell on vt 0
+remains as the fallback.
 
 Two invariants keep this reliable:
 

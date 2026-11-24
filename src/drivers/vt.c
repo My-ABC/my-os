@@ -33,10 +33,15 @@
 #define VT_FB_ALIGN     0x100000U
 /* Minimum PIT ticks between transient spawn retries (~1 s at 100 Hz). */
 #define VT_RETRY_TICKS  100U
+/* Transient spawn retries per vt at ~1 Hz before the vt is disabled
+ * and its F-key switch is dropped. */
+#define VT_MAX_SPAWN_RETRIES 5U
 
 struct vt_state {
     uint32_t shell_pid;      /* tracked shell3 pid, 0 = none yet */
     int spawn_failed;        /* spawner refused permanently; stop retrying */
+    int switch_enabled;      /* F-key switching allowed for this vt */
+    uint32_t retry_count;    /* transient spawn failures so far */
     int fb_ready;
     uint32_t next_retry_tick;/* earliest pit tick for a transient retry */
     uint16_t text_cells[VT_VGA_CELLS];
@@ -88,7 +93,7 @@ uint8_t *vt_vbe_target(int vt) {
 }
 
 void vt_request_switch(int vt) {
-    if (vt >= 0 && vt < VT_COUNT) {
+    if (vt >= 0 && vt < VT_COUNT && vts[vt].switch_enabled) {
         vt_pending = vt;
     }
 }
@@ -134,14 +139,26 @@ int vt_spawn_shell(int vt) {
     rc = vt_spawner(vt);
     if (rc == VT_SPAWN_RETRY) {
         /* Transient failure (disk not mounted yet, file missing,
-         * allocation pressure): retry on a later vt_service pass
-         * instead of latching spawn_failed forever. */
-        vts[vt].next_retry_tick = pit_ticks() + VT_RETRY_TICKS;
+         * allocation pressure): retry once per second. After
+         * VT_MAX_SPAWN_RETRIES the vt gives up: no more respawn
+         * attempts and its F-key switch is disabled. vt 0 still has
+         * the ring0 kernel shell as fallback. */
+        ++vts[vt].retry_count;
+        if (vts[vt].retry_count >= VT_MAX_SPAWN_RETRIES) {
+            vts[vt].spawn_failed = 1;
+            vts[vt].switch_enabled = 0;
+            serial_print("[VT] vt ");
+            serial_print_dec((uint32_t)vt);
+            serial_print(" spawn retries exhausted; vt disabled\n");
+        } else {
+            vts[vt].next_retry_tick = pit_ticks() + VT_RETRY_TICKS;
+        }
         vt_irq_restore(flags);
         return -1;
     }
     if (rc != 0) {
         vts[vt].spawn_failed = 1;
+        vts[vt].switch_enabled = 0;
         serial_print("[VT] shell3 spawn failed on vt ");
         serial_print_dec((uint32_t)vt);
         serial_print(" rc=");
@@ -151,10 +168,12 @@ int vt_spawn_shell(int vt) {
         return -1;
     }
     vts[vt].shell_pid = ring3_foreground_pid_vt(vt);
+    vts[vt].retry_count = 0U;
     if (vts[vt].shell_pid == 0U) {
         /* elf_run succeeded but no foreground pid was recorded; do not
          * loop forever spawning processes that cannot be tracked. */
         vts[vt].spawn_failed = 1;
+        vts[vt].switch_enabled = 0;
         serial_print("[VT] shell3 spawn on vt ");
         serial_print_dec((uint32_t)vt);
         serial_print(" produced no foreground pid\n");
@@ -248,6 +267,7 @@ void vt_init(void) {
     vt_spawner = 0;
     vt_fb_stride = 0U;
     for (int i = 0; i < VT_COUNT; ++i) {
+        vts[i].switch_enabled = 1;
         for (uint32_t c = 0; c < VT_VGA_CELLS; ++c) {
             vts[i].text_cells[c] = (uint16_t)VT_VGA_BLANK;
         }
