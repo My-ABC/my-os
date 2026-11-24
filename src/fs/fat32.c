@@ -75,7 +75,10 @@ int fat32_write_file(const char *path, const void *buffer, uint32_t size) {
 
     uint32_t old_cluster = found == 1
         ? ((uint32_t)le16(entry + 20) << 16 | le16(entry + 26)) : 0U;
-    if (old_cluster >= 2U && free_cluster_chain(old_cluster) != 0) return -1;
+    /* The old cluster chain is freed only after the new chain is fully
+     * written and the directory entry updated: freeing it up front
+     * meant an allocation or write failure left the entry pointing at
+     * released clusters and destroyed the existing file. */
 
     uint32_t first = 0U;
     uint32_t current = 0U;
@@ -113,14 +116,18 @@ int fat32_write_file(const char *path, const void *buffer, uint32_t size) {
     entry[30] = (uint8_t)(size >> 16);
     entry[31] = (uint8_t)(size >> 24);
 
+    int result;
     if (found != 1) {
-        int result = insert_directory_entry(dir_cluster, &prepared, entry);
-        if (result != 0 && first >= 2U) {
-            (void)free_cluster_chain(first);
-        }
+        result = insert_directory_entry(dir_cluster, &prepared, entry);
+    } else {
+        result = update_directory_entry(&location, entry);
+    }
+    if (result != 0) {
+        if (first >= 2U) (void)free_cluster_chain(first);
         return result;
     }
-    return update_directory_entry(&location, entry);
+    if (old_cluster >= 2U) (void)free_cluster_chain(old_cluster);
+    return 0;
 }
 
 
