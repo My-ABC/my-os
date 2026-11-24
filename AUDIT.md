@@ -15,9 +15,9 @@
 
 | # | 位置 | 问题 | 触发条件 | 状态 |
 |---|------|------|----------|------|
-| N1 | `src/drivers/vt.c:21` vs `src/mm/heap.c:7` | **`VT_FB_BASE = 0xD0000000` 与 `KERNEL_HEAP_START = 0xD0000000` 完全重叠。** VBE 模式下 `vt_init` 先把两个终端的离屏帧缓冲映射到 0xD0000000 起；随后任何 `kmalloc`（`heap_next` 同样从 0xD0000000 起）通过 `paging_map_page` **无条件覆盖同一批 PTE**——fb 物理页被挤出映射（泄漏），堆块头写进帧缓冲区域，vt 切换时 memcpy 出来的是堆数据。kmain 的 heap 自检（kmalloc(100)）就足以触发。 | 任何 GRUB/VBE 启动 + 首次内核堆分配 | ⬜ **最高优先级**。修法：把 `VT_FB_BASE` 移到 `0xC1000000`（内核镜像结束 ~0xC1000000 与堆起点 0xD0000000 之间的空闲窗），`VT_FB_LIMIT` 改为 `0xD0000000` |
-| N2 | `src/mm/heap.c:100-124` + `kmalloc:175-176` | **`heap_split` 摘除空闲块后继承的是已清零的 prev/next**：`heap_remove_free` 把 `block->next/prev` 置 0，`heap_split` 让 remainder 继承这两个 0，于是 `free_list = remainder`——**其他所有空闲块被孤立**（free=1 但不在链表上），永久泄漏 + 无法合并 → 堆随碎片化最终 OOM。仅当"拆分"发生（free block 比请求大）且链表中还有别的空闲块时触发；整块分配（remaining==0）不触发。 | 释放多个不同大小块后再次 kmalloc | ⬜ 修法：`heap_split` 里用 `heap_insert_free(remainder)` 重新按地址有序插入，而不是手工接 prev/next |
-| N3 | `src/fs/fat32.c:76-102` | **`fat32_write_file` 先 `free_cluster_chain(old)` 再分配/写新簇**：磁盘满（`allocate_cluster` 失败）或 `write_cluster` 中途失败时直接 return -1，但目录项仍指向**已被释放的旧簇** → 已有文件内容被毁（读到的是空闲簇/新文件数据）。 | 覆盖写一个已存在文件且磁盘空间不足 | ⬜ 修法：先分配并写完新簇链、更新目录项成功后，再释放旧簇链（或失败时回滚） |
+| N1 | `src/drivers/vt.c:21` vs `src/mm/heap.c:7` | **`VT_FB_BASE = 0xD0000000` 与 `KERNEL_HEAP_START = 0xD0000000` 完全重叠。** VBE 模式下 `vt_init` 先把两个终端的离屏帧缓冲映射到 0xD0000000 起；随后任何 `kmalloc`（`heap_next` 同样从 0xD0000000 起）通过 `paging_map_page` **无条件覆盖同一批 PTE**——fb 物理页被挤出映射（泄漏），堆块头写进帧缓冲区域，vt 切换时 memcpy 出来的是堆数据。kmain 的 heap 自检（kmalloc(100)）就足以触发。 | 任何 GRUB/VBE 启动 + 首次内核堆分配 | ✅ 已修（`018c4e0`）：`VT_FB_BASE`→`0xC1000000`，`VT_FB_LIMIT`→`0xD0000000`（内核镜像止于 ~0xC0580000） |
+| N2 | `src/mm/heap.c:100-124` + `kmalloc:175-176` | **`heap_split` 摘除空闲块后继承的是已清零的 prev/next**：`heap_remove_free` 把 `block->next/prev` 置 0，`heap_split` 让 remainder 继承这两个 0，于是 `free_list = remainder`——**其他所有空闲块被孤立**（free=1 但不在链表上），永久泄漏 + 无法合并 → 堆随碎片化最终 OOM。仅当"拆分"发生（free block 比请求大）且链表中还有别的空闲块时触发；整块分配（remaining==0）不触发。 | 释放多个不同大小块后再次 kmalloc | ✅ 已修（`222ff5d`）：remainder 改走 `heap_insert_free` 有序重插 |
+| N3 | `src/fs/fat32.c:76-102` | **`fat32_write_file` 先 `free_cluster_chain(old)` 再分配/写新簇**：磁盘满（`allocate_cluster` 失败）或 `write_cluster` 中途失败时直接 return -1，但目录项仍指向**已被释放的旧簇** → 已有文件内容被毁（读到的是空闲簇/新文件数据）。 | 覆盖写一个已存在文件且磁盘空间不足 | ✅ 已修（`183752b`）：新簇链写完且目录项更新成功后才释放旧链 |
 
 ## 二、P1 — 上轮已修（保持记录）
 
