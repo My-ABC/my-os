@@ -149,6 +149,11 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Concurrency and Memory
 
+- [ ] **Add kernel mutex/locking for Ring 3 shared state**
+  - [ ] Introduce a small kernel mutex/critical-section primitive (IRQ-safe on the single CPU today, SMP-ready later) and apply it to globally shared state touched by concurrent Ring 3 processes.
+  - [ ] Protect FAT32/ATA globals (`g_sector`/`g_cluster`/`g_fs`/`g_cwd`), the global `sysfs_fds` table, and the user-heap free list/`user_heap_next` so a kernel-shell or syscall context cannot observe torn state when IRQ0 schedules another process mid-operation (AUDIT P1-5, P1-1).
+  - [ ] Decide per-object ownership where a lock is wrong (e.g. move user-heap metadata into `struct user_mm`) and document which paths hold which lock.
+  - [ ] Add QEMU coverage for concurrent Ring 3 FAT32/heap access on both vts.
 - [ ] **Add an idle task and HLT-based power saving**
   - [ ] Run a dedicated idle loop that executes `HLT` when no runnable task exists instead of busy-spinning in the scheduler.
   - [ ] Ensure IRQ0/PIT and other interrupts wake the CPU reliably between sleeps.
