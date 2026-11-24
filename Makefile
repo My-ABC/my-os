@@ -168,7 +168,10 @@ run-serial: build
 # FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录；
 # shell3.elf 比镜像新时重建
 disk: shell3
-	@if test -f "$(DISK)" && [ "$(SHELL3_ELF)" -ot "$(DISK)" ]; then \
+	@if test -f "$(DISK)" && [ "$(SHELL3_ELF)" -ot "$(DISK)" ] && \
+		python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
+			from fat32_image import root_file_present; \
+			sys.exit(0 if root_file_present("$(DISK)", "shell3.elf") else 1)'; then \
 		echo "Disk image already exists: $(DISK)"; \
 	else \
 		command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }; \
