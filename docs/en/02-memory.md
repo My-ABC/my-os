@@ -14,6 +14,9 @@ English | [中文](../zh/02-memory.md)
 | ELF image ranges | Demand-mapped per live Ring 3 process |
 | `< 0xC0000000` | User range (`USER_SPACE_END`) |
 | `0xC0000000`+ | Kernel higher-half mapping (`KERNEL_VIRT_BASE`) |
+| `0xD0000000`–`0xE0000000` | Kernel heap window (`KERNEL_HEAP_START`/`KERNEL_HEAP_END`) |
+| `0xE0000000`–~`0xE0400000` | VBE scanout mapping (`VBE_FRAMEBUFFER_ADDRESS`, ~4 MiB at 1280×800×32) |
+| `0xE8000000`–`0xF0000000` | VT private framebuffer backing stores (`VT_FB_BASE`/`VT_FB_LIMIT`) |
 | `0xF0000000` | Temporary page-table access map (`KMAP_BASE`) |
 
 The kernel is linked at virtual `0xC0000000` / physical `0x100000`
@@ -44,7 +47,12 @@ only). `pmm_alloc_page()` / `pmm_free_page()` are the basic ops;
 ## Kernel heap (`src/mm/heap.c`)
 
 `kmalloc`, `kcalloc`, `krealloc`, `kfree` allocate variable-size blocks
-from PMM-backed pages. Used by the shell (`cp -r` entry lists, `run`
+from PMM-backed pages inside the `0xD0000000`–`0xE0000000` window
+(`KERNEL_HEAP_START`/`KERNEL_HEAP_END`); allocations outside it are
+rejected. This window is exclusive: the VBE scanout
+(`0xE0000000`+) and VT framebuffer stores (`0xE8000000`+) sit above it
+and are protected by compile-time `#error` guards in `src/drivers/vt.c`.
+Used by the shell (`cp -r` entry lists, `run`
 image buffer), Ring 3 process structures, and FAT32 copy paths.
 
 ## User address space
