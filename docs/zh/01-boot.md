@@ -53,8 +53,10 @@ GRUB 据此把内核加载到物理 1 MiB 并跳转到 `start`，`%ebx` 为 Mult
 12. 启动期 VGA/串口 banner 与 RTC 时间显示。
 13. `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO` 宏控制的演示路径；
     否则进入 `shell3_supervisor()`——磁盘镜像提供 `/shell3.elf` 时在
-    两个虚拟终端上自动启动，未挂载磁盘或文件缺失时回退内核
-    `start_shell()`，并通过 `vt_service()` 自动重启死亡的 shell。
+    两个虚拟终端上自动启动，未挂载磁盘、文件缺失，或 vt 0 的
+    shell3 拉起永久失败（5 次瞬时重试后 ELF 错误锁存
+    `spawn_failed`）时回退内核 `start_shell()`，并通过
+    `vt_service()` 自动重启死亡的 shell。
     见 [07-shell.md](07-shell.md) 与
     [15-virtual-terminals.md](15-virtual-terminals.md)。
 

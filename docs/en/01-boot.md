@@ -61,8 +61,10 @@ loops.
 13. Demo paths under `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO`;
     otherwise `shell3_supervisor()` — which auto-starts `/shell3.elf`
     on both virtual terminals when the disk image provides it, falls
-    back to the kernel `start_shell()` when no disk is mounted or the
-    file is missing, and keeps respawning dead shells via `vt_service()`.
+    back to the kernel `start_shell()` when no disk is mounted, the
+    file is missing, or vt 0's shell3 spawn permanently fails (5
+    transient retries then ELF errors latch `spawn_failed`), and keeps
+    respawning dead shells via `vt_service()`.
     See [07-shell.md](07-shell.md) and
     [15-virtual-terminals.md](15-virtual-terminals.md).
 

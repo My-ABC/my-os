@@ -63,8 +63,9 @@ the destination is an existing directory, the effective target becomes
 
 ## Output conventions
 
-- Disk and process commands dual-write status to VGA `printf` and COM1
-  `serial_print*`, which keeps scripted QEMU sessions deterministic.
+- Disk, process, and `help` commands dual-write status to VGA `printf`
+  and COM1 `serial_print*`, which keeps scripted QEMU sessions
+  deterministic.
 - Ring 3 `IO_WRITE` output goes to the process's own vt screen buffer
   and is mirrored to COM3 (`serial3_print`); COM1 is reserved for kernel
   diagnostics. COM3 is a single global mirror, so output from vt 0 and

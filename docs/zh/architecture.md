@@ -53,8 +53,9 @@ test/             host 契约测试、C 测试套件、QEMU 集成测试
 - `boot/boot.asm:start` → 早期 PAE 页表 → `kmain(multiboot_info)`。
 - `kmain` 依次初始化 GDT/TSS、串口、PMM、分页、VBE/VGA/VT、ATA/FAT32、
   堆自检、PIC/PIT/键盘、TSC/RTC，然后进入 `shell3_supervisor()`——
-  它在两个虚拟终端（F1/F2）上自动启动 `/shell3.elf`，仅在未挂载磁盘
-  或文件缺失时回退内核 `start_shell()`。
+  它在两个虚拟终端（F1/F2）上自动启动 `/shell3.elf`，未挂载磁盘、
+  文件缺失，或 vt 0 的 shell3 拉起永久失败时回退内核
+  `start_shell()`。
 - Shell 分发 `cmd_table`；磁盘命令走 FAT32 公开 API
   （`include/fs/fat32.h`）；进程命令走 Ring 3 API
   （`include/os/ring3.h`）；`run`/`elf` 经 `elf_run`。

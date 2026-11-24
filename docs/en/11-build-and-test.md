@@ -16,7 +16,11 @@ English | [中文](../zh/11-build-and-test.md)
   (entry `start`, kernel VMA `0xC0000000`, physical load 1 MiB).
 - `make iso` wraps `myos.bin` into `myos.iso` via GRUB (`grub-mkrescue`).
 - `make disk` builds `shell3.elf` (via `libmyc` + `shell3` targets) and
-  writes it into `disk.img` next to the test ELFs; `make run` depends on
+  writes it into `disk.img` next to the test ELFs; an existing image is
+  only reused when `shell3.elf` is older **and** its root-directory
+  entry is still present (`root_file_present` in
+  `test/integration/fat32_image.py`), so a deleted/corrupted entry
+  forces a rebuild; `make run` depends on
   `iso disk` and attaches the image unconditionally, so the supervisor
   auto-starts the Ring 3 shells. Other run targets: `run-kernel`,
   `run-nographic`, `run-serial`, `run-disk`, `run-q35`, `run-q35-nographic`.

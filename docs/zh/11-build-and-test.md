@@ -17,7 +17,10 @@
 - `make iso` 用 GRUB（`grub-mkrescue`）把 `myos.bin` 封装为
   `myos.iso`。
 - `make disk` 构建 `shell3.elf`（经 `libmyc` + `shell3` 目标）并写入
-  `disk.img`（与测试 ELF 同盘）；`make run` 依赖 `iso disk` 并无条件
+  `disk.img`（与测试 ELF 同盘）；已有镜像仅在 `shell3.elf` 更旧
+  **且**根目录项仍然存在时才复用（`test/integration/fat32_image.py`
+  的 `root_file_present` 检查），目录项被删/损坏会强制重建；
+  `make run` 依赖 `iso disk` 并无条件
   挂载该镜像，监督器据此自动启动 Ring 3 shell。其他运行目标：
   `run-kernel`、`run-nographic`、`run-serial`、`run-disk`、
   `run-q35`、`run-q35-nographic`。
