@@ -6,6 +6,7 @@
 `_Noreturn void longjmp(jmp_buf env, int val)` —— 按 C11，
 `val==0` 强转为 1。
 
-setjmp 与 longjmp 之间修改的 volatile 局部变量在第二次
-返回时值不确定（C 标准规则）。不保存信号掩码
+未经 `volatile` 限定、属于包含 `setjmp` 的函数、且在 `setjmp` 与
+`longjmp` 之间被修改的局部变量，在 `longjmp` 返回后值不确定。
+`volatile` 限定的局部变量是安全的——编译器必须从内存重新读取其值。
 （ABI 无 sigprocmask）。
