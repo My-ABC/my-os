@@ -116,12 +116,12 @@ supervisor 退出 `vt_service` 循环改跑 ring0 内核 shell（`start_shell`�
 
 ## 切换到无 shell 的终端
 
-`vt_do_switch` 在目标终端可见之前会重绘其备份屏幕：若目标 vt 没有
-存活的 shell3（`vt_shell_alive` 为假），就在该 vt 屏幕上居中绘制
-`[ waiting for shell3... ]` 提示（VGA 文本单元格，或经
-`vbe_vt_message` 绘制像素），而不是显示一帧陈旧/全黑画面让人误以为
-死机。vt 0 在回退到 ring0 内核 shell 后豁免——那块屏幕属于内核
-shell。shell3 重启并绘制后提示会被正常覆盖。
+F 键切换以目标终端确实有 shell 为前提：每个 vt 的 `switch_enabled`
+初始为 0，只有首次 `vt_spawn_shell` 成功后才置 1。在此之前
+`vt_request_switch` 会丢弃对该终端的 F1/F2 请求，用户永远不会落到
+一块空白的备份屏上。vt 0 是例外——F1 始终可用，因为它承载 ring0
+内核 shell 兜底。该标志会在 vt 锁存 `spawn_failed`（重试耗尽或
+永久拉起错误）时再次清零。
 
 ## 串口输出
 

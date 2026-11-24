@@ -186,6 +186,7 @@ int vt_spawn_shell(int vt) {
     }
     vts[vt].shell_pid = ring3_foreground_pid_vt(vt);
     vts[vt].retry_count = 0U;
+    vts[vt].switch_enabled = 1;
     if (vts[vt].shell_pid == 0U) {
         /* elf_run succeeded but no foreground pid was recorded; do not
          * loop forever spawning processes that cannot be tracked. */
@@ -215,36 +216,6 @@ static void vt_ensure_shells(void) {
     }
 }
 
-/* A switch target with no live shell would show a stale or all-blank
- * screen that looks like a hang. Paint a notice into its backing store
- * instead. vt 0 is exempt once it has fallen back to the ring0 kernel
- * shell (spawn_failed latched): that screen belongs to the kernel
- * shell, not to a missing shell3. */
-static int vt_needs_placeholder(int vt) {
-    return !vt_shell_alive(vt) &&
-           !(vt == VT_FALLBACK && vts[vt].spawn_failed);
-}
-
-static void vt_paint_text_message(int vt, const char *msg) {
-    uint16_t *cells = vts[vt].text_cells;
-    uint32_t i;
-    for (i = 0; i < VT_VGA_CELLS; ++i) {
-        cells[i] = VT_VGA_BLANK;
-    }
-    for (i = 0; msg[i] != '\0' && i < VT_VGA_CELLS; ++i) {
-        cells[i] = (uint16_t)(0x0F00U | (uint8_t)msg[i]);
-    }
-}
-
-static void vt_paint_placeholder(int vt) {
-    if (!vt_needs_placeholder(vt)) return;
-    if (vbe_available()) {
-        vbe_vt_message(vt, "[ waiting for shell3... ]");
-    } else {
-        vt_paint_text_message(vt, "[ waiting for shell3... ]");
-    }
-}
-
 /* Swap the visible display with terminal `target`. Both backing
  * stores must exist; runs with interrupts off because IRQ0's cursor
  * blink reads vt_render_index() mid-copy otherwise. */
@@ -252,11 +223,6 @@ static void vt_do_switch(int target) {
     int old = vt_active;
     uint32_t flags;
     if (target == old || target < 0 || target >= VT_COUNT) return;
-
-    /* Refresh the target's backing store before it becomes visible:
-     * a vt whose shell3 is not running yet gets a notice instead of a
-     * black screen. */
-    vt_paint_placeholder(target);
 
     if (vbe_available()) {
         if (!vts[old].fb_ready || !vts[target].fb_ready) {
@@ -318,7 +284,9 @@ void vt_init(void) {
     vt_spawner = 0;
     vt_fb_stride = 0U;
     for (int i = 0; i < VT_COUNT; ++i) {
-        vts[i].switch_enabled = 1;
+        /* switch_enabled stays 0 until the first successful spawn:
+         * F-keys for a vt with no shell yet are dropped, so the user
+         * can never land on a blank screen. */
         for (uint32_t c = 0; c < VT_VGA_CELLS; ++c) {
             vts[i].text_cells[c] = (uint16_t)VT_VGA_BLANK;
         }

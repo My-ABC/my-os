@@ -20,10 +20,6 @@ uint32_t vbe_rows(void);
 uint8_t *vbe_scanout(void);
 uint32_t vbe_scanout_bytes(void);
 
-/* Paint a one-line notice into terminal `vt`'s backing store (used
- * when switching to a vt whose shell has not drawn anything yet). */
-void vbe_vt_message(int vt, const char *msg);
-
 /* Called by vt.c after a terminal switch: redraw the cursor for the
  * newly visible terminal. */
 void vbe_console_switched(void);

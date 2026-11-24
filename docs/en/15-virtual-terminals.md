@@ -133,14 +133,14 @@ Two invariants keep this reliable:
 
 ## Switching to a shell-less terminal
 
-`vt_do_switch` repaints the target's backing store before it becomes
-visible: if the target vt has no live shell3 (`vt_shell_alive` false),
-a centered `[ waiting for shell3... ]` notice is drawn into that vt's
-screen (VGA text cells, or pixels via `vbe_vt_message`) instead of
-showing a stale/blank frame that looks like a hang. vt 0 is exempt
-once it has fallen back to the ring0 kernel shell — that screen belongs
-to the kernel shell. Once shell3 respawns and draws, the notice is
-overwritten normally.
+F-key switching is gated on the target actually having a shell:
+`switch_enabled` starts at 0 for every vt and is set to 1 only after the
+first successful `vt_spawn_shell`. Until then `vt_request_switch`
+drops F1/F2 requests for that terminal, so the user can never land on
+a blank backing store. vt 0 is the exception — its F1 always stays
+enabled because it hosts the ring0 kernel-shell fallback. The flag is
+cleared again whenever the vt latches `spawn_failed` (retry
+exhaustion or permanent spawn error).
 
 ## Serial output
 
