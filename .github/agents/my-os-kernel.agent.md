@@ -38,7 +38,7 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - vt spawn failures are classified: transient (disk unmounted, file absent, allocation pressure, process table full → `VT_SPAWN_RETRY=-1`) retried every `VT_RETRY_TICKS`; ELF parse/load errors latch `spawn_failed` permanently. `vt_pending` is a plain int (non-atomic; race window documented, unfixed). VBE backing-store alloc failure disables F1/F2 with only a serial log; partial `vt_alloc_fb` failure leaks already-allocated pages.
 - Shell has 16-entry history (Up/Down) and cursor line editing; quoting via `split_line`/`shell_unescape_arg`. Kernel `echo` dual-writes VGA+COM1; Ring 3 output goes to its vt buffer + COM3.
 - Keep changes surgical. Never hide an error behind a success-shaped fallback.
-- F1/F2 scancodes are consumed by the keyboard ISR as vt-switch requests — they never enter the per-vt input buffers. VBE per-terminal backing stores are stride = `vbe_scanout_bytes()` (= `pitch * height`, e.g. 5120×800 = 4,096,000 B for 1280×800×32) rounded up to `VT_FB_ALIGN` (1 MiB) → 4 MiB per terminal; never hardcode 640×480 sizes.
+- F1/F2 scancodes are consumed by the keyboard ISR as vt-switch requests — they never enter the per-vt input buffers. VBE per-terminal backing stores live at `VT_FB_BASE=0xE8000000`–`VT_FB_LIMIT=0xF0000000` (above the heap window `0xD0000000`–`0xE0000000` and the ~4 MiB scanout at `0xE0000000`, below KMAP `0xF0000000`; `#error` guards enforce it). Stride = `vbe_scanout_bytes()` (= `pitch * height`, e.g. 5120×800 = 4,096,000 B for 1280×800×32) rounded up to `VT_FB_ALIGN` (1 MiB) → 4 MiB per terminal; never hardcode 640×480 sizes.
 
 ## History & lessons (why the rules exist)
 

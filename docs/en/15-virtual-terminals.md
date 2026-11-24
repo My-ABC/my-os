@@ -48,9 +48,12 @@ heavy for IRQ1 context.
 `uint16_t text_cells[80*25]` array; the active vt renders directly into
 physical `0xB8000`. Switching is two 4 KiB `memcpy`s.
 
-**VBE graphics mode** — each vt owns a private framebuffer in the free
-kernel-half window `0xD0000000`–`0xE0000000` (below the scanout map at
-`0xE0000000`). All pages are allocated once in `vt_init`: each
+**VBE graphics mode** — each vt owns a private framebuffer in the
+kernel-half window `0xE8000000`–`0xF0000000`, above the kernel heap
+window (`0xD0000000`–`0xE0000000`) and the ~4 MiB scanout map at
+`0xE0000000`, below the KMAP slot at `0xF0000000`. Compile-time
+guards reject a `VT_FB_BASE` that would overlap either neighbour.
+All pages are allocated once in `vt_init`: each
 terminal maps `ceil(vbe_scanout_bytes() / PAGE_SIZE)` pages taken from
 the PMM — 1000 pages (3.906 MiB) per terminal at 1280×800×32, times
 `VT_COUNT`. The per-terminal stride is derived at init:
