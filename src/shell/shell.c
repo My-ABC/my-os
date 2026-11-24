@@ -205,14 +205,21 @@ int cmd_shutdown(int argc, char *argv[]) {
 
 int cmd_help(int argc, char *argv[]) {
     printf("Available commands:\n");
+    serial_print("Available commands:\n");
     for (int i = 0; cmd_table[i].name != NULL; i++) {
         printf("  %s", cmd_table[i].name);
+        serial_print("  ");
+        serial_print(cmd_table[i].name);
         // 手动补齐到 10 个字符
         int len = strlen(cmd_table[i].name);
         for (int j = len; j < 10; j++) {
             printf(" ");
+            serial_putchar(' ');
         }
         printf(" %s\n", cmd_table[i].desc);
+        serial_putchar(' ');
+        serial_print(cmd_table[i].desc);
+        serial_putchar('\n');
     }
     return 0;
 }

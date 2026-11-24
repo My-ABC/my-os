@@ -141,6 +141,25 @@ def root_file_present(image_path, filename):
     return False
 
 
+def create_empty_disk(directory):
+    """FAT32 image with no files at all — used by the vt spawn-exhaustion
+    scenario where /shell3.elf must be absent."""
+    disk_path = Path(directory) / "disk.img"
+    with disk_path.open("wb") as disk:
+        disk.truncate(64 * 1024 * 1024)
+    mkfs = shutil.which("mkfs.fat")
+    if mkfs is None:
+        raise IntegrationFailure("mkfs.fat is required for FAT32 QEMU integration")
+    subprocess.run(
+        [mkfs, "-F", "32", "-n", "MYOS", str(disk_path)],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return disk_path
+
+
 def create_test_disk(directory):
     disk_path = Path(directory) / "disk.img"
     with disk_path.open("wb") as disk:

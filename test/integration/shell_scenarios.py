@@ -311,6 +311,43 @@ def check_run_from_disk(session):
     session.wait_for_regex(rb"\[PS\] 4 DEAD", start=ps_start, timeout=5)
 
 
+def check_vt_spawn_exhaustion(session):
+    """Empty FAT32 disk (no shell3.elf): each vt retries the spawn once
+    per second, gives up after 5 tries, and the ring0 kernel shell takes
+    over on COM1 while COM3 (the Ring 3 mirror) stays silent."""
+    session.wait_for("[VT] vt 0 spawn retries exhausted", timeout=25)
+    session.wait_for("[VT] vt 1 spawn retries exhausted", timeout=10)
+    text = session.serial_text()
+    if text.count("spawning shell on vt 0") != 5:
+        raise IntegrationFailure(
+            "expected exactly 5 spawn attempts on vt 0, got "
+            f"{text.count('spawning shell on vt 0')}")
+    if text.count("spawning shell on vt 1") != 5:
+        raise IntegrationFailure(
+            "expected exactly 5 spawn attempts on vt 1, got "
+            f"{text.count('spawning shell on vt 1')}")
+    session.pass_check("both vts exhausted 5 spawn retries and disabled")
+
+    # The ring0 kernel shell is the fallback: `help` now dual-writes
+    # COM1, proving the shell is alive and processing commands.
+    help_start = len(session.serial_data)
+    session.send_line("help")
+    session.wait_for("Available commands", timeout=10)
+    help_segment = session.serial_data[help_start:]
+    if b"Available commands" not in help_segment:
+        raise IntegrationFailure("kernel shell help missing on COM1")
+    if b"exit" in help_segment:
+        raise IntegrationFailure("kernel shell help lists an exit command")
+    session.pass_check("ring0 kernel shell answers help on COM1")
+
+    # COM3 mirrors only Ring 3 IO_WRITE; no shell3 ever ran, so it must
+    # not carry shell output (and no 'exit' line can appear there).
+    session.read_serial(0.5)
+    if b"exit" in session.serial3_data:
+        raise IntegrationFailure("COM3 carries unexpected output")
+    session.pass_check("COM3 stayed silent (no Ring 3 shell output)")
+
+
 def check_fs_syscalls(session):
     fs_start = len(session.serial_data)
     session.send_line("run fsdemo.elf")
