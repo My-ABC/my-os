@@ -15,11 +15,13 @@
 #define VT_VGA_BLANK    0x0F20U  /* ' ' | light-gray-on-black << 8 */
 
 /* Offscreen VBE backing stores live in the free kernel-half window
- * between the kernel image (ends ~0xC1000000) and the VBE scanout map
- * at 0xE0000000. The stride is derived from the real mode size at
- * init (1280x800x32 scanout is 4,096,000 B -> 4 MiB stride). */
-#define VT_FB_BASE      0xD0000000U
-#define VT_FB_LIMIT     0xE0000000U
+ * between the kernel image (ends ~0xC0580000) and the kernel heap at
+ * 0xD0000000. They must NOT overlap KERNEL_HEAP_START: kmalloc maps
+ * pages with paging_map_page, which overwrites PTEs unconditionally.
+ * The stride is derived from the real mode size at init
+ * (1280x800x32 scanout is 4,096,000 B -> 4 MiB stride). */
+#define VT_FB_BASE      0xC1000000U
+#define VT_FB_LIMIT     0xD0000000U
 #define VT_FB_ALIGN     0x100000U
 /* Minimum PIT ticks between transient spawn retries (~1 s at 100 Hz). */
 #define VT_RETRY_TICKS  100U
