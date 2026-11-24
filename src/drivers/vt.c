@@ -24,6 +24,12 @@
  * (1280x800x32 scanout is 4,096,000 B -> 4 MiB stride). */
 #define VT_FB_BASE      0xE8000000U
 #define VT_FB_LIMIT     0xF0000000U
+#if VT_FB_BASE < 0xE0400000U
+#error "VT_FB_BASE overlaps VBE scanout mapping"
+#endif
+#if VT_FB_BASE >= 0xF0000000U
+#error "VT_FB_BASE overlaps KMAP window"
+#endif
 #define VT_FB_ALIGN     0x100000U
 /* Minimum PIT ticks between transient spawn retries (~1 s at 100 Hz). */
 #define VT_RETRY_TICKS  100U
