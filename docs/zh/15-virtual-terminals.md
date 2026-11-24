@@ -88,8 +88,8 @@ stride = align(vbe_scanout_bytes(), VT_FB_ALIGN)   /* 1 MiB */
 `kernel.c` 的 `shell3_supervisor` 注册 spawner 后循环调用
 `vt_service()`。开机时两个终端各得到一个 `shell3.elf` 实例；当某
 终端受跟踪的 shell pid 死亡或消失时，`vt_service` 在该 vt 上重新
-拉起。内核 shell 固定在 vt 0，仅当未挂载磁盘或 `shell3.elf` 缺失
-时才可达。
+拉起。内核 shell 固定在 vt 0；只要 vt 0 无法承载 shell3——未挂载
+磁盘、`shell3.elf` 缺失，或 vt 0 拉起永久失败（见下）——就会接管。
 
 spawner 的失败按返回码分类，**每个 vt 独立计数**：`VT_SPAWN_RETRY`
 （磁盘未挂载、文件缺失、内存分配压力、进程表已满）按 PIT tick 每秒
@@ -127,6 +127,10 @@ Ring 3 `IO_WRITE` 渲染到进程所属 vt 的缓冲，并把字符串镜像到
 - COM3 是全局镜像，不是按终端分离的串口流。
 - 每个 vt 只保留一屏状态——没有滚动回溯缓冲。
 - 内核 shell 只存在于 vt 0。
+- vt0 → ring0 的回退是单向的：vt 0 一旦锁存 `spawn_failed`、
+  supervisor 进入 `start_shell`，就没有任何路径清除该标志，shell3
+  在 vt 0 上永远无法再拉起（需要重启）。vt 1 不受影响，仍保持各自
+  的 shell3 生命周期。
 - VBE 备份存储分配失败会让 F1/F2 切换失效，且只有串口日志、屏幕
   无任何提示。若 `vt_alloc_fb` 在某终端的页循环中途失败，已映射的
   页会泄漏（该窗口永不回收）。

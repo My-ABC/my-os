@@ -99,8 +99,9 @@ the caller's vt through `ring3_current_vt()`.
 `kernel.c`'s `shell3_supervisor` registers a spawner and then loops on
 `vt_service()`. On boot both terminals get a `shell3.elf` instance; when
 a terminal's tracked shell pid dies or disappears, `vt_service`
-respawns it on that vt. The kernel shell stays pinned to vt 0 and is
-only reachable when no disk is mounted or `shell3.elf` is missing.
+respawns it on that vt. The kernel shell stays pinned to vt 0 and
+becomes reachable whenever vt 0 cannot host shell3 — no disk mounted,
+`shell3.elf` missing, or vt 0's spawn permanently failing (see below).
 
 Spawner failures are classified by return code, counted **per vt**:
 `VT_SPAWN_RETRY` (disk not mounted, file missing, allocation pressure,
@@ -144,6 +145,10 @@ output only (diagnostics plus kernel-shell commands).
 - COM3 is a global mirror, not a per-terminal serial stream.
 - Each vt keeps exactly one screen of state — no scrollback buffer.
 - The kernel shell exists only on vt 0.
+- The vt0 → ring0 fallback is one-way: once vt 0 latches `spawn_failed`
+  and the supervisor enters `start_shell`, nothing ever clears the flag,
+  so shell3 can never respawn on vt 0 again (a reboot is required). vt 1
+  is unaffected and keeps its own shell3 lifecycle.
 - VBE backing-store allocation failure disables F1/F2 switching with
   only a serial log; there is no on-screen indication. If `vt_alloc_fb`
   fails partway through a terminal's page loop, the pages already mapped
