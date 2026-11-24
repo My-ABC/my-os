@@ -113,8 +113,15 @@ static void shell3_supervisor(void) {
     serial_print("[SHELL] Auto-started /shell3.elf (Ring 3 shell)\n");
     for (;;) {
         vt_service();
+        if (vt_needs_ring0_fallback()) {
+            serial_print("[SHELL] vt0 gave up; falling back to ring0 shell\n");
+            break;
+        }
         __asm__ volatile ("hlt");
     }
+    /* The kernel shell's own read loop keeps polling vt_service, so
+     * vt1 switching/respawn keeps working while it runs. */
+    start_shell();
 }
 
 void kmain(uint32_t multiboot_info) {

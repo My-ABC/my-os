@@ -93,7 +93,10 @@ uint8_t *vt_vbe_target(int vt) {
 }
 
 void vt_request_switch(int vt) {
-    if (vt >= 0 && vt < VT_COUNT && vts[vt].switch_enabled) {
+    /* vt 0 stays reachable even after giving up: it hosts the ring0
+     * kernel shell fallback, so its F-key is never dropped. */
+    if (vt >= 0 && vt < VT_COUNT &&
+        (vt == VT_FALLBACK || vts[vt].switch_enabled)) {
         vt_pending = vt;
     }
 }
@@ -121,6 +124,22 @@ void vt_set_spawner(int (*spawner)(int vt)) {
     vt_spawner = spawner;
 }
 
+/* Latch a permanent spawn failure for `vt`: stop respawning and drop
+ * its F-key (vt 0 stays reachable — it hosts the ring0 fallback).
+ * When vt 0 itself gives up, queue a switch back to it so the kernel
+ * shell takes over the display. */
+static void vt_latch_spawn_failed(int vt) {
+    vts[vt].spawn_failed = 1;
+    vts[vt].switch_enabled = 0;
+    if (vt == VT_FALLBACK) {
+        vt_pending = VT_FALLBACK;
+    }
+}
+
+int vt_needs_ring0_fallback(void) {
+    return vts[VT_FALLBACK].spawn_failed;
+}
+
 int vt_spawn_shell(int vt) {
     uint32_t flags;
     int rc;
@@ -145,8 +164,7 @@ int vt_spawn_shell(int vt) {
          * the ring0 kernel shell as fallback. */
         ++vts[vt].retry_count;
         if (vts[vt].retry_count >= VT_MAX_SPAWN_RETRIES) {
-            vts[vt].spawn_failed = 1;
-            vts[vt].switch_enabled = 0;
+            vt_latch_spawn_failed(vt);
             serial_print("[VT] vt ");
             serial_print_dec((uint32_t)vt);
             serial_print(" spawn retries exhausted; vt disabled\n");
@@ -157,8 +175,7 @@ int vt_spawn_shell(int vt) {
         return -1;
     }
     if (rc != 0) {
-        vts[vt].spawn_failed = 1;
-        vts[vt].switch_enabled = 0;
+        vt_latch_spawn_failed(vt);
         serial_print("[VT] shell3 spawn failed on vt ");
         serial_print_dec((uint32_t)vt);
         serial_print(" rc=");
@@ -172,8 +189,7 @@ int vt_spawn_shell(int vt) {
     if (vts[vt].shell_pid == 0U) {
         /* elf_run succeeded but no foreground pid was recorded; do not
          * loop forever spawning processes that cannot be tracked. */
-        vts[vt].spawn_failed = 1;
-        vts[vt].switch_enabled = 0;
+        vt_latch_spawn_failed(vt);
         serial_print("[VT] shell3 spawn on vt ");
         serial_print_dec((uint32_t)vt);
         serial_print(" produced no foreground pid\n");

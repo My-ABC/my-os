@@ -107,13 +107,16 @@ Spawner failures are classified by return code, counted **per vt**:
 process-table full) is retried once per ~1 s of PIT ticks; after
 `VT_MAX_SPAWN_RETRIES` (5) consecutive transient failures the vt gives
 up — `spawn_failed` latches, respawn stops, and its F-key switch is
-disabled (`switch_enabled = 0`, so F1/F2 requests for that terminal are
-dropped in `vt_request_switch`). Any other nonzero return (ELF
+disabled (`switch_enabled = 0`, so F-key requests for that terminal
+are dropped in `vt_request_switch`). Any other nonzero return (ELF
 parse/load errors, or a spawn that produced no foreground pid) also
 latches `spawn_failed`, disables the F-key immediately, and permanently
 stops respawn attempts for that vt. A successful spawn resets the
-retry counter. When vt 0 gives up, the ring0 kernel shell on vt 0
-remains as the fallback.
+retry counter. vt 0 is the exception: its F1 switch always stays
+enabled, and when it gives up the supervisor leaves the `vt_service`
+loop and runs the ring0 kernel shell (`start_shell`), which keeps
+polling `vt_service` so vt 1 switching/respawn still works; a pending
+switch back to vt 0 is queued so the kernel shell takes the display.
 
 Two invariants keep this reliable:
 

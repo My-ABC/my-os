@@ -57,4 +57,9 @@ int vt_spawn_shell(int vt);
 /* 1 while the shell tracked for `vt` is still alive. */
 int vt_shell_alive(int vt);
 
+/* 1 once vt 0 (VT_FALLBACK) has permanently given up spawning shell3;
+ * the supervisor should drop out of the vt_service loop and run the
+ * ring0 kernel shell instead. */
+int vt_needs_ring0_fallback(void);
+
 #endif
