@@ -18,7 +18,17 @@
 
 ## P0
 
-无。未发现“正常使用必然损坏”的缺陷。
+### P0-1 yield 重启把中止返回值写进 frame eax 槽，`int 0x80` 以错误 class 重触发，阻塞输入进程必然报错刷屏 ✅（`8a6cf95`，调试期发现非审计条目）
+
+`src/os/syscall.c` `sys_keyboard_wait_yield` 原把 `frame->eip` 无条件回退 2 字节使 `int 0x80` 重启，但 `boot/interrupt.asm` 的 syscall 桩在 `syscall_switch_frame` 分流**之前**总执行 `mov [esp+44], eax`，把 handler 返回值（-1/0）写进保存帧的 eax 槽。进程恢复后 eax=返回值而非 SYS_* class，重执行的 `int 0x80` 走 default 立即返回——`IO_READ`/`IO_GETCHAR` 每次 yield 恢复都得到一次假返回，用户态进入"阻塞→yield→假 EOF→报错→再阻塞"循环（实测 guess_number 每 timer tick 一条 "Invalid input"）。且 yield 失败时 eip 已回退，后续正常返回也会多触发一次 `int 0x80`。
+
+修复：yield 成功后才回退 eip；`sys_gets` 区分 yield(2)/信号中止(1)；IO_READ/IO_GETCHAR 在 yield 路径返回 `klass`，使重启的 `int 0x80` 以原 class+op+args 重新分发；yield 仅在 `i==0` 时进行，避免行中重启丢已消费字符。
+
+### P0-2 `sys_gets` 在 fatal 信号终止后仍写用户 buf，内核 CR3 下用户 VA 写 fault → 误报 "Out of physical memory" panic ✅（`8a6cf95`，调试期发现非审计条目）
+
+`sys_gets` 的 `sys_signal_check`→`sys_signal_fatal_abort`→`ring3_terminate_current` 已把 CR3 切到内核页表、释放进程 mm、`current_process=-1`，随后代码继续执行 `buf[i]='\0'`——在内核 CR3 下写用户 VA（如 mini-libc `in_buf`/`.bss`），触发 supervisor 写未映射页 fault（error=0x2）。isr14 中 `sys_user_heap_contains` 是纯地址范围检查（`0x01000000`–`0x40000000`，覆盖镜像地址），判 permitted=1；`isr14_demand_map` 因 `ring3_current_mm()==NULL` 失败，走到 `panic_blue_screen("Out of physical memory")`——文案误导，实际是 CR3 状态错误。任何阻塞在 `IO_READ`/`IO_GETCHAR`/`sys_gets` 时收到致命信号（Ctrl+C 自投 SIGINT、SIGKILL）必现。
+
+修复：`syscall_exit_frame != 0`（fatal abort 已切内核 CR3）时跳过 `buf` 写入；同时在 agent.md 记录"terminate 后禁止触碰用户内存"约束。
 
 ---
 
