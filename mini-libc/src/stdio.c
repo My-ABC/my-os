@@ -246,18 +246,15 @@ static int in_getch(void) {
         in_pushed = -1;
         return c;
     }
-    for (;;) {
-        if (!in_have || in_pos >= in_len) {
-            int rc = syscall2(SYS_IO, IO_READ, (unsigned)in_buf, IN_CAP - 1);
-            if (rc == -2) continue;      /* yield-abort: retry the read */
-            if (rc < 0) return -1;
-            in_len = (size_t)rc;
-            in_pos = 0;
-            in_have = 1;
-            if (in_len == 0) return -1; /* empty line: treat as EOF */
-        }
-        return (unsigned char)in_buf[in_pos++];
+    if (!in_have || in_pos >= in_len) {
+        int rc = syscall2(SYS_IO, IO_READ, (unsigned)in_buf, IN_CAP - 1);
+        if (rc < 0) return -1;
+        in_len = (size_t)rc;
+        in_pos = 0;
+        in_have = 1;
+        if (in_len == 0) return -1; /* empty line: treat as EOF */
     }
+    return (unsigned char)in_buf[in_pos++];
 }
 
 static void in_ungetch(int c) {
@@ -490,10 +487,7 @@ int getchar(void) {
 
 int getline(char *buf, int size) {
     if (size <= 1) return -1;
-    int rc;
-    do {
-        rc = syscall2(SYS_IO, IO_READ, (unsigned)buf, (unsigned)(size - 1));
-    } while (rc == -2);              /* yield-abort: retry the read */
+    int rc = syscall2(SYS_IO, IO_READ, (unsigned)buf, (unsigned)(size - 1));
     if (rc < 0) return -1;
     return rc;
 }

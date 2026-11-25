@@ -59,15 +59,25 @@ static int sys_keyboard_wait_yield(struct irq_frame *frame) {
      * key, even when no other Ring 3 process is runnable. The idle
      * loop (shell supervisor / kernel shell) owns vt_service() and
      * other deferred work; without this a lone process blocked in
-     * IO_GETCHAR would starve it forever. The syscall instruction is
-     * rewound so int 0x80 restarts on resume. */
+     * IO_GETCHAR would starve it forever. */
+    struct irq_frame *kframe = ring3_yield_current(frame);
+    if (kframe == 0) return 0;
+    /* Rewind EIP past `int 0x80` (CD 80) only after the yield
+     * succeeded: the resumed frame re-executes the syscall with the
+     * register state saved in the frame. The syscall stub writes the
+     * handler's return value into the frame's eax slot before the
+     * diversion, so callers must return the original class (`klass`)
+     * on this path — that is what makes the restarted int 0x80
+     * dispatch the same syscall again. */
     frame->eip -= 2;
-    syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
-    return syscall_switch_frame != 0;
+    syscall_switch_frame = (uint32_t)kframe;
+    return 1;
 }
 
 /* gets() variant that stops when a signal is delivered, fatal, or the
- * CPU is yielded to another process (syscall restarts on resume). */
+ * CPU is yielded to another process. Returns 0 on a completed line,
+ * 1 on a signal abort, 2 when the wait was yielded (the syscall is
+ * restarted on resume, so callers must return `klass` to the stub). */
 static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
     int vt = (int)ring3_current_vt();
@@ -80,17 +90,22 @@ static int sys_gets(char *buf, int size, struct irq_frame *frame) {
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
             if (sys_signal_check(frame)) {
-                buf[i] = '\0';
+                /* A fatal abort already switched to the kernel CR3 and
+                 * released the mm; writing buf there would fault. */
+                if (syscall_exit_frame == 0U) buf[i] = '\0';
                 return 1;
             }
             continue;
         }
         if (c == 0) {
             if (sys_signal_check(frame)) {
-                buf[i] = '\0';
+                if (syscall_exit_frame == 0U) buf[i] = '\0';
                 return 1;
             }
-            if (sys_keyboard_wait_yield(frame)) return 1;
+            /* Yield only before the first character: a yield restarts
+             * the whole syscall, so yielding mid-line would drop the
+             * characters already consumed. */
+            if (i == 0 && sys_keyboard_wait_yield(frame)) return 2;
             __asm__ volatile ("hlt" ::: "memory");
             continue;
         }
@@ -507,11 +522,16 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         return (uint32_t)-1;
                     }
                     int gets_rc = sys_gets((char *)a1, (int)a2, frame);
+                    if (gets_rc == 2) {
+                        /* Yielded: the frame's eip was rewound and the
+                         * stub diverts to the kernel context. Returning
+                         * `klass` lands SYS_IO in the saved eax slot so
+                         * the restarted int 0x80 re-dispatches IO_READ
+                         * with the original arguments. */
+                        return klass;
+                    }
                     if (gets_rc != 0) {
-                        /* Yield/signal abort: -2 tells callers to retry;
-                         * when the switch_frame diversion works the user
-                         * never sees it (int 0x80 restarts instead). */
-                        return (uint32_t)-2;
+                        return (uint32_t)-1;
                     }
                     /* POSIX-style: return the line length in bytes
                      * (excluding the NUL terminator); 0 = empty line. */
@@ -530,7 +550,11 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         }
                         if (c != 0) return (uint8_t)c;
                         if (sys_signal_check(frame)) return 0;
-                        if (sys_keyboard_wait_yield(frame)) return 0;
+                        /* Same yield-restart contract as IO_READ: the
+                         * stub writes this return into the frame's eax
+                         * slot, so `klass` makes int 0x80 re-dispatch
+                         * IO_GETCHAR on resume. */
+                        if (sys_keyboard_wait_yield(frame)) return klass;
                         __asm__ volatile ("hlt" ::: "memory");
                     }
                 }
