@@ -41,7 +41,8 @@ int elf32_load(const void *image, uint32_t image_size,
         if (program->type != ELF32_PT_LOAD || program->memsz == 0U) continue;
         if (program->filesz > program->memsz ||
             !elf32_range_valid(program->offset, program->filesz, image_size) ||
-            program->vaddr >= USER_SPACE_END || program->memsz > USER_SPACE_END - program->vaddr) return -4;
+            program->vaddr >= USER_MM_SPACE_LIMIT ||
+            program->memsz > USER_MM_SPACE_LIMIT - program->vaddr) return -4;
         segment_end = program->vaddr + program->memsz;
         if ((program->flags & ELF32_PF_X) != 0U &&
             header->entry >= program->vaddr && header->entry < segment_end) entry_ok = 1U;
@@ -49,7 +50,8 @@ int elf32_load(const void *image, uint32_t image_size,
         if (segment_end > image_end) image_end = segment_end;
     }
 
-    if (image_start == 0xFFFFFFFFU || !entry_ok || header->entry >= USER_SPACE_END) return -5;
+    if (image_start == 0xFFFFFFFFU || !entry_ok ||
+        header->entry >= USER_MM_SPACE_LIMIT) return -5;
     image_start &= ~(PAGE_SIZE - 1U);
     image_end = PAGE_ALIGN(image_end);
 
@@ -74,6 +76,13 @@ int elf32_load(const void *image, uint32_t image_size,
             return -7;
         }
         paging_mm_map(mm, address, physical, flags);
+        if (paging_mm_get_phys(mm, address) == 0U) {
+            /* paging_mm_map refuses out-of-range addresses (>= 1 GiB or
+             * < 4 MiB for user pages); bail out instead of faulting later
+             * when the segment copy runs under the target CR3. */
+            pmm_free_page(physical);
+            return -8;
+        }
     }
 
     /* User pages are only reachable through the process CR3; switch to
