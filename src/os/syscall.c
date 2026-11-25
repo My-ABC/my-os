@@ -506,8 +506,12 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2)) {
                         return (uint32_t)-1;
                     }
-                    if (sys_gets((char *)a1, (int)a2, frame) != 0) {
-                        return (uint32_t)-1;
+                    int gets_rc = sys_gets((char *)a1, (int)a2, frame);
+                    if (gets_rc != 0) {
+                        /* Yield/signal abort: -2 tells callers to retry;
+                         * when the switch_frame diversion works the user
+                         * never sees it (int 0x80 restarts instead). */
+                        return (uint32_t)-2;
                     }
                     /* POSIX-style: return the line length in bytes
                      * (excluding the NUL terminator); 0 = empty line. */

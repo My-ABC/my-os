@@ -328,6 +328,7 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
 struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
     uint32_t flags = irq_save();
     if (current_process < 0 || kernel_frame == 0 ||
+        (kernel_frame->cs & 3U) != 0U ||
         (frame->cs & 3U) != 3U) {
         irq_restore(flags);
         return 0;
