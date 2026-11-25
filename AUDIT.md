@@ -48,12 +48,13 @@
 - `requested` 接近 `0xFFFFFFFF` 时，`heap_pages_for_size` 内部 `size + sizeof(struct heap_block)` 回绕，`new_pages` 可能很小；若 `new_pages <= block->pages`，走 `block->size = requested` 的收缩分支并返回原指针。此后 `copy_size = min(block->size, requested)` 可把 `requested` 当作有效大小，后续 `krealloc`/`memcpy` 会按远超实际分配的大小读写内核堆。
 - 当前调用方可信，属于潜在内核堆溢出。建议：`krealloc` 入口复用 `kmalloc` 的上限判断，或让 `heap_pages_for_size` 返回 0/失败。
 
-### P1-4 ELF 装载把合法 `PT_LOAD` 接受到 3 GiB，但 `user_mm` 只映射低 1 GiB，段 `>=0x40000000` 会在切 CR3 后 memset 触发内核保护错误 ⬜
+### P1-4 ELF 装载把合法 `PT_LOAD` 接受到 3 GiB，但 `user_mm` 只映射低 1 GiB，段 `>=0x40000000` 会在切 CR3 后 memset 触发内核保护错误 ✅（`9c557b3`）
 
 `src/os/elf.c:41-49` 用 `USER_SPACE_END`（`0xC0000000`）校验 `vaddr/memsz`；`src/mm/paging.c` 的 `paging_mm_map` 对 `virtual_addr >= USER_MM_SPACE_LIMIT`（`0x40000000`）直接拒绝映射，但 `elf32_load` 不检查每页 `paging_mm_map` 是否成功。
 
 - 恶意/畸形 ELF 只要 `PT_LOAD.vaddr` 落在 `[0x40000000,0xC0000000)`，`image_start..image_end` 会包含未映射页；`elf32_load` 切到目标 CR3 后 `memset`（`src/os/elf.c:81-85`）以 CPL0 访问未映射用户页，`isr14` 判为非法内核访问并 `panic_blue_screen`。
 - 跨 `0x40000000` 边界的镜像同样会在高半段 memset 时 panic。建议：ELF 校验与 `ring3_user_range_permitted` 统一使用 `USER_MM_SPACE_LIMIT`，并逐页确认 `paging_mm_map` 成功。
+- 修复（`9c557b3`）：`PT_LOAD` 的 `vaddr/memsz` 与 `entry` 校验统一收敛到 `USER_MM_SPACE_LIMIT`（1 GiB）；逐页 `paging_mm_map` 后用 `paging_mm_get_phys` 确认映射成功，失败释放物理页并返回 -8。QEMU 实测：vaddr=`0x50000000` 的畸形 ELF 被 `run` 拒绝（"Unable to load or run"），内核存活无 panic。
 
 ### P1-5 FAT32/ATA 全局缓冲与 fd 表非重入，IRQ0 可在 kernel shell FAT 操作中途切到 Ring3 进程再进入 FAT32 ⬜
 
