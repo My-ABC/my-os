@@ -1,9 +1,9 @@
 # MyOS 代码审计报告（P0–P3）
 
-- 审计基线：`feature/vt-f1-f2` @ `b1989bf`（工作区干净，未新建 feature 分支）
-- 范围：`src/`、`include/`、`boot/` 全量重读（约 1.14 万行：boot 汇编入口、全部头文件、内核/内存/中断/Ring3/syscall/ELF/FAT32/驱动/串口/ACPI/VBE/VGA/VT/双 shell）
-- 方法：按 `.github/agents/my-os-kernel.agent.md` 的架构约束逐文件核对；对照 `regs.h`/`interrupt.asm`/`idt.c` 栈帧契约、VT/串口/KMAP/PDE 复用/内存所有权/syscall 用户指针边界逐项验证
-- 验证：本轮为文档审计，未改代码；已运行 `make build`（通过）与 `make test`（45 项通过）。未运行 `make test-qemu`
+- 审计基线：第二轮 @ `9dee583`（第一轮基线 `feature/vt-f1-f2` @ `b1989bf`）
+- 范围：`src/`、`include/`、`boot/` 全量重读（约 1.14 万行：boot 汇编入口、全部头文件、内核/内存/中断/Ring3/syscall/ELF/FAT32/驱动/串口/ACPI/VBE/VGA/VT/双 shell）；第二轮新增 `mini-libc/` 全量（约 2.6 千行：stdlib/stdio/fs/process/signal/time/string/setjmp/syscall.S/crt0.S 及全部头文件）与 `test/` 中 ELF 生成路径核对
+- 方法：按 `.github/agents/my-os-kernel.agent.md` 的架构约束逐文件核对；对照 `regs.h`/`interrupt.asm`/`idt.c` 栈帧契约、VT/串口/KMAP/PDE 复用/内存所有权/syscall 用户指针边界逐项验证；第二轮复核 P1-3/P1-4 修复正确性，并对照 `elf_demo.asm`/`shell3.elf` 程序头验证 ELF 装载页权限路径
+- 验证：两轮均为文档审计，未改代码；第一轮已运行 `make build`（通过）与 `make test`（45 项通过）。未运行 `make test-qemu`
 
 ## 严重度定义
 
@@ -194,3 +194,53 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 8. **P2-6 FAT32 事务顺序**：delete/move 改为“先提交目录项、后释放簇链”。
 9. **P2-7/P2-8/P2-9/P2-10**：FAT 分配性能、mm 创建失败原子性、VT backing 泄漏、set2 键盘状态。
 10. **P3**：按上表逐项清理；ACPI/RTC 固件解析加固可随后续硬件兼容工作一起做。
+
+---
+
+## 第二轮复审新增条目（mini-libc 首次覆盖 + 关键路径复核）
+
+第二轮重读 `mini-libc/`（第一轮范围外）、复核 `9c557b3`/`2d75e54` 两处修复、并对照 `boot/elf_demo.asm` 与 `build/shell3.elf` 的程序头验证 ELF 装载路径。编号沿用 R2-Nx。
+
+### P2
+
+#### R2-N1 mini-libc `xalloc` 的 `ksize` 32-bit 回绕导致分配不足、后续溢出 ⬜
+
+`mini-libc/src/stdlib.c:48-65`：`ksize = size + MH_HDR + align + 8` 在 32-bit `size_t` 上回绕。`malloc(0xFFFFFF00)` 之类的巨大 size 会得到一个很小的 `ksize`，内核只分配一页，但头部 `size` 字段记录原始大值；随后 `calloc` 的 `memset(p,0,total)`、`realloc` 的 `memcpy(np, ptr, min(oldsize,size))` 都按大值读写，必然打爆本进程用户堆（自伤，但可稳定复现崩溃）。`calloc` 的 `nmemb*size` 溢出检查拦不住 `calloc(1, huge)` 这条路径。
+
+建议：`xalloc` 入口加 `size > UINT32_MAX - (MH_HDR + align + 8)` 上限检查并返回 ENOMEM。
+
+#### R2-N2 `elf_run_vt` 的 -7（mm 耗尽）被当作永久 spawn 失败，瞬时内存压力会永久禁用 vt ⬜
+
+`src/kernel.c` `shell3_spawn_on_vt`：只有 `rc == -8`（进程表满）映射为 `VT_SPAWN_RETRY`；`paging_mm_create` 失败时 `elf_run_vt` 返回 -7，被当作 ELF 装载错误 → `vt_latch_spawn_failed` 永久关 F 键。`USER_MM_MAX=8` 的 mm 槽在进程密集/泄漏场景下会耗尽，属于可恢复资源不足，却走了永久失败路径。同函数还有次级问题：`fat32_read_file` 对超 `FAT32_MAX_FILE_SIZE` 的文件截断返回 0（P3-6），`elf_run_vt` 会拿截断镜像解析，大概率 -2 永久 latch。
+
+建议：-7 也映射为 RETRY；spawn 前先 `fat32_stat` 校验 size ≤ FAT32_MAX_FILE_SIZE。
+
+#### R2-N3 `elf32_load` 的段复制依赖 CR0.WP=0，脆弱且未文档化 ⬜
+
+`src/os/elf.c`：按页计算 `PAGE_WRITABLE`（仅 PF_W 段可写），随后切到目标 CR3 以 CPL0 `memcpy` 段内容。对只读 PT_LOAD（`elf_demo.asm` flags=5、`shell3.elf` 的 R-E 段）写入的是无 WRITABLE 的用户页——当前不 panic 只是因为 `boot/boot.asm`/`paging.asm` 只置 PG、CR0.WP=0，supervisor 绕过写保护。一旦将来开启 WP（或在 WP=1 的测试环境），所有含只读段的正常 ELF 都会在装载期触发 "Kernel protection fault" panic。
+
+建议：要么在 `paging_mm_map` 后用 KMAP/物理页写入段数据（不切 CR3），要么显式注释"依赖 WP=0"并加测试；更稳妥是临时把目标页 PTE 置 WRITABLE、拷贝完清除。
+
+### P3
+
+1. `mini-libc/src/stdio.c` `fgets`：`size==1` 时循环不执行，`c` 未初始化却参与 `i==0 && c==EOF` 判断（UB 读栈值）。
+2. `mini-libc/src/ctype.c` `iscntrl`：`c < 32` 漏掉 DEL(127)，`iscntrl(0x7F)` 应为真。
+3. `mini-libc/src/time.c` `strftime`：`tm_wday`/`tm_mon` 未校验即索引 `wday_names[8]`/`mon_names[12]`，调用方构造越界 `struct tm` 会造成用户态 OOB 读。
+4. `mini-libc/src/stdio.c` `fread` 与 `fs.c` `fs_fread/fs_fwrite`：`size * count` 为 32-bit `size_t`/`unsigned`，大参数回绕后 `total` 偏小，返回值与实际读写不一致。
+5. `src/drivers/ata.c`：`ata_read_sectors`/`ata_write_sectors` 发命令前只做 `ata_wait_400ns`（4 次读），不等 BSY 清零；前一次操作未完成时寄存器写入可能被丢弃。建议命令前补 `ata_wait_bsy_clear`。
+6. `src/fs/fat32_core.c` `fat32_init`：`g_sector[16] != 2` 拒绝单 FAT 卷；`total_sectors==0` 时不回退读 BPB 19-20 的 16-bit 字段（`fat32_image.py` 已做此回退，内核没有），部分合法 FAT32 无法挂载。
+7. `src/os/ring3.c` `ring3_kill`：对 `current_process` 自身置 DEAD 后不切帧，进程要等到 IRQ0 才被回收（窗口内仍可执行）；`ring3_signal_scan`/`ring3_terminate_current` 路径已处理，仅 kill-self 路径有此小窗口。
+8. `mini-libc` `xalloc` 的 malloc 头（base/magic/align/size）位于用户可写内存，用户可伪造头让 `free()` 把任意 `base` 传给 `MEMORY_FREE`；内核 `user_free` 有 magic+范围校验，实际只能命中自己进程堆，记为设计说明而非缺陷。
+9. `boot/boot.asm`/`boot/paging.asm`：启用分页时未置 CR0.WP/WP 相关位之外的 CR0 保留位检查；同时 WP=0 使内核可写只读页（含 rodata），属加固建议（见 R2-N3）。
+
+### 复核结论（本轮确认无新问题）
+
+- `krealloc` 上限修复（`2d75e54`）与 grow-merge/shrink 分支的 remainder 处理正确；`heap_split`/`heap_coalesce`/`heap_insert_free` 有序重插无回归。
+- `paging_mm_create` 的借出低 4 MiB 复制（bit9 BORROWED）与 `paging_mm_release` 的借出跳过逻辑一致；`mm_ensure_pt` 失败静默 continue 仍是 P2-8。
+- `elf32_load` 的 `USER_MM_SPACE_LIMIT` 收敛、逐页 `paging_mm_map`+`get_phys` 校验（`9c557b3`）正确；失败路径由 `elf_run_vt` 统一 `paging_mm_release`，无泄漏。
+- `trap.c` isr14 的 demand-map/protection-kill 分支与 `err_code` 位语义核对无误；`isr14_demand_map` 只在 `ring3_current_mm()` 存在时映射。
+- `ring3.c` 信号投递（`sig_deliver`/`sig_actionable`/`sigreturn`）、`ring3_foreground_release` 父进程回退、`ring3_schedule_internal` 的镜像/栈范围校验与 mm 所有权转移均与注释一致。
+- `syscall.c` 的 `sys_user_buffer_ok`/`sys_copy_user_string` 映射级校验、`sysfs_fread/fwrite` 的 uint64 边界、`FS_READDIR` staging、`PROC_LIST` 12 字节记录与 mini-libc `proc_info_t` 布局一致。
+- `fat32_dir.c`/`fat32_name.c`：LFN 序列校验（order/checksum/0xA0 掩码）、`find_free_directory_slots` 的 end-marker 语义、`make_short_alias` 的 `~N` 生成与 `directory_chain_contains` 的 `..` 回溯均正确；P2-6 的 delete/move 顺序问题仍在。
+- `mini-libc` `syscall*.S` 的栈参数偏移、`setjmp.S` 的 esp/eip 保存、`crt0.S` 的 argc/argv/envp 帧与内核 ABI 一致；`strtol/strtoul` 溢出、`qsort` 递归深度（迭代大侧）无问题。
+- `keyboard.c` set2 断码顺序问题（P2-10）本轮复核属实，默认 set1 不受影响。
