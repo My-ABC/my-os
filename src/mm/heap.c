@@ -218,6 +218,9 @@ void *krealloc(void *ptr, size_t size) {
         kfree(ptr);
         return 0;
     }
+    if (requested > 0xFFFFFFFFU - sizeof(struct heap_block)) {
+        return 0;
+    }
 
     uint32_t address = (uint32_t)ptr;
     if (address < KERNEL_HEAP_START + sizeof(struct heap_block) ||
