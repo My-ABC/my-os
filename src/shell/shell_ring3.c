@@ -804,12 +804,14 @@ static int cmd_write(int argc, char *argv[]) {
         offset += len;
     }
     text[offset] = '\0';
-    fs_unlink(argv[1]);   /* truncate semantics: start from a fresh file */
+    /* Open first so a failure leaves the existing file untouched; the
+     * fd stores the path, so unlinking afterwards still truncates. */
     int fd = fs_open(argv[1], FS_O_RDWR);
     if (fd < 0) {
         printf("Unable to write %s\n", argv[1]);
         return -1;
     }
+    fs_unlink(argv[1]);   /* truncate semantics: start from a fresh file */
     size_t off = 0;
     while (off < offset) {
         int w = fs_write(fd, text + off, (unsigned)(offset - off));

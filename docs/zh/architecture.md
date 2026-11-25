@@ -27,6 +27,7 @@ Shell，以及运行在 ATA 磁盘上的 FAT32 文件系统。
 | [12-driver-gaps.md](12-driver-gaps.md) | 驱动能力盘点、按总线列出的缺失驱动、优先级、QEMU 测试设备 |
 | [13-signals.md](13-signals.md) | 信号编号、投递、处理器、restorer trampoline、`SIG_RETURN` |
 | [14-mini-libc.md](14-mini-libc.md) | `mini-libc/` 用户态 C 库、syscall 封装、构建说明 |
+| [15-virtual-terminals.md](15-virtual-terminals.md) | F1/F2 虚拟终端、每终端 shell 与屏幕备份、vt 生命周期 |
 
 英文版见 [../en/](../en/)。
 
@@ -50,8 +51,11 @@ test/             host 契约测试、C 测试套件、QEMU 集成测试
 ## 顶层调用关系
 
 - `boot/boot.asm:start` → 早期 PAE 页表 → `kmain(multiboot_info)`。
-- `kmain` 依次初始化 GDT/TSS、串口、PMM、分页、VBE/VGA、ATA/FAT32、
-  堆自检、PIC/PIT/键盘、RTC，然后进入 `start_shell()`。
+- `kmain` 依次初始化 GDT/TSS、串口、PMM、分页、VBE/VGA/VT、ATA/FAT32、
+  堆自检、PIC/PIT/键盘、TSC/RTC，然后进入 `shell3_supervisor()`——
+  它在两个虚拟终端（F1/F2）上自动启动 `/shell3.elf`，未挂载磁盘、
+  文件缺失，或 vt 0 的 shell3 拉起永久失败时回退内核
+  `start_shell()`。
 - Shell 分发 `cmd_table`；磁盘命令走 FAT32 公开 API
   （`include/fs/fat32.h`）；进程命令走 Ring 3 API
   （`include/os/ring3.h`）；`run`/`elf` 经 `elf_run`。

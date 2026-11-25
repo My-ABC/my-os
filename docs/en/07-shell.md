@@ -63,8 +63,13 @@ the destination is an existing directory, the effective target becomes
 
 ## Output conventions
 
-- Disk and process commands dual-write status to VGA `printf` and COM1
-  `serial_print*`, which keeps scripted QEMU sessions deterministic.
+- Disk, process, and `help` commands dual-write status to VGA `printf`
+  and COM1 `serial_print*`, which keeps scripted QEMU sessions
+  deterministic.
+- Ring 3 `IO_WRITE` output goes to the process's own vt screen buffer
+  and is mirrored to COM3 (`serial3_print`); COM1 is reserved for kernel
+  diagnostics. COM3 is a single global mirror, so output from vt 0 and
+  vt 1 interleaves there.
 - Failures print `Unable to ...` / `Usage: ...` on VGA only.
 
 ## Command table
@@ -86,8 +91,19 @@ disk carries `shell3.elf` at its root — the `disk.img` produced by
 `kernel.c`) auto-starts it in the foreground and respawns it every
 time it exits or is killed, so `make run` lands directly in the
 Ring 3 shell and never shows the kernel shell. The kernel shell is
-only reached when no disk is mounted or `shell3.elf` is missing or
-unloadable. The final
+reached whenever vt 0 cannot host shell3 — no disk mounted,
+`shell3.elf` missing or unloadable, or vt 0's spawn permanently
+failing after retries are exhausted (see
+[15-virtual-terminals.md](15-virtual-terminals.md)). Two virtual terminals (ttys) are provided by
+`src/drivers/vt.c`: F1 selects vt 0 and F2 selects vt 1, each running
+its own `shell3.elf` instance concurrently. Only the visible terminal
+receives keyboard input; every terminal keeps a private screen
+backing store (VGA cell buffer or VBE framebuffer copy) so switching
+preserves each terminal's contents. The kernel shell stays pinned to
+vt 0, foreground ownership and SIGINT are tracked per terminal, and
+`vt_service()` respawns a dead shell on its terminal from the kernel
+idle loop. See [15-virtual-terminals.md](15-virtual-terminals.md)
+for the full vt design. The final
 version implements the full kernel command set through the
 mini-libc public API only: all `fs.h` file commands (`ls`, `cat`,
 `write`, `cp [-r]`, `mv`, `rm [-f]`, `cd`, `mkdir`, `rmdir`),

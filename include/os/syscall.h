@@ -16,7 +16,8 @@
 #define SYS_SIG      7   // 信号
 
 // SYS_IO 子操作
-#define IO_WRITE    1   // ecx: const char *str —— 向 VGA+串口输出字符串
+#define IO_WRITE    1   // ecx: const char *str —— 向 VGA+COM3 输出字符串（上限 4096 字节）
+#define IO_WRITE_MAX 4096U
 #define IO_GETCHAR  2   // 阻塞读取单个字符，返回字符
 #define IO_READ     3   // ecx: char *buf, edx: size —— 读取一行（带回显）
 #define IO_CLEAR    4   // 清屏

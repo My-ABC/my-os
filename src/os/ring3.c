@@ -1,5 +1,6 @@
 #include "ring3.h"
 #include "signal.h"
+#include "vt.h"
 #include "paging.h"
 #include "pmm.h"
 #include "tss.h"
@@ -20,6 +21,7 @@
 struct ring3_process {
     uint32_t pid;
     uint32_t state;
+    uint32_t vt;                 /* virtual terminal this process renders to */
     uint32_t parent_pid;         /* spawner's pid; foreground falls back to it */
     uint32_t user_stack_top;
     uint32_t image_start;
@@ -40,22 +42,30 @@ static struct irq_frame *kernel_frame;
 static int32_t current_process = -1;
 static uint32_t next_pid = 1U;
 static uint32_t next_process;
-static uint32_t foreground_pid;
+static uint32_t foreground_pid[VT_COUNT];
 
-/* When `pid` gives up the foreground slot, hand it back to the process
- * that spawned it (when still alive) instead of leaving a visible
- * fg==0 gap. Without this the kernel shell observes foreground_pid==0
- * between a child's death and its parent's reclaim_foreground() and
- * prints a stray prompt, producing doubled prompts on screen. */
-static void ring3_foreground_release(uint32_t pid, uint32_t parent) {
-    if (foreground_pid != pid) return;
-    foreground_pid = 0U;
+static uint32_t ring3_vt_clamp(int vt) {
+    return (vt >= 0 && vt < VT_COUNT) ? (uint32_t)vt : VT_FALLBACK;
+}
+
+/* When `pid` gives up the foreground slot on its vt, hand it back to
+ * the process that spawned it (when still alive on the same vt)
+ * instead of leaving a visible fg==0 gap. Without this the kernel
+ * shell observes foreground_pid==0 between a child's death and its
+ * parent's reclaim_foreground() and prints a stray prompt, producing
+ * doubled prompts on screen. */
+static void ring3_foreground_release(struct ring3_process *process) {
+    uint32_t vt = process->vt;
+    uint32_t pid = process->pid;
+    uint32_t parent = process->parent_pid;
+    if (foreground_pid[vt] != pid) return;
+    foreground_pid[vt] = 0U;
     if (parent == 0U) return;
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
-        if (processes[i].pid == parent &&
+        if (processes[i].pid == parent && processes[i].vt == vt &&
             (processes[i].state == RING3_PROCESS_READY ||
              processes[i].state == RING3_PROCESS_RUNNING)) {
-            foreground_pid = parent;
+            foreground_pid[vt] = parent;
             return;
         }
     }
@@ -152,7 +162,7 @@ static int mm_install_sig_trampoline(struct user_mm *mm) {
 static int ring3_schedule_internal(void (*func)(void),
                                   struct user_mm *mm,
                                   uint32_t image_start, uint32_t image_end,
-                                  int foreground) {
+                                  int foreground, int vt) {
     uint32_t flags = irq_save();
     uint32_t i;
 
@@ -166,6 +176,9 @@ static int ring3_schedule_internal(void (*func)(void),
            image_end > USER_STACK_TOP_0 - USER_STACK_SIZE) ||
           (image_start < USER_STACK_TOP_1 &&
            image_end > USER_STACK_TOP_1 - USER_STACK_SIZE)))) {
+        /* Ownership of a caller-supplied mm transfers on entry; every
+         * failure path releases it so callers never double-free. */
+        if (mm != 0) paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }
@@ -177,6 +190,7 @@ static int ring3_schedule_internal(void (*func)(void),
         }
     }
     if (i == RING3_PROCESS_COUNT) {
+        if (mm != 0) paging_mm_release(mm);
         irq_restore(flags);
         return -1;
     }
@@ -236,6 +250,7 @@ static int ring3_schedule_internal(void (*func)(void),
 
     processes[i].pid = next_pid++;
     if (next_pid == 0U) next_pid = 1U;
+    processes[i].vt = ring3_vt_clamp(vt);
     processes[i].parent_pid = ring3_current_pid();
     processes[i].state = RING3_PROCESS_READY;
     processes[i].user_stack_top = stack_top;
@@ -249,7 +264,7 @@ static int ring3_schedule_internal(void (*func)(void),
     }
     processes[i].sig_active = 0U;
     processes[i].frame = frame;
-    if (foreground) foreground_pid = processes[i].pid;
+    if (foreground) foreground_pid[processes[i].vt] = processes[i].pid;
 
     next_process = i;
     irq_restore(flags);
@@ -257,14 +272,15 @@ static int ring3_schedule_internal(void (*func)(void),
 }
 
 int ring3_schedule(void (*func)(void)) {
-    return ring3_schedule_mm(func, 0, 0U, 0U, 0);
+    return ring3_schedule_mm(func, 0, 0U, 0U, 0,
+                             (int)ring3_current_vt());
 }
 
 int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
                       uint32_t image_start, uint32_t image_end,
-                      int foreground) {
+                      int foreground, int vt) {
     return ring3_schedule_internal(func, mm, image_start, image_end,
-                                   foreground);
+                                   foreground, vt);
 }
 
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
@@ -312,6 +328,7 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
 struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
     uint32_t flags = irq_save();
     if (current_process < 0 || kernel_frame == 0 ||
+        (kernel_frame->cs & 3U) != 0U ||
         (frame->cs & 3U) != 3U) {
         irq_restore(flags);
         return 0;
@@ -337,8 +354,28 @@ uint32_t ring3_current_pid(void) {
     return processes[(uint32_t)current_process].pid;
 }
 
-uint32_t ring3_foreground_pid(void) {
-    return foreground_pid;
+uint32_t ring3_current_vt(void) {
+    if (current_process < 0) return VT_FALLBACK;
+    return processes[(uint32_t)current_process].vt;
+}
+
+int ring3_pid_vt(uint32_t pid) {
+    uint32_t flags = irq_save();
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        if (processes[i].pid == pid &&
+            (processes[i].state == RING3_PROCESS_READY ||
+             processes[i].state == RING3_PROCESS_RUNNING)) {
+            irq_restore(flags);
+            return (int)processes[i].vt;
+        }
+    }
+    irq_restore(flags);
+    return -1;
+}
+
+uint32_t ring3_foreground_pid_vt(int vt) {
+    if (vt < 0 || vt >= VT_COUNT) return 0U;
+    return foreground_pid[vt];
 }
 
 uint32_t ring3_process_list(uint32_t *pids, uint32_t *states,
@@ -360,7 +397,7 @@ int ring3_set_foreground(uint32_t pid) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
              processes[i].state == RING3_PROCESS_RUNNING)) {
-            foreground_pid = pid;
+            foreground_pid[processes[i].vt] = pid;
             irq_restore(flags);
             return 0;
         }
@@ -375,7 +412,9 @@ int ring3_set_background(uint32_t pid) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
              processes[i].state == RING3_PROCESS_RUNNING)) {
-            if (foreground_pid == pid) foreground_pid = 0U;
+            if (foreground_pid[processes[i].vt] == pid) {
+                foreground_pid[processes[i].vt] = 0U;
+            }
             irq_restore(flags);
             return 0;
         }
@@ -411,9 +450,8 @@ struct irq_frame *ring3_terminate_current(void) {
         return 0;
     }
     struct ring3_process *process = &processes[(uint32_t)current_process];
-    uint32_t pid = process->pid;
     process->state = RING3_PROCESS_DEAD;
-    ring3_foreground_release(pid, process->parent_pid);
+    ring3_foreground_release(process);
     /* Tear down on the kernel page directory before releasing the mm. */
     paging_switch_cr3(paging_kernel_cr3());
     release_process_resources(process);
@@ -432,7 +470,7 @@ int ring3_kill(uint32_t pid) {
             (processes[i].state == RING3_PROCESS_READY ||
              processes[i].state == RING3_PROCESS_RUNNING)) {
             processes[i].state = RING3_PROCESS_DEAD;
-            ring3_foreground_release(pid, processes[i].parent_pid);
+            ring3_foreground_release(&processes[i]);
             if (current_process != (int32_t)i) {
                 release_process_resources(&processes[i]);
             }
@@ -628,7 +666,7 @@ void ring3_signal_scan(struct irq_frame *frame) {
         if (is_current && current_kernel_frame) continue;
         if (fatal != 0U) {
             p->state = RING3_PROCESS_DEAD;
-            ring3_foreground_release(p->pid, p->parent_pid);
+            ring3_foreground_release(p);
             if (!is_current) {
                 release_process_resources(p);
             }

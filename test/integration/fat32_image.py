@@ -85,6 +85,81 @@ def add_root_file(image_path, filename, contents):
     Path(image_path).write_bytes(image)
 
 
+def root_file_present(image_path, filename):
+    """True when the FAT32 root directory holds a live (not 0xE5-deleted)
+    entry for `filename`. Used to detect disk images whose shell3.elf
+    directory entry was removed after the image was created — a plain
+    timestamp check cannot see that."""
+    image = Path(image_path).read_bytes()
+    bytes_per_sector = int.from_bytes(image[11:13], "little")
+    sectors_per_cluster = image[13]
+    reserved_sectors = int.from_bytes(image[14:16], "little")
+    fat_count = image[16]
+    sectors_per_fat = int.from_bytes(image[36:40], "little")
+    total_sectors = int.from_bytes(image[32:36], "little")
+    if total_sectors == 0:
+        total_sectors = int.from_bytes(image[19:21], "little") * bytes_per_sector
+    root_cluster = int.from_bytes(image[44:48], "little") & 0x0FFFFFFF
+    if bytes_per_sector != 512 or sectors_per_cluster == 0:
+        return False
+
+    cluster_size = bytes_per_sector * sectors_per_cluster
+    data_start = (reserved_sectors + fat_count * sectors_per_fat) * bytes_per_sector
+    fat_start = reserved_sectors * bytes_per_sector
+    fat_size = sectors_per_fat * bytes_per_sector
+    data_cluster_count = max(1, (total_sectors * bytes_per_sector -
+                                 data_start) // cluster_size)
+
+    def fat_value(cluster):
+        offset = fat_start + cluster * 4
+        return int.from_bytes(image[offset:offset + 4], "little") & 0x0FFFFFFF
+
+    try:
+        base_name, extension = filename.upper().split(".", 1)
+        short_name = base_name.encode("ascii").ljust(8, b" ") + \
+            extension.encode("ascii").ljust(3, b" ")
+    except (UnicodeEncodeError, ValueError):
+        return False
+
+    cluster = root_cluster
+    for _ in range(data_cluster_count):
+        if cluster < 2 or cluster >= 0x0FFFFFF8:
+            return False
+        directory_offset = data_start + (cluster - 2) * cluster_size
+        directory = image[directory_offset:directory_offset + cluster_size]
+        for offset in range(0, len(directory), 32):
+            entry = directory[offset:offset + 32]
+            if len(entry) < 32:
+                break
+            if entry[0] == 0x00:
+                return False
+            if entry[0] == 0xE5 or entry[11] == 0x0F:
+                continue
+            if bytes(entry[:11]) == short_name:
+                return True
+        cluster = fat_value(cluster)
+    return False
+
+
+def create_empty_disk(directory):
+    """FAT32 image with no files at all — used by the vt spawn-exhaustion
+    scenario where /shell3.elf must be absent."""
+    disk_path = Path(directory) / "disk.img"
+    with disk_path.open("wb") as disk:
+        disk.truncate(64 * 1024 * 1024)
+    mkfs = shutil.which("mkfs.fat")
+    if mkfs is None:
+        raise IntegrationFailure("mkfs.fat is required for FAT32 QEMU integration")
+    subprocess.run(
+        [mkfs, "-F", "32", "-n", "MYOS", str(disk_path)],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return disk_path
+
+
 def create_test_disk(directory):
     disk_path = Path(directory) / "disk.img"
     with disk_path.open("wb") as disk:

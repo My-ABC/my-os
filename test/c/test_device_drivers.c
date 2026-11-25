@@ -108,8 +108,6 @@ static void test_pit_programming_and_ticks(void) {
 
 static void test_serial_io(void) {
     uint8_t received[] = {'x', 'y', 'z', 'q'};
-    uint8_t line_input[] = {'y', 'z', 'q'};
-    char line[3];
     serial_output_length = 0;
     serial_putchar('\n');
     check(serial_output_length == 2 && serial_output[0] == '\r' &&
@@ -121,11 +119,6 @@ static void test_serial_io(void) {
     lsr = 0x21;
     reset_input(received, sizeof(received));
     check(serial_getchar() == 'x', "serial: nonblocking read returns available byte");
-
-    reset_input(line_input, sizeof(line_input));
-    serial_gets(line, sizeof(line));
-    check(line[0] == 'y' && line[1] == 'z' && line[2] == '\0',
-          "serial: line input remains within caller buffer");
 }
 
 int main(void) {

@@ -28,6 +28,7 @@ Numbered documents cover each subsystem in detail:
 | [12-driver-gaps.md](12-driver-gaps.md) | Driver capability inventory, missing drivers by bus, priorities, QEMU test devices |
 | [13-signals.md](13-signals.md) | Signal numbers, delivery, handlers, restorer trampoline, `SIG_RETURN` |
 | [14-mini-libc.md](14-mini-libc.md) | `mini-libc/` user-space C library, syscall wrappers, build notes |
+| [15-virtual-terminals.md](15-virtual-terminals.md) | F1/F2 virtual terminals, per-vt shells and screen backing stores, vt lifecycle |
 
 Chinese translations live under [../zh/](../zh/).
 
@@ -51,8 +52,12 @@ test/             host contract tests, C suites, QEMU integration tests
 ## High-level call graph
 
 - `boot/boot.asm:start` → early PAE tables → `kmain(multiboot_info)`.
-- `kmain` initializes GDT/TSS, serial, PMM, paging, VBE/VGA, ATA/FAT32,
-  heap self-test, PIC/PIT/keyboard, RTC, then enters `start_shell()`.
+- `kmain` initializes GDT/TSS, serial, PMM, paging, VBE/VGA/VT, ATA/FAT32,
+  IDT, heap self-test, PIC/PIT/keyboard, TSC/RTC, then enters
+  `shell3_supervisor()` — which auto-starts `/shell3.elf` on both virtual
+  terminals (F1/F2) and falls back to the kernel `start_shell()` when
+  no disk is mounted, the file is missing, or vt 0's shell3 spawn
+  permanently fails.
 - The shell dispatches `cmd_table` entries; disk commands call the FAT32
   public API (`include/fs/fat32.h`); process commands call the Ring 3 API
   (`include/os/ring3.h`); `run`/`elf` go through `elf_run`.

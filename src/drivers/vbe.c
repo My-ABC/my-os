@@ -2,6 +2,7 @@
 #include "ascii_font.h"
 #include "paging.h"
 #include "serial.h"
+#include "vt.h"
 
 #define VBE_FRAMEBUFFER_ADDRESS 0xE0000000U
 
@@ -24,12 +25,22 @@ struct vbe_state {
 };
 
 static struct vbe_state vbe_state;
-static uint32_t vbe_foreground = 0x00FFFFFFU;
-static uint32_t vbe_background = 0x00000000U;
-static uint32_t vbe_cursor_x;
-static uint32_t vbe_cursor_y;
-static uint32_t vbe_cursor_blink_ticks;
-static uint8_t vbe_cursor_visible = 1;
+
+/* Per-terminal console state: cursor, blink phase, and colors. Each
+ * vt keeps its own copy so an inactive terminal's framebuffer backing
+ * store preserves exactly what was on its screen. */
+struct vbe_ctx {
+    uint32_t cursor_x;
+    uint32_t cursor_y;
+    uint32_t cursor_blink_ticks;
+    uint8_t cursor_visible;
+    uint32_t foreground;
+    uint32_t background;
+};
+
+static struct vbe_ctx vbe_ctxs[VT_COUNT];
+static struct vbe_ctx *vbe_cur;
+static volatile uint8_t *vbe_target;
 
 static uint32_t vbe_palette_color(uint8_t color) {
     static const uint32_t palette[16] = {
@@ -76,10 +87,23 @@ static void vbe_store_pixel(volatile uint8_t *pixel, uint32_t color) {
     }
 }
 
+/* Resolve the console context and pixel target for terminal `vt`.
+ * The active vt draws into the physical scanout; an inactive vt draws
+ * into its private backing store (NULL when unavailable — pixels are
+ * then dropped but cursor bookkeeping still runs). */
+static void vbe_select(int vt) {
+    if (vt < 0 || vt >= VT_COUNT) vt = VT_FALLBACK;
+    vbe_cur = &vbe_ctxs[vt];
+    vbe_target = (volatile uint8_t *)vt_vbe_target(vt);
+}
+
 static void vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     volatile uint8_t *pixel;
     uint32_t bytes_per_pixel = (vbe_state.bpp + 7U) / 8U;
 
+    if (vbe_target == 0) {
+        return;
+    }
     /* Callers are expected to keep x < width and y < height; a bad
      * cursor/state value must not turn into a kernel page fault. */
     if (x >= vbe_state.width || y >= vbe_state.height) {
@@ -94,8 +118,7 @@ static void vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
         serial_print("\n");
         return;
     }
-    pixel = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
-            y * vbe_state.pitch + x * bytes_per_pixel;
+    pixel = vbe_target + y * vbe_state.pitch + x * bytes_per_pixel;
     vbe_store_pixel(pixel, color);
 }
 
@@ -111,7 +134,8 @@ static void vbe_map_framebuffer(const struct vbe_state *state) {
 
 static void vbe_fill_blue(const struct vbe_state *state) {
     uint32_t bytes_per_pixel = (state->bpp + 7U) / 8U;
-    volatile uint8_t *framebuffer = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS;
+    volatile uint8_t *framebuffer = vbe_target;
+    if (framebuffer == 0) return;
 
     for (uint32_t row = 0; row < state->height; row++) {
         volatile uint8_t *line = framebuffer + (uint32_t)row * state->pitch;
@@ -126,7 +150,7 @@ static void vbe_draw_glyph(const uint8_t *glyph, uint32_t column, uint32_t row) 
     for (uint32_t glyph_row = 0; glyph_row < ASCII_FONT_GLYPH_HEIGHT; glyph_row++) {
         for (uint32_t glyph_bit = 0; glyph_bit < ASCII_FONT_GLYPH_WIDTH; glyph_bit++) {
             uint32_t color = (glyph[glyph_row] & (0x80U >> glyph_bit))
-                ? vbe_foreground : vbe_background;
+                ? vbe_cur->foreground : vbe_cur->background;
             for (uint32_t scale_y = 0; scale_y < ASCII_FONT_SCALE; scale_y++) {
                 for (uint32_t scale_x = 0; scale_x < ASCII_FONT_SCALE; scale_x++) {
                     vbe_put_pixel(column * ASCII_FONT_WIDTH +
@@ -141,23 +165,23 @@ static void vbe_draw_glyph(const uint8_t *glyph, uint32_t column, uint32_t row) 
 }
 
 static void vbe_draw_cursor(void) {
-    vbe_cursor_visible = 1;
+    vbe_cur->cursor_visible = 1;
     for (uint32_t row = ASCII_FONT_HEIGHT - 2; row < ASCII_FONT_HEIGHT; row++) {
         for (uint32_t column = 0; column < ASCII_FONT_WIDTH; column++) {
-            vbe_put_pixel(vbe_cursor_x * ASCII_FONT_WIDTH + column,
-                          vbe_cursor_y * ASCII_FONT_HEIGHT + row,
-                          vbe_foreground);
+            vbe_put_pixel(vbe_cur->cursor_x * ASCII_FONT_WIDTH + column,
+                          vbe_cur->cursor_y * ASCII_FONT_HEIGHT + row,
+                          vbe_cur->foreground);
         }
     }
 }
 
 static void vbe_erase_cursor(void) {
-    vbe_cursor_visible = 0;
+    vbe_cur->cursor_visible = 0;
     for (uint32_t row = ASCII_FONT_HEIGHT - 2; row < ASCII_FONT_HEIGHT; row++) {
         for (uint32_t column = 0; column < ASCII_FONT_WIDTH; column++) {
-            vbe_put_pixel(vbe_cursor_x * ASCII_FONT_WIDTH + column,
-                          vbe_cursor_y * ASCII_FONT_HEIGHT + row,
-                          vbe_background);
+            vbe_put_pixel(vbe_cur->cursor_x * ASCII_FONT_WIDTH + column,
+                          vbe_cur->cursor_y * ASCII_FONT_HEIGHT + row,
+                          vbe_cur->background);
         }
     }
 }
@@ -167,7 +191,7 @@ static void vbe_scroll_up(void) {
     uint32_t rows = vbe_state.height / ASCII_FONT_HEIGHT;
     uint32_t scroll_area_rows = rows - 1U;
 
-    for (uint32_t row = 0; row < scroll_area_rows; row++) {
+    for (uint32_t row = 0; row < scroll_area_rows && vbe_target != 0; row++) {
         for (uint32_t column = 0; column < columns; column++) {
             uint32_t src_y = (row + 1U) * ASCII_FONT_HEIGHT;
             uint32_t dst_y = row * ASCII_FONT_HEIGHT;
@@ -175,9 +199,9 @@ static void vbe_scroll_up(void) {
                 for (uint32_t glyph_x = 0; glyph_x < ASCII_FONT_WIDTH; glyph_x++) {
                     uint32_t src_x = column * ASCII_FONT_WIDTH + glyph_x;
                     uint32_t src_color = 0U;
-                    volatile uint8_t *src = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
+                    volatile uint8_t *src = vbe_target +
                         (src_y + glyph_y) * vbe_state.pitch + src_x * ((vbe_state.bpp + 7U) / 8U);
-                    volatile uint8_t *dst = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS +
+                    volatile uint8_t *dst = vbe_target +
                         (dst_y + glyph_y) * vbe_state.pitch + src_x * ((vbe_state.bpp + 7U) / 8U);
                     if (vbe_state.bpp == 32) {
                         src_color = *(volatile vbe_unaligned_u32_t *)src;
@@ -193,31 +217,35 @@ static void vbe_scroll_up(void) {
         }
     }
 
-    for (uint32_t row = scroll_area_rows; row < rows; row++) {
+    for (uint32_t row = scroll_area_rows; row < rows && vbe_target != 0; row++) {
         for (uint32_t column = 0; column < columns; column++) {
             uint32_t start_x = column * ASCII_FONT_WIDTH;
             uint32_t start_y = row * ASCII_FONT_HEIGHT;
             for (uint32_t glyph_y = 0; glyph_y < ASCII_FONT_HEIGHT; glyph_y++) {
                 for (uint32_t glyph_x = 0; glyph_x < ASCII_FONT_WIDTH; glyph_x++) {
-                    vbe_put_pixel(start_x + glyph_x, start_y + glyph_y, vbe_background);
+                    vbe_put_pixel(start_x + glyph_x, start_y + glyph_y,
+                                  vbe_cur->background);
                 }
             }
         }
     }
 
-    vbe_cursor_y = rows - 1U;
-    vbe_cursor_x = 0;
+    vbe_cur->cursor_y = rows - 1U;
+    vbe_cur->cursor_x = 0;
 }
 
 void vbe_cursor_tick(void) {
     if (!vbe_available()) {
         return;
     }
-    if (++vbe_cursor_blink_ticks < 50U) {
+    /* Only the visible terminal's cursor blinks; inactive vts keep a
+     * frozen cursor inside their backing stores. */
+    vbe_select(vt_active_index());
+    if (++vbe_cur->cursor_blink_ticks < 50U) {
         return;
     }
-    vbe_cursor_blink_ticks = 0;
-    if (vbe_cursor_visible) {
+    vbe_cur->cursor_blink_ticks = 0;
+    if (vbe_cur->cursor_visible) {
         vbe_erase_cursor();
     } else {
         vbe_draw_cursor();
@@ -248,8 +276,9 @@ void vbe_get_cursor(uint16_t *row, uint16_t *col) {
         *col = 0;
         return;
     }
-    *row = (uint16_t)vbe_cursor_y;
-    *col = (uint16_t)vbe_cursor_x;
+    vbe_select(vt_render_index());
+    *row = (uint16_t)vbe_cur->cursor_y;
+    *col = (uint16_t)vbe_cur->cursor_x;
 }
 
 void vbe_set_cursor(uint16_t row, uint16_t col) {
@@ -259,16 +288,18 @@ void vbe_set_cursor(uint16_t row, uint16_t col) {
     if (!vbe_available() || row >= rows || col >= columns) {
         return;
     }
+    vbe_select(vt_render_index());
     vbe_erase_cursor();
-    vbe_cursor_x = col;
-    vbe_cursor_y = row;
-    vbe_cursor_blink_ticks = 0;
+    vbe_cur->cursor_x = col;
+    vbe_cur->cursor_y = row;
+    vbe_cur->cursor_blink_ticks = 0;
     vbe_draw_cursor();
 }
 
 void vbe_set_color(uint8_t foreground, uint8_t background) {
-    vbe_foreground = vbe_palette_color(foreground);
-    vbe_background = vbe_palette_color(background);
+    vbe_select(vt_render_index());
+    vbe_cur->foreground = vbe_palette_color(foreground);
+    vbe_cur->background = vbe_palette_color(background);
 }
 
 void vbe_clear(void) {
@@ -278,9 +309,11 @@ void vbe_clear(void) {
     if (!vbe_available()) {
         return;
     }
+    vbe_select(vt_render_index());
+    if (vbe_target == 0) return;
 
-    encoded_color = vbe_encode_color(vbe_background);
-    framebuffer = (volatile uint8_t *)VBE_FRAMEBUFFER_ADDRESS;
+    encoded_color = vbe_encode_color(vbe_cur->background);
+    framebuffer = vbe_target;
     if (vbe_state.bpp == 32) {
         for (uint32_t y = 0; y < vbe_state.height; y++) {
             volatile vbe_unaligned_u32_t *row =
@@ -315,9 +348,9 @@ void vbe_clear(void) {
             }
         }
     }
-    vbe_cursor_x = 0;
-    vbe_cursor_y = 0;
-    vbe_cursor_blink_ticks = 0;
+    vbe_cur->cursor_x = 0;
+    vbe_cur->cursor_y = 0;
+    vbe_cur->cursor_blink_ticks = 0;
     vbe_draw_cursor();
 }
 
@@ -330,19 +363,21 @@ void vbe_putchar(char c) {
     if (!vbe_available()) {
         return;
     }
+    vbe_select(vt_render_index());
     vbe_erase_cursor();
     if (c == '\n') {
-        vbe_cursor_x = 0;
-        vbe_cursor_y++;
+        vbe_cur->cursor_x = 0;
+        vbe_cur->cursor_y++;
     } else if (c == '\r') {
-        vbe_cursor_x = 0;
+        vbe_cur->cursor_x = 0;
     } else if (c == '\b') {
-        if (vbe_cursor_x > 0) {
-            vbe_cursor_x--;
-            vbe_draw_glyph(ascii_font[' '], vbe_cursor_x, vbe_cursor_y);
+        if (vbe_cur->cursor_x > 0) {
+            vbe_cur->cursor_x--;
+            vbe_draw_glyph(ascii_font[' '], vbe_cur->cursor_x,
+                           vbe_cur->cursor_y);
         }
     } else if (c == '\t') {
-        vbe_cursor_x = (vbe_cursor_x + 4U) & ~3U;
+        vbe_cur->cursor_x = (vbe_cur->cursor_x + 4U) & ~3U;
     } else {
         glyph = ascii_font[glyph_index];
         if (glyph_index != ' ' && glyph[0] == 0 && glyph[1] == 0 && glyph[2] == 0 &&
@@ -350,18 +385,34 @@ void vbe_putchar(char c) {
             glyph[6] == 0 && glyph[7] == 0) {
             glyph = ascii_font['?'];
         }
-        vbe_draw_glyph(glyph, vbe_cursor_x, vbe_cursor_y);
-        vbe_cursor_x++;
+        vbe_draw_glyph(glyph, vbe_cur->cursor_x, vbe_cur->cursor_y);
+        vbe_cur->cursor_x++;
     }
-    if (vbe_cursor_x >= columns) {
-        vbe_cursor_x = 0;
-        vbe_cursor_y++;
+    if (vbe_cur->cursor_x >= columns) {
+        vbe_cur->cursor_x = 0;
+        vbe_cur->cursor_y++;
     }
-    if (vbe_cursor_y >= rows) {
+    if (vbe_cur->cursor_y >= rows) {
         vbe_scroll_up();
     } else {
         vbe_draw_cursor();
     }
+}
+
+uint8_t *vbe_scanout(void) {
+    return (uint8_t *)VBE_FRAMEBUFFER_ADDRESS;
+}
+
+uint32_t vbe_scanout_bytes(void) {
+    if (!vbe_available()) return 0U;
+    return vbe_state.pitch * vbe_state.height;
+}
+
+void vbe_console_switched(void) {
+    if (!vbe_available()) return;
+    vbe_select(vt_active_index());
+    vbe_cur->cursor_blink_ticks = 0;
+    vbe_draw_cursor();
 }
 
 int vbe_initialize(uint32_t multiboot_info_addr) {
@@ -465,6 +516,17 @@ int vbe_initialize(uint32_t multiboot_info_addr) {
     vbe_state.valid = 1;
     vbe_map_framebuffer(&vbe_state);
 
+    /* Per-terminal console defaults: white on black, cursor at origin. */
+    for (int i = 0; i < VT_COUNT; ++i) {
+        vbe_ctxs[i].foreground = vbe_palette_color(15U);
+        vbe_ctxs[i].background = vbe_palette_color(0U);
+        vbe_ctxs[i].cursor_x = 0;
+        vbe_ctxs[i].cursor_y = 0;
+        vbe_ctxs[i].cursor_blink_ticks = 0;
+        vbe_ctxs[i].cursor_visible = 1;
+    }
+    vbe_select(VT_FALLBACK);
+
     serial_print("[VBE] GRUB framebuffer=0x");
     serial_print_hex(vbe_state.framebuffer);
     serial_print("\n");
@@ -488,6 +550,7 @@ int vbe_blue_screen(void) {
     if (!vbe_state.valid) {
         return -1;
     }
+    vbe_select(vt_render_index());
     vbe_fill_blue(&vbe_state);
     return 0;
 }

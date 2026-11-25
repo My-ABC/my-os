@@ -107,17 +107,11 @@ static void heap_split(struct heap_block *block, uint32_t pages) {
     remainder->magic = HEAP_BLOCK_MAGIC;
     remainder->size = remaining * PAGE_SIZE - sizeof(struct heap_block);
     remainder->pages = remaining;
-    remainder->free = 1;
-    remainder->prev = block->prev;
-    remainder->next = block->next;
-    if (remainder->prev != 0) {
-        remainder->prev->next = remainder;
-    } else {
-        free_list = remainder;
-    }
-    if (remainder->next != 0) {
-        remainder->next->prev = remainder;
-    }
+    /* The allocated block was already unlinked by heap_remove_free, so
+     * its prev/next are zero — inheriting them would truncate the free
+     * list to just this remainder and orphan every other free block.
+     * Reinsert sorted instead. */
+    heap_insert_free(remainder);
     block->pages = pages;
     block->prev = 0;
     block->next = 0;
@@ -224,9 +218,20 @@ void *krealloc(void *ptr, size_t size) {
         kfree(ptr);
         return 0;
     }
+    if (requested > 0xFFFFFFFFU - sizeof(struct heap_block)) {
+        return 0;
+    }
 
-    struct heap_block *block = (struct heap_block *)((uint32_t)ptr - sizeof(struct heap_block));
-    if (block->magic != HEAP_BLOCK_MAGIC || block->free != 0U) {
+    uint32_t address = (uint32_t)ptr;
+    if (address < KERNEL_HEAP_START + sizeof(struct heap_block) ||
+        address >= KERNEL_HEAP_END) {
+        serial_print("[HEAP] Invalid pointer passed to krealloc\n");
+        return 0;
+    }
+
+    struct heap_block *block = (struct heap_block *)(address - sizeof(struct heap_block));
+    if (block->magic != HEAP_BLOCK_MAGIC || block->pages == 0U || block->free != 0U) {
+        serial_print("[HEAP] Invalid allocation passed to krealloc\n");
         return 0;
     }
 

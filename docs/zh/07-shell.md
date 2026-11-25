@@ -52,8 +52,11 @@
 
 ## 输出约定
 
-- 磁盘和进程类命令把状态同时写到 VGA `printf` 和 COM1
+- 磁盘、进程类命令和 `help` 把状态同时写到 VGA `printf` 和 COM1
   `serial_print*`，保证 QEMU 脚本化会话的确定性。
+- Ring 3 `IO_WRITE` 输出写入进程所属 vt 的屏幕缓冲，并镜像到
+  COM3（`serial3_print`）；COM1 保留给内核诊断信息。COM3 是全局
+  镜像，vt 0 与 vt 1 的输出会在其上交错出现。
 - 失败打印 `Unable to ...` / `Usage: ...`，仅走 VGA。
 
 ## 命令表
@@ -72,8 +75,16 @@
 带有 `shell3.elf` 时——`make disk` 生成的 `disk.img`——内核监督器
 （`kernel.c` 中的 `shell3_supervisor`）会将其置于前台自动启动，
 并在每次退出或被杀后自动重启，因此 `make run` 开机即进入 Ring 3
-Shell，永远看不到内核 Shell。仅当未挂载磁盘或 `shell3.elf` 缺失/
-无法加载时才会进入内核 Shell。最终版通过
+Shell，永远看不到内核 Shell。只要 vt 0 无法承载 shell3 就会进入
+内核 Shell——未挂载磁盘、`shell3.elf` 缺失/无法加载，或 vt 0
+spawn 重试耗尽后永久失败（见
+[15-virtual-terminals.md](15-virtual-terminals.md)）。`src/drivers/vt.c` 提供两个虚拟
+终端（tty）：F1 切换到 vt 0，F2 切换到 vt 1，各自并发运行一个
+`shell3.elf` 实例。只有当前可见终端接收键盘输入；每个终端拥有
+独立的屏幕备份（VGA 字符缓冲或 VBE 帧缓冲副本），切换时保留各
+自画面。内核 Shell 固定在 vt 0，前台归属与 SIGINT 按终端分别
+跟踪，`vt_service()` 在内核空闲循环中负责重启失效终端上的
+shell。完整 vt 设计见 [15-virtual-terminals.md](15-virtual-terminals.md)。最终版通过
 mini-libc 公开 API 实现了内核 Shell 的完整命令集：全部
 `fs.h` 文件命令（`ls`、`cat`、`write`、`cp [-r]`、`mv`、
 `rm [-f]`、`cd`、`mkdir`、`rmdir`）、进程控制（`ps`、`fg`、

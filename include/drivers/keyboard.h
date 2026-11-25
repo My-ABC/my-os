@@ -24,13 +24,19 @@ int keyboard_get_scancode_set(void);
 // IRQ1 处理: 读扫描码, 按下的可打印键写入缓冲区
 void keyboard_irq(void);
 
-// 取一个按键, 缓冲区为空返回 0
+// 取一个按键, 缓冲区为空返回 0 (当前可见终端)
 char keyboard_getchar(void);
+
+// 取指定虚拟终端缓冲中的按键
+char keyboard_getchar_vt(int vt);
 
 // 阻塞等待一个按键
 char keyboard_wait_key(void);
 
-// 检查是否有按键等待读取 (非阻塞)
+// 检查是否有按键等待读取 (非阻塞, 当前可见终端)
 int keyboard_hit(void);
+
+// 检查指定虚拟终端是否有按键等待读取
+int keyboard_hit_vt(int vt);
 
 #endif

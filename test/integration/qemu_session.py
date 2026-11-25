@@ -17,7 +17,9 @@ class QemuSession:
         self.timeout = timeout
         self.deadline = time.monotonic() + timeout
         self.serial_data = bytearray()
+        self.serial3_data = bytearray()  # COM3: Ring 3 IO_WRITE mirror
         self.serial_client = None
+        self.serial3_client = None
         self.monitor = None
         self.process = None
         self.qemu_log = tempfile.TemporaryFile(mode="w+b")
@@ -69,6 +71,15 @@ class QemuSession:
         serial_listener.listen(1)
         serial_listener.settimeout(min(10, self.remaining()))
         serial_port = serial_listener.getsockname()[1]
+        # COM1 carries kernel diagnostics; COM3 mirrors Ring 3 IO_WRITE
+        # output. COM2 gets a 'none' backend so COM3 lands on the third
+        # -serial argument.
+        serial3_listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        serial3_listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        serial3_listener.bind(("127.0.0.1", 0))
+        serial3_listener.listen(1)
+        serial3_listener.settimeout(min(10, self.remaining()))
+        serial3_port = serial3_listener.getsockname()[1]
         command = [
             qemu_path,
             "-machine", "pc,accel=tcg",
@@ -80,6 +91,8 @@ class QemuSession:
             "-no-shutdown",
             "-drive", f"file={self.disk},format=raw,if=ide",
             "-serial", f"tcp:127.0.0.1:{serial_port},server=off,nodelay=on",
+            "-serial", "none",
+            "-serial", f"tcp:127.0.0.1:{serial3_port},server=off,nodelay=on",
             "-monitor", f"unix:{self.monitor_path},server=on,wait=off",
         ]
         try:
@@ -89,13 +102,16 @@ class QemuSession:
                 stderr=subprocess.STDOUT,
             )
             self.serial_client, _ = serial_listener.accept()
+            self.serial3_client, _ = serial3_listener.accept()
         except socket.timeout as error:
             raise IntegrationFailure(
                 "timed out waiting for QEMU serial connection"
             ) from error
         finally:
             serial_listener.close()
+            serial3_listener.close()
         self.serial_client.setblocking(False)
+        self.serial3_client.setblocking(False)
 
         self.monitor = self.connect_monitor()
         self.monitor_read_until(b"(qemu)", 5)
@@ -153,17 +169,29 @@ class QemuSession:
     def send_line(self, line):
         self.send_text(line + "\n")
 
+    def _read_serial_clients(self):
+        """Drain both UART sockets into their own buffers: COM1 kernel
+        diagnostics -> serial_data, COM3 Ring 3 mirror -> serial3_data.
+        Kept separate because the two streams interleave mid-line and
+        would corrupt substring matching if merged. Returns True when
+        any bytes arrived."""
+        got = False
+        for client, buf in ((self.serial_client, self.serial_data),
+                            (self.serial3_client, self.serial3_data)):
+            try:
+                chunk = client.recv(65536)
+            except BlockingIOError:
+                chunk = b""
+            if chunk:
+                buf.extend(chunk)
+                got = True
+        return got
+
     def read_serial(self, duration):
         end = min(self.deadline, time.monotonic() + duration)
         while time.monotonic() < end:
             self.check_running()
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
 
     def wait_for(self, needle, timeout=10):
@@ -175,15 +203,9 @@ class QemuSession:
             # consume a chunk that also carries this wait's output, and the
             # guest then goes idle. Re-check every iteration, not only when
             # new bytes arrive.
-            if needle in self.serial_data:
+            if needle in self.serial_data or needle in self.serial3_data:
                 return
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
         raise IntegrationFailure(f"serial output did not contain {needle!r}")
 
@@ -192,20 +214,22 @@ class QemuSession:
         end = min(self.deadline, time.monotonic() + timeout)
         while time.monotonic() < end:
             self.check_running()
-            if expression.search(self.serial_data[start:]):
+            if (expression.search(self.serial_data[start:]) or
+                    expression.search(self.serial3_data)):
                 return
-            try:
-                chunk = self.serial_client.recv(65536)
-            except BlockingIOError:
-                chunk = b""
-            if chunk:
-                self.serial_data.extend(chunk)
-            else:
+            if not self._read_serial_clients():
                 time.sleep(0.01)
         raise IntegrationFailure(f"serial output did not match {pattern!r}")
 
     def serial_text(self):
         return self.serial_data.decode("ascii", errors="replace")
+
+    def serial_all_text(self):
+        """COM1 + COM3 concatenated. COM1 keeps kernel-side output,
+        COM3 carries Ring 3 IO_WRITE mirrors; each stream stays
+        line-intact but their relative interleaving is lost."""
+        return (bytes(self.serial_data) + b"\n" +
+                bytes(self.serial3_data)).decode("ascii", errors="replace")
 
     @staticmethod
     def pass_check(name):

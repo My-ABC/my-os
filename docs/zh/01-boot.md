@@ -34,23 +34,31 @@ GRUB 据此把内核加载到物理 1 MiB 并跳转到 `start`，`%ebx` 为 Mult
 
 `src/kernel.c:kmain(uint32_t multiboot_info)` 按顺序执行：
 
-1. `gdt_init()` + `tss_init()` —— 描述符表（必须最先）。
+1. `gdt_init()` + `tss_init()` —— 描述符表。
 2. `serial_init()` —— COM1 早期调试输出。
 3. `pmm_init(multiboot_info)` —— 依据 Multiboot 内存图建立位图分配器。
 4. `paging_init()` + `tss_update_cr3()` —— 运行时 PAE 页表；TSS 的
    `esp0` 跟随新的 CR3。
 5. `PMM_QEMU_HIGHMEM_TEST` 宏下可选的 `highmem_qemu_test()`。
-6. 重映射 Multiboot 信息页，供后续 VBE 探测读取。
-7. `vbe_initialize(multiboot_info)`（BIOS VBE 信息在启动前捕获）然后
-   `vga_init()`。
-8. `ata_init()` 探测；成功则调用 `cmd_disk()` 挂载 FAT32。
+6. 把 Multiboot 信息页重映射进低端恒等映射，供后续 VBE 探测读取。
+7. `vbe_initialize(multiboot_info)`（BIOS VBE 信息在启动前捕获），
+   然后 `vga_init()`，再 `vt_init()`（每终端屏幕备份，见
+   [15-virtual-terminals.md](15-virtual-terminals.md)）。
+8. `ata_init()` 探测；成功则 `cmd_disk(1, 0)` 挂载 FAT32。
 9. `idt_init()` —— 异常/IRQ/系统调用门。
 10. 堆自检（`kmalloc`/`kfree`/`kcalloc`/`krealloc`）与 `0x00800000`
     处的 PMM+映射冒烟测试。
-11. `pic_remap()`、`pit_init(100 Hz)`、`keyboard_init()`、`sti`、
-    `rtc_init()`。
-12. `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO` 宏控制的演示路径，
-    否则进入 `start_shell()`。
+11. `pic_remap()`（屏蔽 IRQ2，IRQ0/1 保持屏蔽）、`pit_init(100 Hz)`、
+    `keyboard_init()`、`sti`、`tsc_init()`、`rtc_init()`。
+12. 启动期 VGA/串口 banner 与 RTC 时间显示。
+13. `PANIC_DEMO` / `ELF_DEMO` / `KEYBOARD_DEMO` 宏控制的演示路径；
+    否则进入 `shell3_supervisor()`——磁盘镜像提供 `/shell3.elf` 时在
+    两个虚拟终端上自动启动，未挂载磁盘、文件缺失，或 vt 0 的
+    shell3 拉起永久失败（5 次瞬时重试后 ELF 错误锁存
+    `spawn_failed`）时回退内核 `start_shell()`，并通过
+    `vt_service()` 自动重启死亡的 shell。
+    见 [07-shell.md](07-shell.md) 与
+    [15-virtual-terminals.md](15-virtual-terminals.md)。
 
 > 注意：`kmain` 把真实初始化和启动期自检日志混在一起。串口标记
 > （`MyOS v0.0.1`、`[HEAP] ...`、`[PAGING] ...`）是

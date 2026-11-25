@@ -9,7 +9,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Established the 32-bit x86 Multiboot/GRUB boot flow, including GDT, IDT, TSS, and basic interrupt handling.
 - [x] Implemented kernel paging, PAE page tables, and high-memory mapping. The PMM supports physical addresses below 64 GiB, has host tests for page allocation above 4 GiB, and the optional QEMU `-m 6G` test allocates a real page at `0x100000000`, maps it, verifies writes and reads, then frees and reallocates it.
 - [x] Implemented the kernel heap allocator and a basic user heap allocation interface.
-- [x] Implemented basic Ring 3 process scheduling and process-management commands; at most two processes can run, and they share an address space.
+- [x] Implemented basic Ring 3 process scheduling and process-management commands; up to four concurrent user processes (`RING3_PROCESS_COUNT`).
 - [x] Added the basic `IO_WRITE` and `PROC_GETPID` system calls.
 - [x] Implemented ELF32 loadable-segment validation/loading and BSS zeroing, plus built-in and disk-based ELF program execution.
 - [x] Fixed a possible infinite reboot after PAE changes on the GRUB ISO boot path; build rules now track header dependencies to avoid reusing stale objects after ABI changes.
@@ -25,18 +25,22 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Implemented `rmdir -f` to recursively remove non-empty directories while protecting the current directory and its parents.
 - [x] Implemented `cp`/`cp -r`/`mv` file and directory operations with Linux-style destination semantics.
 - [x] Implemented the `run` command to load and execute an ELF32 program from a FAT32 disk.
-- [x] Added filesystem syscalls `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR` (`SYS_FS` ops 1–10), `PROC_EXIT`/`PROC_YIELD` (`SYS_PROCESS`), `TIME_GET` (`SYS_TIME`), and signal syscalls `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN` (`SYS_SIG`); user pointers are validated against registered ranges and paths resolve through the shared `fat32_resolve_path`/`g_cwd`.
+- [x] Added filesystem syscalls `FS_OPEN`/`CLOSE`/`READ`/`WRITE`/`UNLINK`/`MKDIR`/`RMDIR`/`STAT`/`GETCWD`/`CHDIR`/`RENAME`/`READDIR` (`SYS_FS` ops 1–12), `PROC_EXIT`/`PROC_YIELD`/`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC` (`SYS_PROCESS`), `TIME_GET` (`SYS_TIME`), and signal syscalls `SIG_KILL`/`SIG_SIGNAL`/`SIG_RETURN` (`SYS_SIG`); user pointers are validated by page presence (`sys_user_buffer_ok`) and paths resolve through the shared `fat32_resolve_path`/`g_cwd`.
 - [x] Implemented signal delivery end to end: `SIGINT`/`SIGKILL` only, per-process pending/blocked/handler state, Ctrl+C `KEYBOARD_KEY_SIGINT` → foreground `SIGINT`, fatal-default termination, and user handler invocation via a per-process restorer trampoline at `0x00900000` plus `SIG_RETURN` context restore.
 - [x] Implemented shell line editing: 16-entry history (Up/Down), cursor movement (Left/Right), insertion and Backspace editing with full-line repaint, double-quoted arguments, `\n`/`\\`/`\"` escapes with unknown-escape warnings, Ctrl+C `^C` echo + line discard + prompt redraw, and differentiated ELF/`run` error messages (bad image vs. process slots full vs. read failure).
 - [x] Made `echo` write to both the screen and COM1 serial so scripted/headless sessions keep serial visibility; removed the `secho` command.
 - [x] Added a unittest-style QEMU integration framework (`QemuTestCase` with `assert*` helpers, per-method PASS lines) alongside the existing bounded session orchestration; check results are marked with `✓ PASS`/`✗ FAIL`.
 - [x] Fixed RTC 12/24-hour handling: PM flag is extracted before BCD decode, decoded hours >12 fall back to 24-hour values for RTCs with unreliable mode bits, and all QEMU invocations pass `-rtc base=utc` so the guest RTC reads UTC for the UTC→Beijing conversion. `time` accepts `time 12`/`time 24`.
 - [x] Guarded `vbe_put_pixel` against out-of-bounds coordinates (serial diagnostic instead of an intermittent kernel panic).
+- [x] Added virtual terminals: two ttys switched with F1/F2, each running its own `shell3.elf` Ring 3 process with preserved screens; per-vt keyboard buffers and foreground-pid slots, deferred switching via `vt_service`, offscreen VBE backing stores in the `0xD0000000`–`0xE0000000` window, and automatic per-vt shell respawn. See `docs/en/15-virtual-terminals.md`.
+- [x] Routed Ring 3 `IO_WRITE` output to COM3 as a single global mirror (COM1 keeps kernel-side output) and extended the QEMU harness to capture COM1 and COM3 into separate buffers.
+- [x] Booted into `/shell3.elf` through the `shell3_supervisor` vt spawner with auto-restart on every terminal; the kernel shell remains only as a fallback when no disk is mounted or the ELF is missing/unloadable.
 
 ### Drivers, Console, and Power
 
 - [x] Implemented the basic platform drivers: PIC interrupt-controller setup, the PIT IRQ0 timer, PS/2 keyboard scancode decoding (including Ctrl+C `KEYBOARD_KEY_SIGINT` injection), the VGA text-mode console, VBE framebuffer initialization from GRUB multiboot info with bounded pixel drawing, COM1 serial output, and the RTC.
 - [x] Implemented ACPI table discovery and FADT parsing, including S5 shutdown through the PM1a control block with graceful fallback when tables or registers are unavailable.
+- [x] Hardened the syscall/UART edges after the P0–P3 audit (`AUDIT.md`): bounded serial TX waits so a missing UART cannot hang the kernel, `IO_WRITE` copies user strings through a bounded 4096-byte kernel buffer, `IO_READ` validates buffer/size, and user pointers are checked by page presence via `sys_user_buffer_ok`/`paging_mm_get_phys`.
 
 ### Project Structure, Tests, and Documentation
 
@@ -44,7 +48,7 @@ This document tracks completed work and the project roadmap. When an item is com
 - [x] Organized tests by purpose, separating Python tests, host C tests, Shell launchers, and QEMU integration tests; added the optional `make test-qemu-highmem` test for real high-page allocation and access.
 - [x] Added host and QEMU integration tests covering PAE/PMM, high physical-page allocation and access, FAT32 LFN, Shell operations, Ring 3 processes, and disk ELF execution.
 - [x] Created the project roadmap and documented its entry points in both READMEs and the kernel agent guide.
-- [x] Created the bilingual architecture documentation series under `docs/en` and `docs/zh` (numbered chapters from boot through signals, plus driver-gap analysis and the memory-isolation chapter), with synchronized language links.
+- [x] Created the bilingual architecture documentation series under `docs/en` and `docs/zh` (numbered chapters from boot through virtual terminals, plus driver-gap analysis and the memory-isolation chapter), with synchronized language links; chapters were re-verified against the current code during the vt-f1-f2 audit.
 
 ## Kernel, User Space, and System Calls
 
@@ -61,9 +65,9 @@ This document tracks completed work and the project roadmap. When an item is com
   - [x] Verify sub-millisecond sleep precision and signal checks with QEMU tests.
 - [ ] **Complete the user-space and system-call interfaces**
   - [ ] Define a stable, versioned system-call ABI, argument conventions, and error codes. (Two-level class/sub-op numbering in `eax`/`ebx` with args in `ecx`/`edx`/`esi` is documented in `docs/en/04-syscall-abi.md`; no versioning yet.)
-  - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers. (FS syscalls validate pointers; `IO_WRITE`/`IO_READ`/`SYS_MEMORY` still dereference caller pointers directly.)
-  - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces. (`PROC_EXIT`, `PROC_YIELD`, and the signal set exist; no fork/exec/wait or per-process fd table yet.)
-  - [ ] Add system calls for file, directory, console, time, and device access. (`SYS_FS` ops 1–10, `TIME_GET`/`TIME_TO`, and console read/write exist; device access is still missing.)
+  - [ ] Validate user pointers, lengths, and address ranges; provide safe user/kernel data-copy helpers. (FS and console syscalls validate pointers by page presence via `sys_user_buffer_ok`/`paging_mm_get_phys`; `MEMORY_REALLOC` still dereferences the block header unchecked and is kept as the `kfault.elf` panic demo.)
+  - [ ] Complete process creation, exit, wait, signal/event, and resource-reclamation interfaces. (`PROC_EXIT`/`PROC_YIELD`/`PROC_LIST`/`PROC_SET_FG`/`PROC_EXEC` and the signal set exist; still no fork/wait or per-process fd table.)
+  - [ ] Add system calls for file, directory, console, time, and device access. (`SYS_FS` ops 1–12, `TIME_GET`/`TIME_TO`/`TIME_SLEEP`, and console read/write exist; device access is still missing.)
   - [ ] Add host and QEMU tests for the ABI and invalid-argument handling. (QEMU covers happy paths and signal delivery; invalid-argument coverage is partial.)
 - [ ] **Implement a signal mechanism** (only `SIGINT`/`SIGKILL` so far; more numbers, `sigprocmask`-style blocking APIs, and nested delivery remain)
   - [x] Define signal numbers, delivery semantics (poll-based at IRQ0/syscall wait points, not synchronous faults), and per-process pending/blocked signal state.
@@ -82,8 +86,13 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Complete the Shell and migrate it to Ring 3**
   - [x] Gradually move command parsing, interaction, and built-ins out of the kernel. (`src/shell/shell_ring3.c` + `include/shell/shell_ring3.h`, built as `build/shell3.elf` via `make shell3`.)
   - [x] Use system calls to access the console, filesystem, processes, and devices.
-  - [ ] Provide basic command-line editing, history, error codes, and executable search. (Kernel shell: editing, 16-entry history, `\n`/`\\`/`\"` escapes, and differentiated ELF errors are done; executable search/PATH lookup is not.)
-  - [ ] Ensure the kernel can recover control if the user Shell crashes or exits.
+  - [ ] Provide basic command-line editing, history, error codes, and executable search. (Both shells now have line editing, 16-entry history, escapes, and differentiated errors; executable search/PATH lookup is still missing.)
+  - [x] Ensure the kernel can recover control if the user Shell crashes or exits. (The vt layer respawns `shell3.elf` on every terminal via `vt_service`; transient spawn failures retry at ~1 Hz and only permanent ELF errors latch.)
+- [ ] **Extend virtual-terminal support**
+  - [ ] Support more than two terminals (extend the vt array, per-vt foreground slots, and F-key map together).
+  - [ ] Add scrollback buffers; each vt currently keeps only one screen.
+  - [ ] Split the COM3 mirror into per-vt streams and make VBE backing-store allocation failure non-fatal.
+  - Entry points: [vt.c](./src/drivers/vt.c), [15-virtual-terminals.md](./docs/en/15-virtual-terminals.md).
 
 ## Inter-Process Communication
 
@@ -99,7 +108,7 @@ This document tracks completed work and the project roadmap. When an item is com
 
 - [ ] **Complete filesystem and Shell storage workflows**
   - [ ] Systematically review FAT32 path resolution, directory bounds, error propagation, and corrupt-disk handling.
-  - [ ] Complete file-handle and open/close/sequential-read/write interfaces for user programs.
+  - [ ] Complete file-handle and open/close/sequential-read/write interfaces for user programs. (`SYS_FS` fd ops 1–4 and the mini-libc `fs.h`/`unistd.h` wrappers exist; the fd table is global, not per-process.)
   - [x] Add common operations such as copy, move, and rename, with persistence and regression tests. (`cp` copies files and `cp -r` copies directory trees; `mv` renames/moves files and directories with Linux semantics — existing directory destinations receive the source, existing file destinations are replaced, and directory-into-itself moves are rejected.)
   - [x] Document the supported scope and limits for LFN, short-name aliases, and non-ASCII names. (Shell-created entries always carry LFN preserving case; lookups match LFN case-sensitively and fall back to the 8.3 short name only when no LFN exists. See README.)
 - [ ] **Implement a block cache**
@@ -140,6 +149,11 @@ This document tracks completed work and the project roadmap. When an item is com
 
 ## Concurrency and Memory
 
+- [ ] **Add kernel mutex/locking for Ring 3 shared state**
+  - [ ] Introduce a small kernel mutex/critical-section primitive (IRQ-safe on the single CPU today, SMP-ready later) and apply it to globally shared state touched by concurrent Ring 3 processes.
+  - [ ] Protect FAT32/ATA globals (`g_sector`/`g_cluster`/`g_fs`/`g_cwd`), the global `sysfs_fds` table, and the user-heap free list/`user_heap_next` so a kernel-shell or syscall context cannot observe torn state when IRQ0 schedules another process mid-operation (AUDIT P1-5, P1-1).
+  - [ ] Decide per-object ownership where a lock is wrong (e.g. move user-heap metadata into `struct user_mm`) and document which paths hold which lock.
+  - [ ] Add QEMU coverage for concurrent Ring 3 FAT32/heap access on both vts.
 - [ ] **Add an idle task and HLT-based power saving**
   - [ ] Run a dedicated idle loop that executes `HLT` when no runnable task exists instead of busy-spinning in the scheduler.
   - [ ] Ensure IRQ0/PIT and other interrupts wake the CPU reliably between sleeps.

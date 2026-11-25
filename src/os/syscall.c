@@ -49,44 +49,63 @@ extern uint32_t syscall_switch_frame;
 
 /* Yield the CPU while waiting for keyboard input. The saved user frame's
  * EIP is rewound past `int 0x80` (CD 80) so the syscall restarts from
- * scratch when the process is rescheduled. Only yields when another
- * Ring 3 process is runnable; otherwise keeps sleeping so the kernel
- * shell cannot steal the keystroke. Returns nonzero when yielded. */
+ * scratch when the process is rescheduled. Yields to the kernel idle
+ * context on every wait iteration so deferred kernel work (vt_service)
+ * is not starved by a lone blocked process. Returns nonzero when
+ * yielded. */
 static int sys_keyboard_wait_yield(struct irq_frame *frame) {
     if (ring3_current_pid() == 0U) return 0;
-    uint32_t pids[RING3_PROCESS_COUNT];
-    uint32_t states[RING3_PROCESS_COUNT];
-    uint32_t me = ring3_current_pid();
-    uint32_t n = ring3_process_list(pids, states, RING3_PROCESS_COUNT);
-    int other = 0;
-    for (uint32_t i = 0; i < n; ++i) {
-        if (pids[i] != me &&
-            (states[i] == RING3_PROCESS_READY ||
-             states[i] == RING3_PROCESS_RUNNING)) {
-            other = 1;
-            break;
-        }
-    }
-    if (!other) return 0;
+    /* Always yield to the kernel idle context while waiting for a
+     * key, even when no other Ring 3 process is runnable. The idle
+     * loop (shell supervisor / kernel shell) owns vt_service() and
+     * other deferred work; without this a lone process blocked in
+     * IO_GETCHAR would starve it forever. */
+    struct irq_frame *kframe = ring3_yield_current(frame);
+    if (kframe == 0) return 0;
+    /* Rewind EIP past `int 0x80` (CD 80) only after the yield
+     * succeeded: the resumed frame re-executes the syscall with the
+     * register state saved in the frame. The syscall stub writes the
+     * handler's return value into the frame's eax slot before the
+     * diversion, so callers must return the original class (`klass`)
+     * on this path — that is what makes the restarted int 0x80
+     * dispatch the same syscall again. */
     frame->eip -= 2;
-    syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
-    return syscall_switch_frame != 0;
+    syscall_switch_frame = (uint32_t)kframe;
+    return 1;
 }
 
 /* gets() variant that stops when a signal is delivered, fatal, or the
- * CPU is yielded to another process (syscall restarts on resume). */
+ * CPU is yielded to another process. Returns 0 on a completed line,
+ * 1 on a signal abort, 2 when the wait was yielded (the syscall is
+ * restarted on resume, so callers must return `klass` to the stub). */
 static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
+    int vt = (int)ring3_current_vt();
     while (i < size - 1) {
-        char c = keyboard_getchar();
+        /* Only the foreground process on this vt may consume keys;
+         * a background reader (e.g. the shell while `run` hosts a
+         * child) waits without stealing keystrokes. */
+        char c = ring3_foreground_pid_vt(vt) == ring3_current_pid()
+                     ? keyboard_getchar_vt(vt) : 0;
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
-            if (sys_signal_check(frame)) return 1;
+            if (sys_signal_check(frame)) {
+                /* A fatal abort already switched to the kernel CR3 and
+                 * released the mm; writing buf there would fault. */
+                if (syscall_exit_frame == 0U) buf[i] = '\0';
+                return 1;
+            }
             continue;
         }
         if (c == 0) {
-            if (sys_signal_check(frame)) return 1;
-            if (sys_keyboard_wait_yield(frame)) return 1;
+            if (sys_signal_check(frame)) {
+                if (syscall_exit_frame == 0U) buf[i] = '\0';
+                return 1;
+            }
+            /* Yield only before the first character: a yield restarts
+             * the whole syscall, so yielding mid-line would drop the
+             * characters already consumed. */
+            if (i == 0 && sys_keyboard_wait_yield(frame)) return 2;
             __asm__ volatile ("hlt" ::: "memory");
             continue;
         }
@@ -294,18 +313,23 @@ uint32_t sys_user_heap_contains(uint32_t addr) {
     return addr >= USER_HEAP_START && addr < USER_HEAP_END;
 }
 
-/* Validate that every page covering [addr, addr+len) belongs to a registered
- * user range (live ELF image, user stack, or user heap). Rejects kernel
- * addresses and unmapped holes so bad pointers return -1 instead of
- * panicking the kernel on the subsequent copy. */
+/* Validate that every page covering [addr, addr+len) is actually mapped
+ * in the current process's address space. Range-permission checks are
+ * not sufficient: a permitted-but-unmapped page (e.g. an unregistered
+ * image range or a not-yet-demand-paged stack page) would fault in
+ * kernel context and panic. */
+static int sys_user_page_mapped(uint32_t page) {
+    struct user_mm *mm = ring3_current_mm();
+    return mm != 0 && paging_mm_get_phys(mm, page) != 0U;
+}
+
 static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
     if (len == 0U) return 1;
     if (addr >= USER_SPACE_END || len > USER_SPACE_END - addr) return 0;
     uint32_t last = addr + len - 1U;
     for (uint32_t page = addr & ~(PAGE_SIZE - 1U); page <= last;
          page += PAGE_SIZE) {
-        if (!ring3_user_range_permitted(page) &&
-            !sys_user_heap_contains(page)) {
+        if (!sys_user_page_mapped(page)) {
             return 0;
         }
     }
@@ -316,11 +340,14 @@ static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
  * dst_size. Returns the string length (excluding NUL) or -1. */
 static int sys_copy_user_string(uint32_t addr, char *dst, uint32_t dst_size) {
     if (addr >= USER_SPACE_END || dst_size < 2U) return -1;
+    uint32_t checked_page = 0xFFFFFFFFU;
     for (uint32_t i = 0; i + 1U < dst_size; ++i) {
         uint32_t a = addr + i;
-        if (a >= USER_SPACE_END ||
-            (!ring3_user_range_permitted(a) && !sys_user_heap_contains(a))) {
-            return -1;
+        if (a >= USER_SPACE_END) return -1;
+        uint32_t page = a & ~(PAGE_SIZE - 1U);
+        if (page != checked_page) {
+            if (!sys_user_page_mapped(page)) return -1;
+            checked_page = page;
         }
         char c = *(const volatile char *)a;
         dst[i] = c;
@@ -465,18 +492,55 @@ uint32_t syscall_handler(struct irq_frame *frame) {
             switch (op) {
                 case IO_WRITE: { // a1: const char *str
                     uint32_t pid = ring3_current_pid();
-                    if (pid != 0U && pid == ring3_foreground_pid()) {
-                        vga_print((const char *)a1);
-                        serial_print((const char *)a1);
+                    if (pid == 0U ||
+                        pid != ring3_foreground_pid_vt((int)ring3_current_vt())) {
+                        return 0;
                     }
+                    /* Copy the user string into a bounded kernel buffer
+                     * first: a bad pointer or a missing NUL used to fault
+                     * in kernel context and panic. Cap at 4096 bytes. */
+                    char *text = (char *)kmalloc(IO_WRITE_MAX + 1U);
+                    if (text == 0) return (uint32_t)-1;
+                    int len = sys_copy_user_string(a1, text,
+                                                  IO_WRITE_MAX + 1U);
+                    if (len < 0 || len > IO_WRITE_MAX) {
+                        kfree(text);
+                        return (uint32_t)-1;
+                    }
+                    vga_print(text);
+                    serial3_print(text);
+                    kfree(text);
                     return 0;
                 }
                 case IO_READ: // a1: char *buf, a2: size
-                    sys_gets((char *)a1, a2, frame);
-                    return 0;
-                case IO_GETCHAR:
+                    /* a2 arrives as uint32_t; sys_gets takes int, so
+                     * values > INT32_MAX wrap negative. Reject non-
+                     * positive sizes and buffers that are not wholly
+                     * inside permitted user ranges before any write. */
+                    if ((int32_t)a2 <= 0 ||
+                        !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2)) {
+                        return (uint32_t)-1;
+                    }
+                    int gets_rc = sys_gets((char *)a1, (int)a2, frame);
+                    if (gets_rc == 2) {
+                        /* Yielded: the frame's eip was rewound and the
+                         * stub diverts to the kernel context. Returning
+                         * `klass` lands SYS_IO in the saved eax slot so
+                         * the restarted int 0x80 re-dispatches IO_READ
+                         * with the original arguments. */
+                        return klass;
+                    }
+                    if (gets_rc != 0) {
+                        return (uint32_t)-1;
+                    }
+                    /* POSIX-style: return the line length in bytes
+                     * (excluding the NUL terminator); 0 = empty line. */
+                    return (uint32_t)strlen((const char *)a1);
+                case IO_GETCHAR: {
+                    int vt = (int)ring3_current_vt();
                     for (;;) {
-                        char c = keyboard_getchar();
+                        char c = ring3_foreground_pid_vt(vt) == ring3_current_pid()
+                                     ? keyboard_getchar_vt(vt) : 0;
                         if (c == KEYBOARD_KEY_SIGINT) {
                             /* Ctrl+C read by the syscall itself: deliver SIGINT
                              * to ourselves, then honor the disposition. */
@@ -486,9 +550,14 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         }
                         if (c != 0) return (uint8_t)c;
                         if (sys_signal_check(frame)) return 0;
-                        if (sys_keyboard_wait_yield(frame)) return 0;
+                        /* Same yield-restart contract as IO_READ: the
+                         * stub writes this return into the frame's eax
+                         * slot, so `klass` makes int 0x80 re-dispatch
+                         * IO_GETCHAR on resume. */
+                        if (sys_keyboard_wait_yield(frame)) return klass;
                         __asm__ volatile ("hlt" ::: "memory");
                     }
+                }
                 case IO_CLEAR:
                     vga_clear();
                     return 0;
@@ -590,7 +659,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
                     uint32_t pids[RING3_PROCESS_COUNT];
                     uint32_t states[RING3_PROCESS_COUNT];
-                    uint32_t fg = ring3_foreground_pid();
+                    uint32_t fg = ring3_foreground_pid_vt((int)ring3_current_vt());
                     uint32_t count = ring3_process_list(pids, states,
                                                         RING3_PROCESS_COUNT);
                     if (a2 < count * 12U) return (uint32_t)-1;
@@ -604,7 +673,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 }
                 case PROC_SET_FG:
                     if (a1 == 0U) {
-                        uint32_t fg = ring3_foreground_pid();
+                        uint32_t fg = ring3_foreground_pid_vt(
+                            (int)ring3_current_vt());
                         return fg != 0U && ring3_set_background(fg) == 0
                                ? 0 : (uint32_t)-1;
                     }
@@ -640,7 +710,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         paging_mm_release(mm);
                         return (uint32_t)-1;
                     }
-                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1) == 0
+                    return ring3_schedule_mm(user_entry, mm, 0U, 0U, 1,
+                                             (int)ring3_current_vt()) == 0
                            ? 0U : (uint32_t)-1;
                 }
                 default:

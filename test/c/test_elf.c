@@ -148,11 +148,12 @@ uint32_t paging_switch_cr3(uint32_t phys) {
 
 int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
                       uint32_t image_start, uint32_t image_end,
-                      int foreground) {
+                      int foreground, int vt) {
     (void)func;
     (void)mm;
     (void)image_start;
     (void)image_end;
     (void)foreground;
+    (void)vt;
     return 0;
 }

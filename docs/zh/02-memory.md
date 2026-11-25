@@ -10,10 +10,13 @@
 | `0x00100000` 起 | 内核物理加载地址（1 MiB） |
 | `0x00800000` | 启动期映射冒烟测试页（临时） |
 | `0x01000000`–`0x40000000` | Ring 3 用户堆（`USER_HEAP_START`/`USER_HEAP_END`） |
-| `0x810000`、`0x820000` | 每进程 Ring 3 用户栈，各 32 KiB |
+| `0x00810000`、`0x00820000` | 每进程 Ring 3 用户栈顶（`USER_STACK_TOP_0/1`），各 32 KiB 向下生长 |
 | ELF 镜像区间 | 按存活 Ring 3 进程按需映射 |
 | `< 0xC0000000` | 用户区（`USER_SPACE_END`） |
 | `0xC0000000`+ | 内核高半区映射（`KERNEL_VIRT_BASE`） |
+| `0xD0000000`–`0xE0000000` | 内核堆窗口（`KERNEL_HEAP_START`/`KERNEL_HEAP_END`） |
+| `0xE0000000`–约 `0xE0400000` | VBE 扫描输出映射（`VBE_FRAMEBUFFER_ADDRESS`，1280×800×32 下约 4 MiB） |
+| `0xE8000000`–`0xF0000000` | VT 私有帧缓冲备份区（`VT_FB_BASE`/`VT_FB_LIMIT`） |
 | `0xF0000000` | 页表临时访问映射（`KMAP_BASE`） |
 
 内核链接在虚拟 `0xC0000000` / 物理 `0x100000`（`linker.ld`）；
@@ -41,8 +44,12 @@ Multiboot 内存图（仅可用区域）。基本操作为 `pmm_alloc_page()` /
 
 ## 内核堆（`src/mm/heap.c`）
 
-`kmalloc`、`kcalloc`、`krealloc`、`kfree` 从 PMM 帧分配可变长块。Shell
-（`cp -r` 目录项列表、`run` 镜像缓冲）、Ring 3 进程结构和 FAT32 复制路
+`kmalloc`、`kcalloc`、`krealloc`、`kfree` 从 PMM 帧分配可变长块，作用
+域限定在 `0xD0000000`–`0xE0000000` 窗口
+（`KERNEL_HEAP_START`/`KERNEL_HEAP_END`），窗口外的分配会被拒绝。该
+窗口是独占的：VBE 扫描输出（`0xE0000000` 起）和 VT 帧缓冲备份区
+（`0xE8000000` 起）位于其上方，并由 `src/drivers/vt.c` 的编译期
+`#error` 守卫保护。Shell（`cp -r` 目录项列表、`run` 镜像缓冲）、Ring 3 进程结构和 FAT32 复制路
 径都在用。
 
 ## 用户地址空间
@@ -50,8 +57,9 @@ Multiboot 内存图（仅可用区域）。基本操作为 `pmm_alloc_page()` /
 用户内存全部按需映射：
 
 - **ELF 镜像区间** —— 按存活进程记录，加载器按需映射代码/数据页。
-- **用户栈** —— 两个 32 KiB 区域，位于 `0x810000` 和 `0x820000`，进程
-  终止时整体释放。
+- **用户栈** —— 两个 32 KiB 区域，栈顶分别为 `0x00810000`
+  （`USER_STACK_TOP_0`）和 `0x00820000`（`USER_STACK_TOP_1`），向下
+  生长；进程终止时整体释放。
 - **用户堆** —— `0x01000000`–`0x40000000`，由 `src/os/syscall.c` 的
   `SYS_MEMORY` 子操作管理。
 

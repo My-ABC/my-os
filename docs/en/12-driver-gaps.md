@@ -14,15 +14,16 @@ adopted one at a time as needs arise.
 | Driver | Capability | Limits |
 |---|---|---|
 | ATA PIO (`ata.c`) | Primary-master disk, LBA28, polled PIO read/write of ≤255 sectors per call | No LBA48, no DMA/UDMA, no write-cache flush, no IRQ14, single channel (no slave/secondary), no ATAPI, no error-detail propagation |
-| Keyboard (`keyboard.c`) | IRQ1, scancode sets 1–2, 32-byte ring buffer, ASCII + Shift/Caps/Num | Arrow/function/extended keys unmapped, no escape sequences, no UTF-8, Alt/Ctrl tracked but unused, buffer overflow drops keys silently |
+| Keyboard (`keyboard.c`) | IRQ1, scancode sets 1–2, per-vt 256-byte ring buffers (`VT_COUNT` slots), ASCII + Shift/Caps/Num, F1/F2 consumed for vt switching, Ctrl+C → SIGINT | Arrow/function/extended keys unmapped beyond F1/F2, no escape sequences, no UTF-8, Alt/Ctrl tracked but mostly unused, buffer overflow drops keys silently |
 | PIC (`pic.c`) | 8259A master/slave remap to IRQ32+, per-line mask, EOI | No spurious-IRQ handling, no priority/IRR inspection, no IRQ sharing model |
 | PIT (`pit.c`) | 8253 channel 0 at `PIT_FREQUENCY` (100 Hz), tick counter, drives scheduler + VBE cursor blink | Channel 0 only, no read-back/latency measurement, coarse time source |
 | RTC (`rtc.c`) | MC146818 CMOS time, BCD/12–24 h decode, century heuristic, Beijing-time and Unix-timestamp helpers | No IRQ8 alarm/update-ended, century inferred by range guess, no HPET fallback |
-| Serial (`serial.c`) | COM1 38400 8N1, polled TX, polled RX helpers (`serial_getchar`/`serial_wait_char`/`serial_gets`) | RX helpers unused by the shell (keyboard is the only console input), no IRQ4, single port, no flow control |
+| Serial (`serial.c`) | COM1 + COM3 38400 8N1, bounded polled TX on both (~1M LSR polls then drop + one-time COM3 warning), `serial_getchar` nonblocking RX on COM1 | `serial_getchar` unused by the shell (keyboard is the only console input), no IRQ4, COM3 is TX-only mirror, no flow control |
 | VGA (`vga.c`) | 80×25 text mode, 16 colors, hardware cursor, scroll | Text mode only; superseded by VBE when a framebuffer exists |
 | VBE (`vbe.c`) | Uses the Multiboot/BIOS framebuffer (not VBE BIOS calls), maps it at `0xE0000000`, 8/15/16/24/32 bpp with per-field masks, software 8×8 text rendering, blinking cursor | No mode setting (inherits GRUB's mode), no double buffering, no acceleration, no pointer/input |
 | ACPI (`acpi.c`) | RSDP scan (EBDA + BIOS area), RSDT/XSDT walk to FADT, FADT reset register for reboot, PM1 S5 shutdown with a `_S5_` AML byte-pattern hack, triple fallbacks (0xCF9, KBC reset, triple fault) | Only FADT is consumed; no MADT/HPET/MCFG, no general table registry, no length/checksum validation of SDTs, no real AML interpreter |
 | Font (`ascii_font.c`) | 8×8 bitmap glyphs for VBE text | Data only |
+| Virtual terminals (`vt.c`) | Two screen ttys (F1/F2) with private VGA-cell/VBE-fb backing stores, per-vt foreground slots, deferred switch + shell respawn | Fixed `VT_COUNT` = 2, no scrollback, VBE backing alloc failure disables switching with serial log only |
 
 ## Missing drivers by bus/device
 

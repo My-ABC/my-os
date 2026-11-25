@@ -3,12 +3,20 @@
 #include "stddef.h"
 #include "ring3.h"
 #include "signal.h"
+#include "vt.h"
 
 /* Host-side driver tests link keyboard.c without the process/signal
- * objects; weak stubs keep Ctrl+C a plain buffered byte there. The
- * kernel's strong definitions in ring3.c override these. */
-__attribute__((weak)) uint32_t ring3_foreground_pid(void) {
+ * or vt objects; weak stubs keep Ctrl+C/F-keys inert there. The
+ * kernel's strong definitions override these. */
+__attribute__((weak)) uint32_t ring3_foreground_pid_vt(int vt) {
+    (void)vt;
     return 0U;
+}
+__attribute__((weak)) int vt_active_index(void) {
+    return 0;
+}
+__attribute__((weak)) void vt_request_switch(int vt) {
+    (void)vt;
 }
 __attribute__((weak)) int ring3_signal_send(uint32_t pid, uint32_t sig) {
     (void)pid;
@@ -68,9 +76,12 @@ static const char shift_symbols[128] = {
     ['`'] = '~'
 };
 
-static volatile char buffer[BUFFER_SIZE];
-static volatile uint32_t head = 0;
-static volatile uint32_t tail = 0;
+/* One ring buffer per virtual terminal: keystrokes always land in the
+ * visible terminal's queue, so an inactive shell cannot steal input
+ * meant for the terminal on screen. */
+static volatile char buffer[VT_COUNT][BUFFER_SIZE];
+static volatile uint32_t head[VT_COUNT];
+static volatile uint32_t tail[VT_COUNT];
 
 // 转换字符（处理 Shift、Caps Lock）
 static char apply_modifiers(char c, int shift, int caps) {
@@ -104,8 +115,10 @@ static char apply_modifiers(char c, int shift, int caps) {
 }
 
 void keyboard_init(void) {
-    head = 0;
-    tail = 0;
+    for (int i = 0; i < VT_COUNT; ++i) {
+        head[i] = 0;
+        tail[i] = 0;
+    }
     shift_pressed = 0;
     alt_pressed = 0;
     ctrl_pressed = 0;
@@ -250,6 +263,20 @@ void keyboard_irq(void) {
         return;
     }
 
+    /* F1/F2 (scan set 1 make codes) switch virtual terminals. The
+     * switch itself is deferred to vt_service() because it copies
+     * framebuffer-sized backing stores and must not run inside IRQ1. */
+    if (!was_extended && current_scancode_set == 1) {
+        if (scancode == 0x3BU) {  // F1
+            vt_request_switch(0);
+            return;
+        }
+        if (scancode == 0x3CU) {  // F2
+            vt_request_switch(1);
+            return;
+        }
+    }
+
     char c;
     if (was_extended) {
         // 扩展码（小键盘 Enter, /, 方向键）
@@ -288,26 +315,41 @@ void keyboard_irq(void) {
          * not required to read keys). Deliver SIGINT to the console
          * owner immediately; the byte stays buffered for whichever
          * reader consumes it next. */
-        uint32_t fg = ring3_foreground_pid();
+        uint32_t fg = ring3_foreground_pid_vt(vt_active_index());
         if (fg != 0U) {
             ring3_signal_send(fg, SIGINT);
         }
     }
 
-    uint32_t next = (head + 1) % BUFFER_SIZE;
-    if (next != tail) {
-        buffer[head] = c;
-        head = next;
+    int vt = vt_active_index();
+    uint32_t next = (head[vt] + 1) % BUFFER_SIZE;
+    if (next != tail[vt]) {
+        buffer[vt][head[vt]] = c;
+        head[vt] = next;
     }
 }
 
-char keyboard_getchar(void) {
-    if (head == tail) {
+char keyboard_getchar_vt(int vt) {
+    if (vt < 0 || vt >= VT_COUNT) vt = 0;
+    if (head[vt] == tail[vt]) {
         return 0;
     }
-    char c = buffer[tail];
-    tail = (tail + 1) % BUFFER_SIZE;
+    char c = buffer[vt][tail[vt]];
+    tail[vt] = (tail[vt] + 1) % BUFFER_SIZE;
     return c;
+}
+
+char keyboard_getchar(void) {
+    return keyboard_getchar_vt(vt_active_index());
+}
+
+int keyboard_hit_vt(int vt) {
+    if (vt < 0 || vt >= VT_COUNT) vt = 0;
+    return head[vt] != tail[vt];
+}
+
+int keyboard_hit(void) {
+    return keyboard_hit_vt(vt_active_index());
 }
 
 char keyboard_wait_key(void) {
@@ -318,8 +360,4 @@ char keyboard_wait_key(void) {
         }
         __asm__ volatile ("hlt");
     }
-}
-
-int keyboard_hit(void) {
-    return head != tail;
 }

@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from common import IntegrationFailure, ROOT
-from fat32_image import create_test_disk
+from fat32_image import create_empty_disk, create_test_disk
 from framework import QemuTestCase
 from qemu_session import QemuSession
 from page_fault_scenarios import (
@@ -25,6 +25,7 @@ from shell_scenarios import (
     check_run_from_disk,
     check_startup,
     check_storage_and_shell,
+    check_vt_spawn_exhaustion,
 )
 
 
@@ -85,6 +86,19 @@ def run_kernel_fault_session(qemu, kernel, disk, timeout):
     print("✓ PASS: kernel-fault panic session", flush=True)
 
 
+def run_vt_fallback_session(qemu, kernel, timeout):
+    # The vt spawn-exhaustion scenario needs a disk with no shell3.elf,
+    # so it boots a dedicated session on an empty FAT32 image.
+    tempdir = tempfile.TemporaryDirectory(prefix="myos-qemu-empty-")
+    try:
+        disk = create_empty_disk(tempdir.name)
+        run_session([check_vt_spawn_exhaustion], qemu, kernel, disk,
+                    timeout)
+        print("✓ PASS: vt spawn-exhaustion fallback session", flush=True)
+    finally:
+        tempdir.cleanup()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-i386"))
@@ -100,6 +114,7 @@ def main():
         create_test_disk(tempdir.name)
         run_main_session(args.qemu, args.kernel, disk, args.timeout)
         run_kernel_fault_session(args.qemu, args.kernel, disk, args.timeout)
+        run_vt_fallback_session(args.qemu, args.kernel, args.timeout)
         print("✓ ALL PASS", flush=True)
         return 0
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:

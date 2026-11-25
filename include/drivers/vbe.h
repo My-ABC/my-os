@@ -15,4 +15,13 @@ void vbe_set_cursor(uint16_t row, uint16_t col);
 uint32_t vbe_columns(void);
 uint32_t vbe_rows(void);
 
+/* Physical scanout window (virtual address of the mapped framebuffer)
+ * and its size in bytes; used by vt.c to save/restore terminal screens. */
+uint8_t *vbe_scanout(void);
+uint32_t vbe_scanout_bytes(void);
+
+/* Called by vt.c after a terminal switch: redraw the cursor for the
+ * newly visible terminal. */
+void vbe_console_switched(void);
+
 #endif

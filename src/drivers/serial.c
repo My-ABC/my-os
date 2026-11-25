@@ -9,19 +9,59 @@ void serial_init(void) {
     outb(SERIAL_COM1 + 3, 0x03);  // 8 位数据, 无校验, 1 位停止位
     outb(SERIAL_COM1 + 2, 0xC7);  // 启用 FIFO, 清空, 14 字节阈值
     outb(SERIAL_COM1 + 4, 0x0B);  // IRQ 使能, RTS/DSR 置位
+
+    outb(SERIAL_COM3 + 1, 0x00);
+    outb(SERIAL_COM3 + 3, 0x80);
+    outb(SERIAL_COM3 + 0, 0x03);
+    outb(SERIAL_COM3 + 1, 0x00);
+    outb(SERIAL_COM3 + 3, 0x03);
+    outb(SERIAL_COM3 + 2, 0xC7);
+    outb(SERIAL_COM3 + 4, 0x0B);
 }
 
-static int serial_is_transmit_empty(void) {
-    return inb(SERIAL_COM1 + 5) & 0x20;
+/* Bounded LSR wait: a missing UART must not hang the kernel. ~1M port
+ * reads is far longer than any FIFO drain at 38400 baud. */
+#define SERIAL_TX_TIMEOUT 0x100000U
+
+static int serial3_tx_timeout_warned;
+
+/* Returns 1 when the THR is ready, 0 on timeout (caller drops). */
+static int serial_tx_wait(uint16_t lsr_port) {
+    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+        if (inb(lsr_port) & 0x20) return 1;
+    }
+    return 0;
 }
 
 void serial_putchar(char c) {
     if (c == '\n') {
         serial_putchar('\r');
     }
-    while (!serial_is_transmit_empty()) {
-    }
+    if (!serial_tx_wait(SERIAL_COM1 + 5)) return;
     outb(SERIAL_COM1, (uint8_t)c);
+}
+
+void serial3_putchar(char c) {
+    if (c == '\n') {
+        c = '\r';
+        if (!serial_tx_wait(SERIAL_COM3 + 5)) goto dropped;
+        outb(SERIAL_COM3, (uint8_t)c);
+        c = '\n';
+    }
+    if (!serial_tx_wait(SERIAL_COM3 + 5)) goto dropped;
+    outb(SERIAL_COM3, (uint8_t)c);
+    return;
+dropped:
+    if (!serial3_tx_timeout_warned) {
+        serial3_tx_timeout_warned = 1;
+        serial_print("[SER] COM3 TX timeout, output dropped\n");
+    }
+}
+
+void serial3_print(const char* str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        serial3_putchar(str[i]);
+    }
 }
 
 void serial_print(const char* str) {
@@ -66,36 +106,4 @@ int serial_getchar(void) {
         return -1;  // 无数据可读
     }
     return inb(SERIAL_COM1);  // 读取数据端口
-}
-
-// 从串口读取一个字符（阻塞）
-int serial_wait_char(void) {
-    while (!serial_is_data_available()) {
-        __asm__ volatile ("pause");  // 等待数据就绪
-    }
-    return inb(SERIAL_COM1);
-}
-
-// 从串口读取一行字符串（阻塞）
-void serial_gets(char *buffer, int size) {
-    int i = 0;
-    while (i < size - 1) {
-        char c = serial_wait_char();
-        if (c == '\r' || c == '\n') {
-            buffer[i] = '\0';
-            serial_putchar('\n');  // 回显换行
-            break;
-        } else if (c == '\b' || c == 0x7F) {  // 退格
-            if (i > 0) {
-                i--;
-                serial_putchar('\b');
-                serial_putchar(' ');
-                serial_putchar('\b');
-            }
-        } else {
-            buffer[i++] = c;
-            serial_putchar(c);  // 回显
-        }
-    }
-    buffer[i] = '\0';
 }

@@ -32,8 +32,8 @@ class StorageAndShellContractTests(unittest.TestCase):
         self.assertIn('printf("myos %s > ", cwd)', prompt)
         self.assertIn('printf("myos > ")', prompt)
         input_loop = function_body(text, "shell_read_line")
-        self.assertIn("ring3_foreground_pid() == 0U", input_loop)
-        self.assertIn("keyboard_hit()", input_loop)
+        self.assertIn("ring3_foreground_pid_vt(VT_FALLBACK) == 0U", input_loop)
+        self.assertIn("keyboard_hit_vt(VT_FALLBACK)", input_loop)
         self.assertIn('"sti; hlt"', input_loop)
         self.assertIn('serial_print("[SHELL] CWD ")',
                       function_body(text, "cmd_cd"))
