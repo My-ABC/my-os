@@ -41,12 +41,13 @@
 - 指向未映射地址 → 内核页错误 panic；指向可控用户内存且伪造 `USER_BLOCK_MAGIC` → 可能让 `memcpy(new_ptr, ptr, copy_size)` 从任意地址复制到用户（信息泄漏）或误释放。
 - 这是 syscall ABI 边界缺陷，不只是演示路径。建议：与 `user_free` 一致先做范围检查，再校验 magic/free；demo 另找稳定触发方式。
 
-### P1-3 `krealloc` 缺少与 `kmalloc` 相同的 `size` 上限检查，可回绕出巨大 `block->size` ⬜
+### P1-3 `krealloc` 缺少与 `kmalloc` 相同的 `size` 上限检查，可回绕出巨大 `block->size` ✅（`2d75e54`）
 
 `src/mm/heap.c:157-163` `kmalloc` 有 `requested > 0xFFFFFFFFU - sizeof(struct heap_block)` 保护；`src/mm/heap.c:212-235` `krealloc` 在 `requested != 0` 后直接 `heap_pages_for_size(requested)`，没有该上限。
 
 - `requested` 接近 `0xFFFFFFFF` 时，`heap_pages_for_size` 内部 `size + sizeof(struct heap_block)` 回绕，`new_pages` 可能很小；若 `new_pages <= block->pages`，走 `block->size = requested` 的收缩分支并返回原指针。此后 `copy_size = min(block->size, requested)` 可把 `requested` 当作有效大小，后续 `krealloc`/`memcpy` 会按远超实际分配的大小读写内核堆。
 - 当前调用方可信，属于潜在内核堆溢出。建议：`krealloc` 入口复用 `kmalloc` 的上限判断，或让 `heap_pages_for_size` 返回 0/失败。
+- 修复（`2d75e54`）：`krealloc` 在 `requested != 0` 分支后加与 `kmalloc` 相同的 `requested > 0xFFFFFFFFU - sizeof(struct heap_block)` 上限检查，超限返回 0。
 
 ### P1-4 ELF 装载把合法 `PT_LOAD` 接受到 3 GiB，但 `user_mm` 只映射低 1 GiB，段 `>=0x40000000` 会在切 CR3 后 memset 触发内核保护错误 ✅（`9c557b3`）
 
@@ -171,7 +172,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 - N2 `heap_split` 截断 free list：已修，remainder 走 `heap_insert_free` 有序重插（`src/mm/heap.c:100-118`）。✅
 - N3 FAT32 覆盖写先放旧链：已修，`fat32_write_file` 先写新链/更新目录项再释放旧链（`src/fs/fat32.c`）。✅
 - `IO_WRITE/IO_READ` 用户指针：已修，`sys_copy_user_string`/`sys_user_buffer_ok` 有界校验（`src/os/syscall.c:291-332,468-499`）。✅
-- `user_realloc`/`krealloc` 的“完全无校验”：`kfree/krealloc` 已加范围+magic+pages+free 检查（`src/mm/heap.c:176-195,222-233`）；但 `user_realloc` 仍缺入口范围检查，见 P1-2，`krealloc` 仍缺 size 上限，见 P1-3。⬜（部分）
+- `user_realloc`/`krealloc` 的“完全无校验”：`kfree/krealloc` 已加范围+magic+pages+free 检查（`src/mm/heap.c:176-195,222-233`），`krealloc` 已补 size 上限（`2d75e54`）；但 `user_realloc` 仍缺入口范围检查，见 P1-2。⬜（部分）
 - VT spawn 失败/重试/vt0 回退：已实现 `VT_SPAWN_RETRY`、重试上限、永久失败关 F 键、vt0 回退 ring0 shell（`src/drivers/vt.c`）。✅
 - shell3 `cmd_write` 先 unlink 后 open：已修为先 open 再 unlink（`src/shell/shell_ring3.c:807-820`）。✅
 - serial TX timeout 仍写：已修，超时丢弃并只告警一次（`src/drivers/serial.c:24-59`）。✅
@@ -185,7 +186,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 1. **P1-4 ELF 上限**：把 ELF 段校验收敛到 `USER_MM_SPACE_LIMIT` 并逐页检查 `paging_mm_map`，否则畸形镜像可稳定 panic。
 2. **P1-1/P1-2 用户堆**：user heap 元数据按 mm 隔离 + `user_free/user_realloc` 完整范围/pages 校验 + `paging_mm_unmap` 上限检查。
-3. **P1-3 `krealloc` size 上限**：与 `kmalloc` 对齐，消除回绕。
+3. ~~**P1-3 `krealloc` size 上限**~~ ✅（`2d75e54`）
 4. **P1-5 FAT32/ATA 重入**：为 kernel shell 与 Ring3 并发 FS 加临界区/缓冲隔离。
 5. **P2-1/P2-3 syscall buffer 与 demand-map**：明确“已提交页”语义，避免栈页误拒与堆 UAF 被掩盖。
 6. **P2-4 页表覆盖**：`paging_map_page/paging_mm_map` 增加冲突检测。
