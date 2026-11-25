@@ -248,8 +248,8 @@ static int in_getch(void) {
     }
     if (!in_have || in_pos >= in_len) {
         int rc = syscall2(SYS_IO, IO_READ, (unsigned)in_buf, IN_CAP - 1);
-        if (rc != 0) return -1;
-        in_len = strlen(in_buf);
+        if (rc < 0) return -1;
+        in_len = (size_t)rc;
         in_pos = 0;
         in_have = 1;
         if (in_len == 0) return -1; /* empty line: treat as EOF */
@@ -488,8 +488,8 @@ int getchar(void) {
 int getline(char *buf, int size) {
     if (size <= 1) return -1;
     int rc = syscall2(SYS_IO, IO_READ, (unsigned)buf, (unsigned)(size - 1));
-    if (rc != 0) return -1;
-    return (int)strlen(buf);
+    if (rc < 0) return -1;
+    return rc;
 }
 
 int scanf(const char *fmt, ...) {

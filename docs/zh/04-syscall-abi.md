@@ -38,7 +38,7 @@ English: [English version](../en/04-syscall-abi.md)
 |--------|------|------|------|------|
 | 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 成功 0，失败 -1 | 向进程所属虚拟终端的屏幕缓冲输出字符串（上限 `IO_WRITE_MAX` = 4096 字节），并镜像到 COM3（`vga_print` + `serial3_print`，无长度参数，按 NUL 结尾）。字符串先拷入有界内核缓冲，因此非法指针或缺 NUL 返回 -1 而不会 panic。**仅当调用者 PID 等于其 vt 上的 `ring3_foreground_pid_vt()` 时才输出**；后台进程或内核上下文调用被静默丢弃。COM1 只承载内核侧输出——Ring 3 输出不出现在 COM1。 |
 | 2 | `IO_GETCHAR` | 无 | 字符 | 阻塞读取单个键盘字符，循环到拿到非 0 字符为止；实际不会返回 0。 |
-| 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 成功 0，失败 -1 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL。`size <= 0` 或 `buf` 不完全位于允许的用户地址范围内时返回 -1。阻塞直到收到换行。 |
+| 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 行长度（字节，不含 NUL；0 = 空行），失败 -1 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL。`size <= 0` 或 `buf` 不完全位于允许的用户地址范围内时返回 -1。阻塞直到收到换行。 |
 | 4 | `IO_CLEAR` | 无 | 0 | 清屏（`vga_clear`）。 |
 | 5 | `IO_CURSOR_GET` | 无 | `(row << 16) \| col` | 经 `vga_get_cursor` 返回当前光标位置。 |
 | 6 | `IO_CURSOR_SET` | `ecx` = 行，`edx` = 列 | 0 | 经 `vga_set_cursor` 移动光标（VGA 文本与 VBE 模式均可用）。 |

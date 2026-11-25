@@ -72,14 +72,24 @@ static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
     int vt = (int)ring3_current_vt();
     while (i < size - 1) {
-        char c = keyboard_getchar_vt(vt);
+        /* Only the foreground process on this vt may consume keys;
+         * a background reader (e.g. the shell while `run` hosts a
+         * child) waits without stealing keystrokes. */
+        char c = ring3_foreground_pid_vt(vt) == ring3_current_pid()
+                     ? keyboard_getchar_vt(vt) : 0;
         if (c == KEYBOARD_KEY_SIGINT) {
             ring3_signal_send(ring3_current_pid(), SIGINT);
-            if (sys_signal_check(frame)) return 1;
+            if (sys_signal_check(frame)) {
+                buf[i] = '\0';
+                return 1;
+            }
             continue;
         }
         if (c == 0) {
-            if (sys_signal_check(frame)) return 1;
+            if (sys_signal_check(frame)) {
+                buf[i] = '\0';
+                return 1;
+            }
             if (sys_keyboard_wait_yield(frame)) return 1;
             __asm__ volatile ("hlt" ::: "memory");
             continue;
@@ -496,12 +506,17 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2)) {
                         return (uint32_t)-1;
                     }
-                    sys_gets((char *)a1, (int)a2, frame);
-                    return 0;
+                    if (sys_gets((char *)a1, (int)a2, frame) != 0) {
+                        return (uint32_t)-1;
+                    }
+                    /* POSIX-style: return the line length in bytes
+                     * (excluding the NUL terminator); 0 = empty line. */
+                    return (uint32_t)strlen((const char *)a1);
                 case IO_GETCHAR: {
                     int vt = (int)ring3_current_vt();
                     for (;;) {
-                        char c = keyboard_getchar_vt(vt);
+                        char c = ring3_foreground_pid_vt(vt) == ring3_current_pid()
+                                     ? keyboard_getchar_vt(vt) : 0;
                         if (c == KEYBOARD_KEY_SIGINT) {
                             /* Ctrl+C read by the syscall itself: deliver SIGINT
                              * to ourselves, then honor the disposition. */
