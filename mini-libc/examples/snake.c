@@ -65,9 +65,10 @@ static void draw(void) {
 }
 
 static void step(void) {
-    int nx = sx[0] + dx, ny = sy[0] + dy;
+    /* 穿墙：出左边从右边进，出上边从下边进 */
+    int nx = (sx[0] + dx + W) % W;
+    int ny = (sy[0] + dy + H) % H;
     int i;
-    if (nx < 0 || nx >= W || ny < 0 || ny >= H) { over = 1; return; }
     for (i = 0; i < len; ++i)
         if (sx[i] == nx && sy[i] == ny) { over = 1; return; }
     if (nx == fx && ny == fy) {
