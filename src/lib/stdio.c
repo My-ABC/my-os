@@ -11,12 +11,14 @@ static int int_to_str(char* str, int value, int base) {
     char* p1, *p2;
     unsigned int ud = value;
     int divisor = 10;
-    
+    int negative = 0;
+
     // Handle negative numbers
     if (base == 10 && value < 0) {
         *p++ = '-';
         str++;
         ud = 0U - ud;
+        negative = 1;
     } else if (base == 16) {
         divisor = 16;
     }
@@ -41,8 +43,10 @@ static int int_to_str(char* str, int value, int base) {
         p1++;
         p2--;
     }
-    
-    return p - str;
+
+    /* str was advanced past '-' for the digit reversal, so p - str
+     * counts digits only — add the sign back. */
+    return (int)(p - str) + negative;
 }
 
 // Helper function to convert integer to string with zero padding
