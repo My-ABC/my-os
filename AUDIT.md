@@ -174,6 +174,8 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 13. `src/os/panic.c`/`panic_blue_screen`：倒计时会 `sti` 等 PIT；若 panic 发生在 `current_process<0` 且仍有 READY Ring3 进程，IRQ0 理论上可切走显示 panic 的上下文。边界场景，建议 panic 路径关中断 busy-wait 或屏蔽调度。✅（panic_in_progress 置位后 ring3_timer_switch 不再切换）
 14. `boot/*.asm`/`gdt/idt`：32-bit protected mode 下 TSS 描述符为 8 字节，DF TSS(0x30) 与普通 TSS(0x28) 不重叠；`regs.h` 与 `interrupt.asm` 栈帧契约有 host 侧测试覆盖。无新增 P0-P2。
 
+> **测试发现（非审计条目）**：为 P3 补 host 测试时抓到真 bug——`src/lib/stdio.c` `int_to_str` 对负数 `str++` 跳过 `'-'` 后 `return p - str` 少算符号位，`sprintf("%d", -42)` 输出 `-4`（INT_MIN 输出 `-214748364`）。`int_to_str_padded` 的 `is_negative` 单独计长不受影响。修复：`negative` 标志补回返回长度（`0ed2c07`）。既有测试无任何负数 `%d` 用例是漏网原因；现已补 -1/-9/-10/-99/-100/INT_MIN+1 边界与 padded 全内容断言。
+
 ---
 
 ## 已复核为已修复/不再成立的历史项

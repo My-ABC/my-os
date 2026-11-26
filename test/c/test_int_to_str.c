@@ -46,5 +46,28 @@ int main(void) {
     sprintf(buf, "%05d", -7);
     check(strcmp(buf, "-0007") == 0, "sprintf padded negative");
 
+    /* sign/digit-count boundaries: off-by-one on the '-' was the bug */
+    sprintf(buf, "%d", -1);
+    check(strcmp(buf, "-1") == 0, "sprintf -1");
+    sprintf(buf, "%d", -9);
+    check(strcmp(buf, "-9") == 0, "sprintf -9");
+    sprintf(buf, "%d", -10);
+    check(strcmp(buf, "-10") == 0, "sprintf -10");
+    sprintf(buf, "%d", -99);
+    check(strcmp(buf, "-99") == 0, "sprintf -99");
+    sprintf(buf, "%d", -100);
+    check(strcmp(buf, "-100") == 0, "sprintf -100");
+    sprintf(buf, "%d", INT_MIN + 1);
+    check(strcmp(buf, "-2147483647") == 0, "sprintf INT_MIN+1");
+
+    /* padded path must produce full content too, not a truncated
+     * prefix that happens to match the return length */
+    sprintf(buf, "%05d", -7);
+    check(buf[0] == '-' && buf[1] == '0' && buf[2] == '0' &&
+          buf[3] == '0' && buf[4] == '7' && buf[5] == '\0',
+          "padded negative full content");
+    sprintf(buf, "%06d", -100);
+    check(strcmp(buf, "-00100") == 0, "padded -100");
+
     return finish_test_suite("int_to_str");
 }
