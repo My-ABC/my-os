@@ -1,11 +1,11 @@
 #include "panic.h"
-
-volatile int panic_in_progress = 0;
 #include "acpi.h"
 #include "pit.h"
 #include "serial.h"
 #include "stdint.h"
 #include "vga.h"
+
+volatile int panic_in_progress = 0;
 
 static void print_reg(const char* name, uint32_t value) {
     vga_print(name);
