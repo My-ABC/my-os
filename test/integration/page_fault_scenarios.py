@@ -1,3 +1,5 @@
+import time
+
 from common import IntegrationFailure
 
 
@@ -88,6 +90,28 @@ def check_bufcheck(session):
     session.pass_check("bufcheck.elf reaped after Ctrl+C")
 
 
+def check_heap_isolation(session):
+    # heap.elf (P1-1): two concurrent instances on vt0 and vt1 must not
+    # share user-heap free-list/bump-pointer state. Each mallocs, frees
+    # a small block, yields so the peer publishes its own freed block,
+    # allocates again, and verifies its magic survived.
+    start = len(session.serial3_data)
+    session.send_line("run heap.elf")          # vt0
+    session.send_key("f2")                     # switch to vt1
+    time.sleep(0.5)                            # vt_service is deferred
+    session.send_line("run heap.elf")          # vt1
+    session.wait_for_regex(rb"HEAP-OK(?s:.)*HEAP-OK", timeout=20)
+    tail = bytes(session.serial3_data[start:])
+    if b"HEAP-FAIL" in tail:
+        raise IntegrationFailure("heap.elf reported HEAP-FAIL")
+    if tail.count(b"HEAP-OK") != 2:
+        raise IntegrationFailure(
+            f"expected 2 HEAP-OK lines, got {tail.count(b'HEAP-OK')}")
+    session.pass_check("per-process user heaps isolate concurrent mallocs")
+
+    session.send_key("f1")                     # back to vt0
+
+
 def check_user_oom(session):
     # oom.elf drains the user heap through SYS_MEMORY until the PMM is
     # empty, then touches permitted-but-unmapped heap pages. The demand
@@ -105,7 +129,7 @@ def check_user_oom(session):
 
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 11 DEAD", start=ps_start, timeout=5)
+    session.wait_for_regex(rb"\[PS\] 13 DEAD", start=ps_start, timeout=5)
     session.pass_check("oom.elf is reaped after the out-of-memory kill")
 
     session.send_line("echo oom-suite-ok")

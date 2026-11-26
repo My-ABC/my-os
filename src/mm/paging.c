@@ -2,6 +2,7 @@
 #include "serial.h"
 #include "string.h"
 #include "pmm.h"
+#include "syscall.h"
 
 #define KERNEL_VIRT_BASE 0xC0000000U
 #define KERNEL_PHYS_BASE 0x00100000U
@@ -268,6 +269,8 @@ struct user_mm *paging_mm_create(void) {
         slot->in_use = 1;
         user_mm_objs[i].slot = i;
         user_mm_objs[i].pdpt_phys = (uint32_t)mm_phys(&slot->pdpt);
+        user_mm_objs[i].user_heap_next = USER_HEAP_START;
+        user_mm_objs[i].user_free_list = 0;
 
         /* Give every address space the same supervisor-only low 4 MiB
          * identity map: boot stubs, the initial kernel stack, and other
