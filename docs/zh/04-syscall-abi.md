@@ -24,7 +24,7 @@ English: [English version](../en/04-syscall-abi.md)
 
 | 大类 | 名称 | 子操作 |
 |------|------|--------|
-| 1 | `SYS_IO` | `IO_WRITE`(1)、`IO_GETCHAR`(2)、`IO_READ`(3)、`IO_CLEAR`(4)、`IO_CURSOR_GET`(5)、`IO_CURSOR_SET`(6) |
+| 1 | `SYS_IO` | `IO_WRITE`(1)、`IO_GETCHAR`(2)、`IO_READ`(3)、`IO_CLEAR`(4)、`IO_CURSOR_GET`(5)、`IO_CURSOR_SET`(6), `IO_CONSOLE_INFO`(7), `IO_GETCHAR_NB`(8) |
 | 2 | `SYS_TIME` | `TIME_GET`(1)、`TIME_TO`(2)、`TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1)、`MEMORY_CALLOC`(2)、`MEMORY_REALLOC`(3)、`MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1)、`PWR_REBOOT`(2) |
@@ -38,6 +38,7 @@ English: [English version](../en/04-syscall-abi.md)
 |--------|------|------|------|------|
 | 1 | `IO_WRITE` | `ecx` = `const char *`（NUL 结尾字符串指针） | 成功 0，失败 -1 | 向进程所属虚拟终端的屏幕缓冲输出字符串（上限 `IO_WRITE_MAX` = 4096 字节），并镜像到 COM3（`vga_print` + `serial3_print`，无长度参数，按 NUL 结尾）。字符串先拷入有界内核缓冲，因此非法指针或缺 NUL 返回 -1 而不会 panic。**仅当调用者 PID 等于其 vt 上的 `ring3_foreground_pid_vt()` 时才输出**；后台进程或内核上下文调用被静默丢弃。COM1 只承载内核侧输出——Ring 3 输出不出现在 COM1。 |
 | 2 | `IO_GETCHAR` | 无 | 字符 | 阻塞读取单个键盘字符，循环到拿到非 0 字符为止；实际不会返回 0。 |
+| 8 | `IO_GETCHAR_NB` | 无 | 字符或 0 | 非阻塞按键轮询：缓冲区有键返回字符，无键或调用者非本 vt 前台进程时返回 0。Ctrl+C 标记字节被静默消费（IRQ1 已投递 SIGINT）。 |
 | 3 | `IO_READ` | `ecx` = `char *buf`，`edx` = `size` | 行长度（字节，不含 NUL；0 = 空行），失败 -1 | 从键盘读取一行到 `buf`（内部走 `gets`，带回显）。最多写入 `size-1` 个字符加 NUL。`size <= 0` 或 `buf` 不完全位于允许的用户地址范围内时返回 -1。阻塞直到收到换行。 |
 | 4 | `IO_CLEAR` | 无 | 0 | 清屏（`vga_clear`）。 |
 | 5 | `IO_CURSOR_GET` | 无 | `(row << 16) \| col` | 经 `vga_get_cursor` 返回当前光标位置。 |

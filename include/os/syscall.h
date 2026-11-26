@@ -24,6 +24,7 @@
 #define IO_CURSOR_GET 5 // 返回 (row<<16)|col
 #define IO_CURSOR_SET 6 // ecx: row, edx: col —— 设置光标位置
 #define IO_CONSOLE_INFO 7 // 返回 (rows<<16)|cols —— 控制台字符单元格尺寸
+#define IO_GETCHAR_NB 8  // 非阻塞读键：无键返回 0（仅前台进程）
 
 // SYS_TIME 子操作
 #define TIME_GET    1   // 返回 Unix 时间戳（UTC）

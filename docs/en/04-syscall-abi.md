@@ -24,7 +24,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 
 | Class | Name | Sub-operations |
 |-------|------|----------------|
-| 1 | `SYS_IO` | `IO_WRITE`(1), `IO_GETCHAR`(2), `IO_READ`(3), `IO_CLEAR`(4), `IO_CURSOR_GET`(5), `IO_CURSOR_SET`(6) |
+| 1 | `SYS_IO` | `IO_WRITE`(1), `IO_GETCHAR`(2), `IO_READ`(3), `IO_CLEAR`(4), `IO_CURSOR_GET`(5), `IO_CURSOR_SET`(6), `IO_CONSOLE_INFO`(7), `IO_GETCHAR_NB`(8) |
 | 2 | `SYS_TIME` | `TIME_GET`(1), `TIME_TO`(2), `TIME_SLEEP`(3) |
 | 3 | `SYS_MEMORY` | `MEMORY_MALLOC`(1), `MEMORY_CALLOC`(2), `MEMORY_REALLOC`(3), `MEMORY_FREE`(4) |
 | 4 | `SYS_POWER` | `PWR_SHUTDOWN`(1), `PWR_REBOOT`(2) |
@@ -38,6 +38,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 |----|------|-----------|---------|---------|
 | 1 | `IO_WRITE` | `ecx` = `const char *` (NUL-terminated string pointer) | 0 on success, -1 on error | Writes a string (max `IO_WRITE_MAX` = 4096 bytes) to the process's own virtual-terminal screen buffer and mirrors it to COM3 (`vga_print` + `serial3_print`; no length argument, NUL-terminated). The string is first copied into a bounded kernel buffer, so invalid pointers or missing NULs return -1 instead of panicking. **Output only happens when the caller's PID equals `ring3_foreground_pid_vt()` of the caller's vt**; calls from background processes or kernel context are silently dropped. COM1 carries kernel-side output only — Ring 3 output does not appear there. |
 | 2 | `IO_GETCHAR` | none | char | Blocks until a keyboard character is available, looping until a nonzero char; effectively never returns 0. |
+| 8 | `IO_GETCHAR_NB` | none | char or 0 | Non-blocking key poll: returns the next buffered char, or 0 when the buffer is empty or the caller is not the vt foreground process. The Ctrl+C marker byte is consumed silently (IRQ1 already delivered SIGINT). |
 | 3 | `IO_READ` | `ecx` = `char *buf`, `edx` = `size` | line length in bytes (excluding NUL; 0 = empty line), -1 on error | Reads one line from the keyboard into `buf` (via `gets`, with echo). Writes at most `size-1` chars plus NUL. Returns -1 when `size <= 0` or `buf` is not wholly inside permitted user ranges. Blocks until a newline arrives. |
 | 4 | `IO_CLEAR` | none | 0 | Clears the screen (`vga_clear`). |
 | 5 | `IO_CURSOR_GET` | none | `(row << 16) \| col` | Returns the current cursor position via `vga_get_cursor`. |

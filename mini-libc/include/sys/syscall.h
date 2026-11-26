@@ -22,6 +22,7 @@
 #define IO_CURSOR_GET  5
 #define IO_CURSOR_SET  6
 #define IO_CONSOLE_INFO 7
+#define IO_GETCHAR_NB  8
 
 /* SYS_TIME sub-operations */
 #define TIME_GET    1

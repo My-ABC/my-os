@@ -569,6 +569,20 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                         __asm__ volatile ("hlt" ::: "memory");
                     }
                 }
+                case IO_GETCHAR_NB: {
+                    /* Non-blocking poll: 0 when no key is buffered or the
+                     * caller is not the vt foreground process. The Ctrl+C
+                     * marker is consumed silently — IRQ1 already sent
+                     * SIGINT to the foreground pid. */
+                    int vt = (int)ring3_current_vt();
+                    if (ring3_foreground_pid_vt(vt) != ring3_current_pid() ||
+                        !keyboard_hit_vt(vt)) {
+                        return 0;
+                    }
+                    char c = keyboard_getchar_vt(vt);
+                    if (c == KEYBOARD_KEY_SIGINT) return 0;
+                    return (uint32_t)(uint8_t)c;
+                }
                 case IO_CLEAR:
                     vga_clear();
                     return 0;
