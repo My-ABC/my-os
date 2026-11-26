@@ -263,7 +263,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 ### P1
 
-#### R3-N1 `sys_user_buffer_ok`/`sys_copy_user_string` 只查 `PAE_PRESENT`，借出低 4 MiB supervisor 恒等映射成为任意物理页读写原语 ⬜
+#### R3-N1 `sys_user_buffer_ok`/`sys_copy_user_string` 只查 `PAE_PRESENT`，借出低 4 MiB supervisor 恒等映射成为任意物理页读写原语 ✅（`277ca70`）
 
 `src/os/syscall.c:321-357` 的 `sys_user_page_mapped` 调 `paging_mm_get_phys`，后者（`src/mm/paging.c:355-374`）只检查 PTE `PAE_PRESENT` 位，不检查 `PAE_USER`/`PAE_WRITABLE`。而 `paging_mm_create`（`src/mm/paging.c:277-288`）把内核 `pae_low_pt` 的低 4 MiB **supervisor-only 恒等映射**（`src/mm/paging.c:471-475`，无 `PAE_USER`）复制进每个 user_mm 的 VA `0x00000000–0x003FFFFF`。
 
@@ -273,6 +273,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 - 任一 Ring 3 进程用裸 `int 0x80`（无需 mini-libc）即可触发：`sys_call(SYS_IO, IO_READ, 0x200000, 512)`。
 
 影响：跨进程内存破坏/信息泄漏的确定性原语，且 WP=0 使对只读用户页（ELF text/rodata）的写入也静默成功（应返回 EFAULT 而非写穿）。建议：新增按 access mode 校验的 helper——读要求 `PAE_USER`，写要求 `PAE_USER|PAE_WRITABLE`；`sys_user_buffer_ok` 增加 `writable` 参数，所有 memcpy 目的端传 1、源端传 0；`sys_copy_user_string` 只要求 USER。
+- 修复（`277ca70`）：`paging_mm_get_pte` 暴露原始 PTE；`sys_user_page_ok` 要求 `PAE_PRESENT|PAE_USER`（写路径加 `PAE_WRITABLE`），替换原 `sys_user_page_mapped`；`sys_user_buffer_ok` 增加 `writable` 参数。调用点：写方向 `IO_READ`/`sysfs_fread`/`TIME_TO`/`PROC_LIST`/`FS_GETCWD`/`FS_READDIR` 传 1；读方向 `sys_copy_user_string`（IO_WRITE/path）/`sysfs_fwrite` 传 0。QEMU 新增 `bufcheck.elf` 场景验证 0x00100000 读写均返回 -1、合法 buffer 正常。
 
 #### R3-N2 `TIME_SLEEP` 在内核态忙等全程不让出，`sleep()/usleep()` 冻结所有 Ring 3 进程 ⬜
 
