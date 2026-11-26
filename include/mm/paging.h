@@ -99,6 +99,11 @@ uint32_t paging_is_user_address(uint32_t virtual_addr);
 #define USER_MM_MAX          8U
 #define USER_MM_SPACE_LIMIT  0x40000000U  /* PDPT[0] covers 0..1 GiB */
 
+/* Per-process user heap virtual address range — an address-space
+ * layout constant, not a syscall ABI detail. */
+#define USER_HEAP_START 0x01000000U
+#define USER_HEAP_END   0x40000000U
+
 struct user_block;   /* defined in os/syscall.c; opaque to the mm layer */
 
 struct user_mm {

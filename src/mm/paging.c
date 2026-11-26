@@ -2,7 +2,6 @@
 #include "serial.h"
 #include "string.h"
 #include "pmm.h"
-#include "syscall.h"
 
 #define KERNEL_VIRT_BASE 0xC0000000U
 #define KERNEL_PHYS_BASE 0x00100000U

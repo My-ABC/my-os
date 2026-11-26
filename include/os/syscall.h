@@ -72,9 +72,7 @@
 #define SYSFS_O_RDONLY 0
 #define SYSFS_O_RDWR   1
 
-// 用户堆虚拟地址范围（供页错误按需映射做范围判定）
-#define USER_HEAP_START 0x01000000U
-#define USER_HEAP_END   0x40000000U
+// 用户堆虚拟地址范围已移至 include/mm/paging.h（地址空间布局常量）
 uint32_t sys_user_heap_contains(uint32_t addr);
 
 uint32_t sys_call(uint32_t klass, uint32_t op,
