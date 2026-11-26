@@ -254,3 +254,99 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 - `fat32_dir.c`/`fat32_name.c`：LFN 序列校验（order/checksum/0xA0 掩码）、`find_free_directory_slots` 的 end-marker 语义、`make_short_alias` 的 `~N` 生成与 `directory_chain_contains` 的 `..` 回溯均正确；P2-6 的 delete/move 顺序问题仍在。
 - `mini-libc` `syscall*.S` 的栈参数偏移、`setjmp.S` 的 esp/eip 保存、`crt0.S` 的 argc/argv/envp 帧与内核 ABI 一致；`strtol/strtoul` 溢出、`qsort` 递归深度（迭代大侧）无问题。
 - `keyboard.c` set2 断码顺序问题（P2-10）本轮复核属实，默认 set1 不受影响。
+
+---
+
+## 第三轮复审新增条目（syscall.c / mini-libc / syscall ABI 边界）
+
+第三轮重读 `src/os/syscall.c`、`include/os/syscall.h` 与 `mini-libc/` 全部源码（stdlib/stdio/fs/process/signal/time/unistd/console/power/ctype/string/inttypes/assert、全部头文件、`syscall.S`/`setjmp.S`/`crt0.S`），并对照 `src/mm/paging.c`、`src/os/ring3.c`、`src/os/elf.c`、`boot/user.asm`、`linker.ld` 验证页权限与调度契约。编号沿用 R3-Nx。
+
+### P1
+
+#### R3-N1 `sys_user_buffer_ok`/`sys_copy_user_string` 只查 `PAE_PRESENT`，借出低 4 MiB supervisor 恒等映射成为任意物理页读写原语 ⬜
+
+`src/os/syscall.c:321-357` 的 `sys_user_page_mapped` 调 `paging_mm_get_phys`，后者（`src/mm/paging.c:355-374`）只检查 PTE `PAE_PRESENT` 位，不检查 `PAE_USER`/`PAE_WRITABLE`。而 `paging_mm_create`（`src/mm/paging.c:277-288`）把内核 `pae_low_pt` 的低 4 MiB **supervisor-only 恒等映射**（`src/mm/paging.c:471-475`，无 `PAE_USER`）复制进每个 user_mm 的 VA `0x00000000–0x003FFFFF`。
+
+- 该范围内 VA = 物理地址：PMM 只把 `<1 MiB`、内核镜像与 multiboot 结构标为已用（`src/mm/pmm.c:161-174`），`kernel_end+2 页` 到 4 MiB 的物理页可被 `pmm_alloc_page` 分配给**任意进程的堆/栈/页表/信号页**。用户态碰不到这些页（无 USER 位），但 syscall 校验放行后内核以 supervisor 身份直接 memcpy。
+- 写方向：`IO_READ`(sys_gets)、`FS_READ`、`FS_READDIR`、`FS_GETCWD`、`TIME_TO`、`PROC_LIST` 的目标 buffer，以及 `FS_WRITE` 的**源** buffer（内核把物理页内容读出写进文件 → 盘上数据外泄）。
+- 读方向：`IO_WRITE` 与所有 `sysfs_resolve_path` 路径参数经 `sys_copy_user_string` 读取 → `IO_WRITE(0x200000)` 把任意物理页内容打印到 VGA+COM3。
+- 任一 Ring 3 进程用裸 `int 0x80`（无需 mini-libc）即可触发：`sys_call(SYS_IO, IO_READ, 0x200000, 512)`。
+
+影响：跨进程内存破坏/信息泄漏的确定性原语，且 WP=0 使对只读用户页（ELF text/rodata）的写入也静默成功（应返回 EFAULT 而非写穿）。建议：新增按 access mode 校验的 helper——读要求 `PAE_USER`，写要求 `PAE_USER|PAE_WRITABLE`；`sys_user_buffer_ok` 增加 `writable` 参数，所有 memcpy 目的端传 1、源端传 0；`sys_copy_user_string` 只要求 USER。
+
+#### R3-N2 `TIME_SLEEP` 在内核态忙等全程不让出，`sleep()/usleep()` 冻结所有 Ring 3 进程 ⬜
+
+`src/os/syscall.c:594-606`：`TIME_SLEEP` 用 TSC deadline + `pause` 在内核态忙等，只在 `pit_ticks()` 变化时做信号检查，没有任何 `ring3_yield_current`。而 `ring3_timer_switch`（`src/os/ring3.c:290-292`）对 `frame->cs` 为内核 CS 的中断帧直接 `return frame`——IRQ0 在 syscall 期间永不调度。
+
+- `sleep(3600)` 使本进程在内核态空转一小时，其它 READY 进程、kernel idle 上下文全部饿死（PIT 仍在走但每次都恢复同一帧）。对比 `IO_READ`/`IO_GETCHAR` 都有 `sys_keyboard_wait_yield` 契约。
+- 次级：`sys_gets` 只在 `i==0` 时 yield（为避免重启丢行中字符），行中等键时 `hlt` 同样不让出——用户输到一半走开会让其它进程无限期饿死。
+
+建议：`TIME_SLEEP` 循环里周期性 `ring3_yield_current`（需像 IO_READ 一样回退 eip/返回 klass 重启，或接受 sleep 被信号中断返回）；`sys_gets` 行中等待可考虑把已读字符暂存到内核侧再 yield。
+
+#### R3-N3 mini-libc `fgets(stdin)`/`fscanf` 尾随空白永远等不到 `'\n'`，正常路径挂起 ⬜
+
+内核 `IO_READ`（`sys_gets`，`src/os/syscall.c:112-115`）把 `'\n'`/`'\r'` 吃掉只回显，`in_buf` 里**不含换行符**。mini-libc `in_getch`（`src/stdio.c:243-258`）按行缓冲分发字符：
+
+- `fgets(buf, n, stdin)`（`src/stdio.c:630-640`）以 `c=='\n'` 为行尾——该字符永远不会出现，只能靠 `size-1` 字符耗尽或空行（rc==0→in_getch 返回 -1→EOF）结束。正常用法 `fgets` 读一行会跨行阻塞直到缓冲写满，是确定性挂起。
+- `scanf`/`fscanf` 格式串末尾的空白指令（经典 `scanf("%d\n")`）在 `vfscanf` 的 `isspace` 分支 `isrc_skip_ws` 里消费完当前行缓冲后继续 `in_getch` 阻塞等**下一行**——与 hosted scanf 的"等一个换行"语义恰好相反，这里换行已被内核吞掉，等价于必须再输入一整行。
+- `getline()`（`src/stdio.c:488-493`）直接走 `IO_READ`，返回值不含 `'\n'`（与 POSIX getline 返回含换行的长度不符），且头文件已声明不可与 getchar 混用——属已知设计，但 `fgets` 无任何注释说明此限制。
+
+建议：`in_getch` 行尾补一个虚拟 `'\n'`（或 EOF 语义改为"行结束"），让 `fgets`/`scanf` 行为与 hosted C 一致；至少在 `fgets`/`stdio.h` 注释中声明 stdin 行为。
+
+### P2
+
+#### R3-N4 `fopen(path,"a")` 不追加反而从文件头覆盖；`write(1)`/`read(0)` 不映射到控制台 ⬜
+
+- `mini-libc/src/fs.c:72-94` `fs_fopen` 把 `'a'` 与 `'w'` 一样映射为 `FS_O_RDWR`，内核 fd `offset=0`；`fs_fwrite` 按 offset 写 → `"a"` 模式从文件**开头**覆盖写，与 POSIX 追加语义完全相反，属静默数据破坏（`"w"` 不截断已有尾部至少注释承认了，`"a"` 连注释都没有）。内核 ABI 无 lseek/append 模式，无法用现有 syscall 实现真正追加。
+- `mini-libc/src/unistd.c:41-47` `read/write` 直接转 `fs_read/fs_write`：`write(1, buf, n)`（STDOUT_FILENO）会查内核全局 `sysfs_fds[1]`——要么返回 -1（fd 未用），要么**写进恰好占用 fd 1 的无关文件**；`read(0,...)` 同理。标准 fd 0/1/2 与内核 fd 表完全不关联，unistd 层 I/O 对控制台不可用。
+
+建议：`fs_fopen` 对 `'a'` 显式返回 ENOSYS/EINVAL 直至内核支持追加或 lseek；`unistd read/write` 对 fd 0/1/2 路由到 `IO_READ`/`IO_WRITE`/`in_getch` 系列，或文档声明不支持。
+
+#### R3-N5 `execve` 成功后调用进程不退出，新旧进程并存 ⬜
+
+`PROC_EXEC`（`src/os/syscall.c:682-695`）调 `elf_run` 只 `ring3_schedule_mm` 一个**新**前台进程，随后返回 0；调用者 syscall 正常返回 → mini-libc `execve` 返回 0，原进程继续运行。`mini-libc/include/unistd.h:26` 注释声称"Returns only if the exec fails"，与实际不符。POSIX exec 语义是镜像替换；当前实现是"再 spawn 一个前台进程"，且旧进程仍占一个进程槽/CR3。
+
+建议：要么 `PROC_EXEC` 成功路径对当前进程 `ring3_terminate_current`（真 exec），要么修正 unistd.h 注释把它定义为 spawn-and-continue。
+
+#### R3-N6 `user_entry` 演示代码页被映射为 `WRITABLE|USER|BORROWED` 且所有 mm 共享同一物理页 ⬜
+
+`src/os/syscall.c:702-715`（`PROC_RUN_USERCODE`）与 `src/shell/shell.c:254-255`（`cmd_ring3`）都把 `(uint32_t)user_entry` 处的物理页以 `PAGE_PRESENT|PAGE_WRITABLE|PAGE_USER|PAGE_BORROWED` 映射进新 mm。`linker.ld:28-33` 的 `.user.text` 位于低半区恒等映射内，`physical=vaddr=user_entry`，**每个进程映射的是同一物理页**。
+
+- 任一 Ring 3 进程向自己的 `user_entry` VA 写入即可改写共享代码页：之后所有 `ring3`/`PROC_RUN_USERCODE` 启动的演示进程执行被注入的代码（跨进程代码注入/破坏）；`user_prefix` 字符串同页可改。
+- `WRITABLE` 也无必要——演示代码只读即可。
+
+建议：去掉 `PAGE_WRITABLE`（代码页只读）；更彻底的做法是每次 spawn 分配私有物理页拷贝代码，或干脆废弃该演示路径。
+
+#### R3-N7 `fprintf`/`fwrite` 到 REG 文件逐字符 `FS_WRITE`，每次内核整文件 read-modify-write ⬜
+
+`mini-libc/src/stdio.c:522-537` `file_putc_raw` 对 `FS_FILE_REG` 每字符调 `fs_fwrite(&ch,1,1,f)` → `SYS_FS/FS_WRITE` → `sysfs_fwrite` 每次 `fat32_read_file` 整文件 + `fat32_write_file` 整文件回写（`src/os/syscall.c:447-479`）。`fprintf(f, "...")` 输出 N 字符 = N 次全文件 IO，复杂度 O(文件大小×N)；`fputs`/`fputc` 同理。叠加内核 P2-5/P2-11 的全局 fd/整文件语义，向文件写几 KB 即不可用。`fgets`/`fgetc` 反向同样每字节整文件重读。
+
+建议：mini-libc FILE 层加写缓冲（攒批后一次 `fs_write`），读侧加预读缓冲；根治仍需内核流式 FS（见 P2-5）。
+
+#### R3-N8 `vformat`/`vfscanf` 忽略 `ll`/`hh` 长度修饰，`%lld` 参数错位 ⬜
+
+`mini-libc/src/stdio.c:145-146`（输出）与 `:381`（输入）把 `h/hh/l/ll/j/z/t/L` 全部跳过按 `int`/`unsigned` 处理。i386 上 `long long` 占两个栈槽：`printf("%lld %d", ll, x)` 中 `va_arg(ap,int)` 只取低 4 字节且 ap 只前进 4 字节，**后续所有参数整体错位**；`scanf("%lld", &ll)` 只写低 4 字节，高 4 字节残留。`inttypes.h` 注释承认"%lld is not yet parsed"，但 PRId64 宏仍展开为 `"lld"`，用户按标准用法必然踩坑。
+
+建议：解析 `ll`/`l` 并对 64 位参数用 `va_arg(ap, long long)`/`unsigned long long`（需要 out_uint_x 支持 64 位除法——可用 `__udivdi3` 或手写）；或从 inttypes.h 移除 64 位 PRIm 宏直到实现。
+
+### P3
+
+1. `src/os/syscall.c` 各 `SYS_*` 已知 class 的 `default:` 子操作分支一律 `return 0`——拼错 op 号静默"成功"，建议返回 -1/ENOSYS（未知 class 已正确返回 -1）。
+2. `mini-libc/src/stdlib.c:204` `strtol` 在 `acc=2^31`（`LONG_MIN` 边界）时 `-(long)acc` 构成 `-(LONG_MIN)` UB（x86 上碰巧正确）；`abs(INT_MIN)`/`labs(LONG_MIN)` 同型 UB。
+3. `mini-libc/src/stdio.c:213-221` `snprintf(NULL, 0, ...)` 因 `buf==0` 走 console 分支把内容打印到屏幕，而非只计算返回长度；`snprintf` 其余截断语义正确。
+4. `mini-libc/src/stdio.c:480` `vfscanf` 的 `eof_hit` 只在**字面量**分支设置；`scanf("%s")`/`%d` 在输入流首字符即 EOF 时经 `goto done` 返回 0 而非 EOF（POSIX 应为 EOF）。
+5. `mini-libc/src/stdio.c:255` `in_getch` 把空行（内核 rc==0）当 EOF 返回 -1：`getchar()` 在用户按一次回车时返回 EOF，是瞬时错误而非流终止。
+6. `mini-libc/src/stdlib.c:21-25` `_Exit`/`exit` 恒以 `ecx=0` 调 `PROC_EXIT`，`status` 被丢弃（内核本就不记录，但 ABI 注释"ecx: 退出码"有误导）；`signal()`/`kill()` 的早退分支不设 `errno`。
+7. `mini-libc/include/stdint.h`：`intmax_t`/`uintmax_t` 定义为 `int`/`unsigned int`（hosted LP32 通常为 `long long`）；`int_least8_t` 等 least 类型取 `int` 过宽但合法。`inttypes.c` 的 imax\* 与之自洽，仅与 hosted C ABI 有偏差。
+8. `mini-libc/src/stdlib.c:51-53` `xalloc` 的 align 归一化 `while (a < align) a <<= 1`：用户伪造 malloc header 的 `align` 字段为非 2 幂大值（如 `0x80000001`）会让 `a` 溢出为 0 后死循环——仅自伤（header 在自己地址空间），但 `hdr_of` 不校验 align 幂次/上界。
+9. `src/os/syscall.c:855-867` `sys_call` 是内核态 `int 0x80` 包装：`current_process < 0`（内核/idle 上下文）时 `PROC_EXIT`/`PROC_YIELD` 等静默无效或走默认分支，属未文档化的边界。
+10. `src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）；`FS_OPEN` 的 mode 未限定 `<= SYSFS_O_RDWR` 之外的位（`mode > 1` 已拒，OK）。
+
+### 复核结论（本轮确认无新问题）
+
+- `syscall.S` 四个 wrapper 的栈参数偏移（+20/+24/+28/+32/+36）、callee-saved 保存顺序与 `int 0x80` ABI 一致；`sys_call`（内核侧 inline asm）与 mini-libc 路径共用同一 `CD 80` 编码，`sys_keyboard_wait_yield` 的 `eip -= 2` 回退对两条路径都成立。
+- `sys_gets`/`IO_GETCHAR` 的 yield-restart 契约（返回 `klass` 使 eax 槽重派发原 class+op）、fatal abort 后跳过用户 buf 写入、`i==0` 才 yield 的行中字符保护均与注释一致；P0-1/P0-2 修复无回归。
+- `sysfs_fopen/fread/fwrite` 的路径解析、`is_dir`/exists 组合判断、`(uint64_t)offset+size` 上界、`sysfs_fd_index` 边界均正确；`fat32_list_directory(path, 0)` 的 NULL callback 有 `callback != 0` 保护（`src/fs/fat32_dir.c:304`），`FS_CHDIR` 探测安全。
+- `ring3_signal_set_handler` 的 `handler > SIG_IGN && handler >= USER_SPACE_END` 边界、`sig_actionable` 的 IGN/DFL 分类、`sig_deliver` 的 CR3 切换写帧、`sigreturn` 的整帧恢复与 mini-libc `signal()` 的 userspace handlers 缓存语义一致；`SIG_IGN=1`/`SIG_DFL=0` 两端取值吻合。
+- `crt0.S` 的 argc/argv/envp 帧、`setjmp.S` 的 esp+4/eip 保存与 longjmp 恢复、`qsort` 的小侧递归、`strtol/strtoul` 的 ERANGE/前缀检测、`bsearch`/`memmove` 重叠方向均正确。
+- `PROC_LIST` 12 字节记录与 `proc_info_t` 布局、`FS_*` 参数序（a1=path/fd, a2=buf, a3=size）与 `include/os/syscall.h` 及 mini-libc `sys/syscall.h` 两份头文件逐一核对一致。
