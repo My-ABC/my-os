@@ -123,7 +123,14 @@ static void vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
 }
 
 static void vbe_map_framebuffer(const struct vbe_state *state) {
-    uint32_t size = state->pitch * state->height;
+    /* pitch*height in 64-bit; the mapping must not reach the VT
+     * framebuffer backing window at 0xE8000000. */
+    uint64_t span = (uint64_t)state->pitch * state->height;
+    if (VBE_FRAMEBUFFER_ADDRESS + span > 0xE8000000ULL) {
+        serial_print("[VBE] framebuffer span too large; not mapped\n");
+        return;
+    }
+    uint32_t size = (uint32_t)span;
     uint32_t pages = (size + 0xFFFU) / 0x1000U;
     for (uint32_t page = 0; page < pages; page++) {
         paging_map_page(VBE_FRAMEBUFFER_ADDRESS + page * 0x1000U,

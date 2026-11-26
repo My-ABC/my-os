@@ -160,18 +160,18 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 ## P3（风格/次要健壮性）
 
 1. `src/drivers/serial.c:44-59`：COM3 `serial3_putchar('\n')` 分两次等 THR，第一次成功第二次超时时会留下孤立 `\r`；影响仅是输出美观。
-2. `src/lib/stdio.c`：`sprintf` 无界写入调用方 buffer；`int_to_str/int_to_str_padded` 对 `INT_MIN` 的 `-value` 有 UB 风险；内核 `gets` 走 `keyboard_wait_key` 不经过 `sys_keyboard_wait_yield` 的让出路径（仅 kernel shell 使用）。
-3. `src/drivers/keyboard.c`：`alt_pressed` 声明后未使用；set1 `apply_modifiers` 对 Caps+Shift 仍输出大写；`keyboard_send_command_with_response` 未使用（编译警告）。
-4. `src/shell/shell.c`/`shell_ring3.c`：`split_line` 未闭合引号按字面量处理（与注释一致但仍是边界）；`parse_pid`/PID 解析在 `shell.c` 有溢出保护而 `shell_ring3.c:157-166` 的 `parse_pid` 未做 `pid*10` 溢出检查；`shell_ring3 cmd_bg` 不校验 pid 是否存在/是否真为后台，`bg <bad>` 也打印成功。
+2. `src/lib/stdio.c`：`sprintf` 无界写入调用方 buffer；`int_to_str/int_to_str_padded` 对 `INT_MIN` 的 `-value` 有 UB 风险 ✅（INT_MIN 改无符号取负；sprintf 无界写入为内核内部约定，保留）；内核 `gets` 走 `keyboard_wait_key` 不经过 `sys_keyboard_wait_yield` 的让出路径（仅 kernel shell 使用）。
+3. `src/drivers/keyboard.c`：`alt_pressed` 声明后未使用；set1 `apply_modifiers` 对 Caps+Shift 仍输出大写；`keyboard_send_command_with_response` 未使用（编译警告）。✅（已删 alt_pressed/未用函数，Caps+Shift 改为 XOR）
+4. `src/shell/shell.c`/`shell_ring3.c`：`split_line` 未闭合引号按字面量处理（与注释一致但仍是边界）；`parse_pid`/PID 解析在 `shell.c` 有溢出保护而 `shell_ring3.c:157-166` 的 `parse_pid` 未做 `pid*10` 溢出检查 ✅（已补上界检查）；`shell_ring3 cmd_bg` 不校验 pid 是否存在/是否真为后台，`bg <bad>` 也打印成功。
 5. `src/fs/fat32_name.c`：LFN 只支持 ASCII，非 ASCII UTF-16 会折叠成 `?`，可能造成不同长名映射到同一短名/同一显示名。
 6. `src/fs/fat32.c`：`fat32_read_file` 在 buffer 不足时返回成功并把 `*size` 截断为实际复制长度；调用方若不比较 size 与文件长度会静默截断（`cmd_cat` 64 KiB buffer 即如此）。
 7. `src/drivers/vbe.c:125-133`：`vbe_map_framebuffer` 按 `pitch*height` 映射到 `0xE0000000`，无上限/重叠检查；极端模式可能覆盖 `0xE8000000` VT backing 或 `0xF0000000` KMAP。`pitch*height` 也可能 32-bit 回绕。
 8. `src/drivers/vt.c`：`vt_fb_stride` 计算失败只打印日志，已 spawn 的 vt 仍会置 `switch_enabled`，F 键请求会被接受但 `vt_do_switch` 因 backing 缺失拒绝，用户只看到 serial 日志。
-9. `src/mm/paging.c`：`paging_try_reclaim_page_table` 回收页表后只 `flush_tlb(0)`，未按需刷其它地址；`paging_mm_unmap` 缺 `USER_MM_SPACE_LIMIT` 检查（与 P1-1 相关）。
+9. `src/mm/paging.c`：`paging_try_reclaim_page_table` 回收页表后只 `flush_tlb(0)`，未按需刷其它地址；`paging_mm_unmap` 缺 `USER_MM_SPACE_LIMIT` 检查（与 P1-1 相关）。✅（unmap 已补上限检查；reclaim TLB 项保留观察）
 10. `src/mm/pmm.c`：`pmm_get_free_frames` 每次 O(位图全扫)，`g_pmm.used_frames` 维护但未被查询路径使用；高位 `pmm_alloc_page_at_or_above` 只在测试宏路径验证。
 11. `src/drivers/acpi.c`：已全量重读。RSDP/FADT/DSDT 定位依赖固件表长度与签名，AML `_S5` 解析是启发式且未做完整 AML 边界校验；reset/shutdown 走多级 fallback，失败最终 `hlt`。固件可信前提下可接受，建议后续加表长度/checksum 复核。
 12. `src/drivers/rtc.c`：`rtc_read_time` 未校验 month/day 范围；`rtc_convert_timezone` 对极大 `offset_seconds` 会长循环；`rtc_to_unix_timestamp` 在 RTC 年份 <1970 时结果不可靠。
-13. `src/os/panic.c`/`panic_blue_screen`：倒计时会 `sti` 等 PIT；若 panic 发生在 `current_process<0` 且仍有 READY Ring3 进程，IRQ0 理论上可切走显示 panic 的上下文。边界场景，建议 panic 路径关中断 busy-wait 或屏蔽调度。
+13. `src/os/panic.c`/`panic_blue_screen`：倒计时会 `sti` 等 PIT；若 panic 发生在 `current_process<0` 且仍有 READY Ring3 进程，IRQ0 理论上可切走显示 panic 的上下文。边界场景，建议 panic 路径关中断 busy-wait 或屏蔽调度。✅（panic_in_progress 置位后 ring3_timer_switch 不再切换）
 14. `boot/*.asm`/`gdt/idt`：32-bit protected mode 下 TSS 描述符为 8 字节，DF TSS(0x30) 与普通 TSS(0x28) 不重叠；`regs.h` 与 `interrupt.asm` 栈帧契约有 host 侧测试覆盖。无新增 P0-P2。
 
 ---

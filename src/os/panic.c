@@ -1,4 +1,6 @@
 #include "panic.h"
+
+volatile int panic_in_progress = 0;
 #include "acpi.h"
 #include "pit.h"
 #include "serial.h"
@@ -36,6 +38,7 @@ static void countdown(uint32_t seconds) {
 }
 
 void panic_blue_screen(const char* message, struct registers* regs) {
+    panic_in_progress = 1;
     vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
     vga_clear();
 

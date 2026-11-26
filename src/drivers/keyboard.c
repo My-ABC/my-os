@@ -31,7 +31,6 @@ static int current_scancode_set = 1;
 
 // 修饰键状态
 static int shift_pressed = 0;
-static int alt_pressed = 0;
 static int ctrl_pressed = 0;
 static int caps_lock_on = 0;
 static int num_lock_on = 0;
@@ -86,7 +85,7 @@ static volatile uint32_t tail[VT_COUNT];
 // 转换字符（处理 Shift、Caps Lock）
 static char apply_modifiers(char c, int shift, int caps) {
     if (c >= 'a' && c <= 'z') {
-        if (shift || caps) {
+        if (shift != caps) {
             return c - 'a' + 'A';
         }
         return c;
@@ -120,7 +119,6 @@ void keyboard_init(void) {
         tail[i] = 0;
     }
     shift_pressed = 0;
-    alt_pressed = 0;
     ctrl_pressed = 0;
     caps_lock_on = 0;
     num_lock_on = 0;
@@ -156,13 +154,6 @@ static void keyboard_send_controller_command(uint8_t cmd) {
 static void keyboard_send_data(uint8_t data) {
     keyboard_wait_write();
     outb(KEYBOARD_DATA_PORT, data);
-}
-
-// 向键盘发送命令并读取响应
-static uint8_t keyboard_send_command_with_response(uint8_t cmd) {
-    keyboard_send_data(cmd);
-    keyboard_wait_read();
-    return inb(KEYBOARD_DATA_PORT);
 }
 
 void keyboard_set_scancode_set(int set) {

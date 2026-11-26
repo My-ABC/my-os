@@ -104,6 +104,7 @@ int ata_read_sectors(uint32_t lba, uint32_t count, void *buffer) {
     }
 
     ata_lba28_setup(lba, count);
+    (void)ata_wait_bsy_clear();
     outb(ATA_REG_COMMAND, ATA_CMD_READ_SECTORS);
 
     uint16_t *out = (uint16_t *)buffer;
@@ -125,6 +126,7 @@ int ata_write_sectors(uint32_t lba, uint32_t count, const void *buffer) {
     }
 
     ata_lba28_setup(lba, count);
+    (void)ata_wait_bsy_clear();
     outb(ATA_REG_COMMAND, ATA_CMD_WRITE_SECTORS);
 
     const uint16_t *input = (const uint16_t *)buffer;

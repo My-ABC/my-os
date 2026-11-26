@@ -400,7 +400,7 @@ uint64_t paging_mm_get_pte(struct user_mm *mm, uint32_t virtual_addr) {
 
 void paging_mm_unmap(struct user_mm *mm, uint32_t virtual_addr) {
     struct user_mm_slot *slot = mm_slot_of(mm);
-    if (slot == 0) return;
+    if (slot == 0 || virtual_addr >= USER_MM_SPACE_LIMIT) return;
     virtual_addr &= ~(PAGE_SIZE - 1U);
     uint32_t pd_index = (virtual_addr >> 21) & 0x1FFU;
     uint32_t pt_index = (virtual_addr >> 12) & 0x1FFU;

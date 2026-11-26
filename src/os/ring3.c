@@ -1,3 +1,4 @@
+#include "panic.h"
 #include "ring3.h"
 #include "signal.h"
 #include "vt.h"
@@ -285,6 +286,7 @@ int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
 
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     irq_handler(32);
+    if (panic_in_progress) return frame;
     ring3_signal_scan(frame);
 
     if (current_process >= 0 && (frame->cs & 3U) != 3U) {

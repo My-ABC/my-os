@@ -159,6 +159,7 @@ int parse_pid(const char *s, uint32_t *out) {
     if (*s == '\0') return -1;
     for (; *s; ++s) {
         if (*s < '0' || *s > '9') return -1;
+        if (pid > (0xFFFFFFFFU - 9U) / 10U) return -1;
         pid = pid * 10U + (uint32_t)(*s - '0');
     }
     *out = pid;

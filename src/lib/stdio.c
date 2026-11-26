@@ -16,7 +16,7 @@ static int int_to_str(char* str, int value, int base) {
     if (base == 10 && value < 0) {
         *p++ = '-';
         str++;
-        ud = -value;
+        ud = 0U - ud;
     } else if (base == 16) {
         divisor = 16;
     }
@@ -57,7 +57,7 @@ static int int_to_str_padded(char* str, int value, int base, int width, char pad
     // Handle negative numbers
     if (base == 10 && value < 0) {
         is_negative = 1;
-        ud = -value;
+        ud = 0U - ud;
     } else if (base == 16) {
         divisor = 16;
     }
