@@ -63,5 +63,5 @@ Only keep entries here when an Architecture constraint or Rejected design derive
 2. Make the smallest complete change; update related docs (both languages) in the same change.
 3. Validate: `make build` + `make test`; run `make test-qemu` when runtime behavior matters and QEMU is installed. Host tests must run without the cross-compiler.
 4. Keep this agent file synchronized when build/test behavior, conventions, or file responsibilities change.
-5. Branching: docs-only changes may go directly on `main`; all code changes on `feature/<topic>`, never directly on `main`.
+5. Branching: `dev` is the main development line and the repo default branch; `main` receives milestone merges from `dev`. Docs-only changes may go directly on `dev`; all code changes on `feature/<topic>` branched off `dev`, merged back to `dev` — never commit directly to `main`. `mini-libc` remains a separate long-lived line for library work.
 6. Report changed files, exact validation results, and remaining limitations. Never claim a check that was not run.
