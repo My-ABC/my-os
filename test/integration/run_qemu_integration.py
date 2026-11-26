@@ -13,6 +13,7 @@ from fat32_image import create_empty_disk, create_test_disk
 from framework import QemuTestCase
 from qemu_session import QemuSession
 from page_fault_scenarios import (
+    check_bufcheck,
     check_kernel_fault_panic,
     check_page_faults,
     check_user_oom,
@@ -70,6 +71,7 @@ def run_main_session(qemu, kernel, disk, timeout):
             check_ring3_and_builtin_elf,
             check_run_from_disk,
             check_page_faults,
+            check_bufcheck,
             check_fs_syscalls,
             check_signal_handler_delivery,
             check_user_oom,

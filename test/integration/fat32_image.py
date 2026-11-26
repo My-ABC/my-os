@@ -218,4 +218,14 @@ def create_test_disk(directory):
             check=True,
         )
         add_root_file(disk_path, filename, fault_path.read_bytes())
+
+    bufcheck_path = Path(directory) / "bufcheck.elf"
+    subprocess.run(
+        ["nasm", "-f", "bin",
+         str(ROOT / "test" / "integration" / "bufcheck_demo.asm"),
+         "-o", str(bufcheck_path)],
+        cwd=ROOT,
+        check=True,
+    )
+    add_root_file(disk_path, "bufcheck.elf", bufcheck_path.read_bytes())
     return disk_path

@@ -25,5 +25,5 @@ def check_signal_handler_delivery(session):
 
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 9 DEAD", start=ps_start, timeout=8)
+    session.wait_for_regex(rb"\[PS\] 10 DEAD", start=ps_start, timeout=8)
     session.pass_check("SIGINT handler delivery and sigreturn context restore")

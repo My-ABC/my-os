@@ -373,6 +373,29 @@ uint64_t paging_mm_get_phys(struct user_mm *mm, uint32_t virtual_addr) {
     return paging_entry_physical(pte) | (virtual_addr & (PAGE_SIZE - 1U));
 }
 
+/* Return the raw PTE for a user-mm page (0 when unmappable), so
+ * callers can check PAE_USER/PAE_WRITABLE — get_phys alone cannot
+ * distinguish the borrowed supervisor identity map below 4 MiB. */
+uint64_t paging_mm_get_pte(struct user_mm *mm, uint32_t virtual_addr) {
+    struct user_mm_slot *slot = mm_slot_of(mm);
+    if (slot == 0) return 0U;
+    virtual_addr &= ~(PAGE_SIZE - 1U);
+    if (virtual_addr >= USER_MM_SPACE_LIMIT) return 0U;
+    struct page_directory_entry *pde =
+        &slot->pd0.entries[(virtual_addr >> 21) & 0x1FFU];
+    if ((pde->value & PAE_PRESENT) == 0U ||
+        (pde->value & PAE_PAGE_SIZE) != 0U) {
+        return 0U;
+    }
+    uint64_t pt_phys = paging_entry_physical(pde->value);
+    struct page_table *pt =
+        (struct page_table *)paging_map_physical(pt_phys);
+    if (pt == NULL) return 0U;
+    uint64_t pte = pt->entries[(virtual_addr >> 12) & 0x1FFU].value;
+    paging_unmap_physical();
+    return pte;
+}
+
 void paging_mm_unmap(struct user_mm *mm, uint32_t virtual_addr) {
     struct user_mm_slot *slot = mm_slot_of(mm);
     if (slot == 0) return;
