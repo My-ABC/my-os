@@ -1,12 +1,28 @@
-# `setjmp.h`
+# `setjmp.h` — 非局部跳转
 
-`typedef int jmp_buf[6]` —— 保存 ebx/esi/edi/ebp/esp/eip。
-`int setjmp(jmp_buf env)` —— 首次返回 0，之后以
-`longjmp` 的值再次返回。
-`_Noreturn void longjmp(jmp_buf env, int val)` —— 按 C11，
-`val==0` 强转为 1。
+仅保存调用者保存寄存器；不保存信号掩码。
 
-未经 `volatile` 限定、属于包含 `setjmp` 的函数、且在 `setjmp` 与
-`longjmp` 之间被修改的局部变量，在 `longjmp` 返回后值不确定。
-`volatile` 限定的局部变量是安全的——编译器必须从内存重新读取其值。
-（ABI 无 sigprocmask）。
+## 类型
+
+```c
+typedef int jmp_buf[6];   /* ebx esi edi ebp esp eip */
+```
+
+## 函数
+
+### `int setjmp(jmp_buf env)`
+
+- **参数**：`env` — 接收保存上下文的缓冲区。
+- **返回值**：直接调用时返回 `0`；上下文被恢复时返回 `val`
+  （`longjmp` 的参数）。
+- **详细说明**：保存 `ebx/esi/edi/ebp/esp/eip`。在 `setjmp` 与
+  `longjmp` 之间被修改的 volatile 局部变量在第二次返回时值不
+  确定——适用标准 C 规则。
+
+### `_Noreturn void longjmp(jmp_buf env, int val)`
+
+- **参数**：`env` — `setjmp` 填充过的缓冲区；`val` — `setjmp`
+  将返回的值。
+- **返回值**：永不返回。
+- **详细说明**：恢复保存的上下文；`val == 0` 会被转为 `1`（因
+  此 `setjmp` 不会看起来返回两次 `0`）。
