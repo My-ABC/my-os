@@ -165,17 +165,16 @@ run-nographic: build
 run-serial: build
 	qemu-system-i386 -rtc base=utc -kernel $(KERNEL) -serial stdio
 
-# FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录；
-# shell3.elf 比镜像新时重建
+# FAT32 磁盘镜像：构建 shell3.elf 并写入镜像根目录。
+# 镜像已存在时用 mtools 原地更新 shell3.elf（保留镜像里其它文件，
+# 包括用 mtools 手动拷入的）；不存在才 mkfs 重建。
 disk: shell3
-	@if test -f "$(DISK)" && [ "$(SHELL3_ELF)" -ot "$(DISK)" ] && \
-		python3 -c 'import sys; sys.path.insert(0, "test/integration"); \
-			from fat32_image import root_file_present; \
-			sys.exit(0 if root_file_present("$(DISK)", "shell3.elf") else 1)'; then \
-		echo "Disk image already exists: $(DISK)"; \
+	@if test -f "$(DISK)"; then \
+		command -v mcopy >/dev/null 2>&1 || { echo "Error: mtools (mcopy) is required"; exit 1; }; \
+		mcopy -o -i "$(DISK)" "$(SHELL3_ELF)" ::shell3.elf && \
+		echo "Updated shell3.elf in $(DISK)"; \
 	else \
 		command -v mkfs.fat >/dev/null 2>&1 || { echo "Error: mkfs.fat is required"; exit 1; }; \
-		rm -f "$(DISK)"; \
 		truncate -s $(DISK_SIZE) "$(DISK)"; \
 		mkfs.fat -F 32 -n MYOS "$(DISK)"; \
 		python3 -c 'import sys; sys.path.insert(0, "test/integration"); \

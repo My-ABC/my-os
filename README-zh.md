@@ -81,8 +81,8 @@ make run-disk       # 若需要则创建 disk.img，再通过 -kernel 启动并�
 
 `make test` 特意保持为纯宿主机测试，不需要 QEMU 或内核交叉工具链
 （需要 Python 3 和宿主机 `cc`）。`make test-qemu` 需要内核构建工具
-（`nasm` 及 i686 编译器/链接器）、Python 3、`mkfs.fat` 和
-`qemu-system-i386`；它会构建
+（`nasm` 及 i686 编译器/链接器）、Python 3、`mkfs.fat`、`mtools`
+（`mcopy`/`mdir`，用于向 FAT32 磁盘镜像拷贝文件）和 `qemu-system-i386`；它会构建
 `myos.bin`，以无头 TCG 模式启动
 `qemu-system-i386`，通过 QEMU monitor 驱动 PS/2 键盘，并检查 COM1 串口输出。
 测试会挂载自动生成的 FAT32 IDE 磁盘，并覆盖启动、Shell 输入、ATA/FAT32

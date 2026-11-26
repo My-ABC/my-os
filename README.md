@@ -99,7 +99,7 @@ Python cases print clear case names and PASS/FAIL results.
 `make test` intentionally remains host-only, so it works without QEMU or the
 kernel cross-toolchain (it needs Python 3 and host `cc`). `make test-qemu`
 requires the kernel build tools (`nasm` and an i686 compiler/linker), Python 3,
-`mkfs.fat`, and `qemu-system-i386`; it builds `myos.bin`, starts
+`mkfs.fat`, `mtools` (`mcopy`/`mdir` for copying files into the FAT32 disk image), and `qemu-system-i386`; it builds `myos.bin`, starts
 `qemu-system-i386` in headless TCG mode, and drives the PS/2 keyboard through
 QEMU's monitor while checking COM1 output. It attaches a generated FAT32 IDE disk
 and exercises startup, shell input, ATA/FAT32 write/read commands, and runs an ELF demo assembled from
