@@ -14,6 +14,7 @@ from framework import QemuTestCase
 from qemu_session import QemuSession
 from page_fault_scenarios import (
     check_bufcheck,
+    check_heap_isolation,
     check_kernel_fault_panic,
     check_page_faults,
     check_user_oom,
@@ -74,6 +75,7 @@ def run_main_session(qemu, kernel, disk, timeout):
             check_bufcheck,
             check_fs_syscalls,
             check_signal_handler_delivery,
+            check_heap_isolation,
             check_user_oom,
         ],
         qemu, kernel, disk, timeout,

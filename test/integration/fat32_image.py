@@ -228,4 +228,14 @@ def create_test_disk(directory):
         check=True,
     )
     add_root_file(disk_path, "bufcheck.elf", bufcheck_path.read_bytes())
+
+    heap_path = Path(directory) / "heap.elf"
+    subprocess.run(
+        ["nasm", "-f", "bin",
+         str(ROOT / "test" / "integration" / "heap_demo.asm"),
+         "-o", str(heap_path)],
+        cwd=ROOT,
+        check=True,
+    )
+    add_root_file(disk_path, "heap.elf", heap_path.read_bytes())
     return disk_path

@@ -99,9 +99,18 @@ uint32_t paging_is_user_address(uint32_t virtual_addr);
 #define USER_MM_MAX          8U
 #define USER_MM_SPACE_LIMIT  0x40000000U  /* PDPT[0] covers 0..1 GiB */
 
+struct user_block;   /* defined in os/syscall.c; opaque to the mm layer */
+
 struct user_mm {
     uint32_t slot;
     uint32_t pdpt_phys;   /* value to load into CR3 */
+    /* Per-process user-heap metadata. The heap lives in this mm's
+     * private address space, so the free list and bump pointer must be
+     * per-mm: a global list would let one process's free() publish
+     * block headers at VAs that are meaningless (or unmapped) under
+     * another process's CR3. */
+    uint32_t user_heap_next;
+    struct user_block *user_free_list;
 };
 
 struct user_mm *paging_mm_create(void);

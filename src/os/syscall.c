@@ -148,15 +148,13 @@ struct user_block {
     struct user_block *next;
 };
 
-static uint32_t user_heap_next = USER_HEAP_START;
-static struct user_block *user_free_list;
-
 static uint32_t user_pages_for_size(uint32_t size) {
     return (size + sizeof(struct user_block) + PAGE_SIZE - 1U) / PAGE_SIZE;
 }
 
-static struct user_block *user_find_free(uint32_t pages) {
-    struct user_block *block = user_free_list;
+static struct user_block *user_find_free(struct user_mm *mm,
+                                         uint32_t pages) {
+    struct user_block *block = mm->user_free_list;
     while (block != 0) {
         if (block->pages >= pages) {
             return block;
@@ -166,8 +164,8 @@ static struct user_block *user_find_free(uint32_t pages) {
     return 0;
 }
 
-static void user_remove_free(struct user_block *block) {
-    struct user_block **current = &user_free_list;
+static void user_remove_free(struct user_mm *mm, struct user_block *block) {
+    struct user_block **current = &mm->user_free_list;
     while (*current != 0 && *current != block) {
         current = &(*current)->next;
     }
@@ -177,9 +175,8 @@ static void user_remove_free(struct user_block *block) {
     }
 }
 
-static uint32_t user_restore_pages(struct user_block *block) {
-    struct user_mm *mm = ring3_current_mm();
-    if (mm == 0) return 0;
+static uint32_t user_restore_pages(struct user_mm *mm,
+                                   struct user_block *block) {
     uint32_t block_addr = (uint32_t)block;
     for (uint32_t page = 1U; page < block->pages; ++page) {
         uint32_t virtual_addr = block_addr + page * PAGE_SIZE;
@@ -195,21 +192,19 @@ static uint32_t user_restore_pages(struct user_block *block) {
     return 1;
 }
 
-static void *user_alloc(uint32_t size) {
-    struct user_mm *mm = ring3_current_mm();
-    if (mm == 0) return 0;
+static void *user_alloc(struct user_mm *mm, uint32_t size) {
     if (size == 0U || size > 0xFFFFFFFFU - sizeof(struct user_block)) {
         return 0;
     }
 
     uint32_t pages = user_pages_for_size(size);
-    struct user_block *block = user_find_free(pages);
+    struct user_block *block = user_find_free(mm, pages);
     if (block != 0) {
-        user_remove_free(block);
-        if (!user_restore_pages(block)) {
+        user_remove_free(mm, block);
+        if (!user_restore_pages(mm, block)) {
             block->free = 1;
-            block->next = user_free_list;
-            user_free_list = block;
+            block->next = mm->user_free_list;
+            mm->user_free_list = block;
             return 0;
         }
         block->free = 0;
@@ -217,7 +212,7 @@ static void *user_alloc(uint32_t size) {
         return (void *)((uint32_t)block + sizeof(struct user_block));
     }
 
-    uint32_t address = (user_heap_next + PAGE_SIZE - 1U) & ~(PAGE_SIZE - 1U);
+    uint32_t address = (mm->user_heap_next + PAGE_SIZE - 1U) & ~(PAGE_SIZE - 1U);
     if (address < USER_HEAP_START || address + pages * PAGE_SIZE < address ||
         address + pages * PAGE_SIZE > USER_HEAP_END) {
         return 0;
@@ -247,12 +242,11 @@ static void *user_alloc(uint32_t size) {
     block->pages = pages;
     block->free = 0;
     block->next = 0;
-    user_heap_next = address + pages * PAGE_SIZE;
+    mm->user_heap_next = address + pages * PAGE_SIZE;
     return (void *)(address + sizeof(struct user_block));
 }
 
-static void user_free(void *ptr) {
-    struct user_mm *mm = ring3_current_mm();
+static void user_free(struct user_mm *mm, void *ptr) {
     if (ptr == 0 || mm == 0) {
         return;
     }
@@ -263,6 +257,14 @@ static void user_free(void *ptr) {
 
     struct user_block *block = (struct user_block *)(address - sizeof(struct user_block));
     if (block->magic != USER_BLOCK_MAGIC || block->free != 0U) {
+        return;
+    }
+    /* block->pages is read from user memory; a corrupt value would make
+     * the unmap loop walk far outside the heap. Reject zero and any
+     * range that does not fit inside USER_HEAP_END. */
+    if (block->pages == 0U ||
+        (uint64_t)(uint32_t)block + (uint64_t)block->pages * PAGE_SIZE >
+            USER_HEAP_END) {
         return;
     }
 
@@ -276,16 +278,16 @@ static void user_free(void *ptr) {
     }
 
     block->free = 1;
-    block->next = user_free_list;
-    user_free_list = block;
+    block->next = mm->user_free_list;
+    mm->user_free_list = block;
 }
 
-static void *user_realloc(void *ptr, uint32_t size) {
+static void *user_realloc(struct user_mm *mm, void *ptr, uint32_t size) {
     if (ptr == 0) {
-        return user_alloc(size);
+        return user_alloc(mm, size);
     }
     if (size == 0U) {
-        user_free(ptr);
+        user_free(mm, ptr);
         return 0;
     }
 
@@ -299,13 +301,13 @@ static void *user_realloc(void *ptr, uint32_t size) {
         return ptr;
     }
 
-    void *new_ptr = user_alloc(size);
+    void *new_ptr = user_alloc(mm, size);
     if (new_ptr == 0) {
         return 0;
     }
     uint32_t copy_size = block->size < size ? block->size : size;
     memcpy(new_ptr, ptr, copy_size);
-    user_free(ptr);
+    user_free(mm, ptr);
     return new_ptr;
 }
 
@@ -617,29 +619,31 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 default:
                     return 0;
             }
-        case SYS_MEMORY:
+        case SYS_MEMORY: {
+            struct user_mm *mm = ring3_current_mm();
             switch (op) {
                 case MEMORY_MALLOC:
-                    return (uint32_t)user_alloc(a1);
+                    return (uint32_t)user_alloc(mm, a1);
                 case MEMORY_CALLOC:
                     if (a1 != 0U && a2 > 0xFFFFFFFFU / a1) {
                         return 0;
                     }
                     {
-                        void *calloc_ptr = user_alloc(a1 * a2);
+                        void *calloc_ptr = user_alloc(mm, a1 * a2);
                         if (calloc_ptr != 0) {
                             memset(calloc_ptr, 0, a1 * a2);
                         }
                         return (uint32_t)calloc_ptr;
                     }
                 case MEMORY_REALLOC:
-                    return (uint32_t)user_realloc((void *)a1, a2);
+                    return (uint32_t)user_realloc(mm, (void *)a1, a2);
                 case MEMORY_FREE:
-                    user_free((void *)a1);
+                    user_free(mm, (void *)a1);
                     return 0;
                 default:
                     return 0;
             }
+        }
         case SYS_POWER:
             if (op == PWR_SHUTDOWN) {
                 acpi_shutdown();
