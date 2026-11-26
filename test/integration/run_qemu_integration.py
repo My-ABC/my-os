@@ -9,12 +9,17 @@ import tempfile
 from pathlib import Path
 
 from common import IntegrationFailure, ROOT
-from fat32_image import create_empty_disk, create_test_disk
+from fat32_image import (
+    create_empty_disk,
+    create_shell3_test_disk,
+    create_test_disk,
+)
 from framework import QemuTestCase
 from qemu_session import QemuSession
 from page_fault_scenarios import (
     check_bufcheck,
     check_heap_isolation,
+    check_heap_vt_isolation,
     check_kernel_fault_panic,
     check_page_faults,
     check_user_oom,
@@ -103,6 +108,20 @@ def run_vt_fallback_session(qemu, kernel, timeout):
         tempdir.cleanup()
 
 
+def run_vt_heap_session(qemu, kernel, timeout):
+    # The concurrent heap-isolation scenario needs real shell3
+    # processes on both vts, so it boots a dedicated session on a disk
+    # that includes build/shell3.elf.
+    tempdir = tempfile.TemporaryDirectory(prefix="myos-qemu-shell3-")
+    try:
+        disk = create_shell3_test_disk(tempdir.name)
+        run_session([check_heap_vt_isolation], qemu, kernel, disk,
+                    timeout)
+        print("✓ PASS: vt heap-isolation session", flush=True)
+    finally:
+        tempdir.cleanup()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-i386"))
@@ -119,6 +138,7 @@ def main():
         run_main_session(args.qemu, args.kernel, disk, args.timeout)
         run_kernel_fault_session(args.qemu, args.kernel, disk, args.timeout)
         run_vt_fallback_session(args.qemu, args.kernel, args.timeout)
+        run_vt_heap_session(args.qemu, args.kernel, args.timeout)
         print("✓ ALL PASS", flush=True)
         return 0
     except (IntegrationFailure, OSError, subprocess.SubprocessError) as error:

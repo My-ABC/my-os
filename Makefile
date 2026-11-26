@@ -116,7 +116,7 @@ $(BUILD_DIR)/mini-libc/%.o: mini-libc/src/%.c
 test:
 	python3 -m unittest discover -s test/python -p 'test_*.py' -v
 
-test-qemu: build
+test-qemu: build shell3
 	python3 test/integration/run_qemu_integration.py --qemu "$(QEMU)" --kernel "$(KERNEL)"
 
 test-qemu-highmem:

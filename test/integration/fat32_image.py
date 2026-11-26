@@ -239,3 +239,15 @@ def create_test_disk(directory):
     )
     add_root_file(disk_path, "heap.elf", heap_path.read_bytes())
     return disk_path
+
+
+def create_shell3_test_disk(directory):
+    """Test disk plus build/shell3.elf so both vts get real Ring 3
+    shells — required for scenarios that switch terminals."""
+    disk_path = create_test_disk(directory)
+    shell3 = ROOT / "build" / "shell3.elf"
+    if not shell3.is_file():
+        raise IntegrationFailure(
+            "build/shell3.elf is required; run `make shell3` first")
+    add_root_file(disk_path, "shell3.elf", shell3.read_bytes())
+    return disk_path
