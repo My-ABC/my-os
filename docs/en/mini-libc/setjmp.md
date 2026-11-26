@@ -15,9 +15,10 @@ typedef int jmp_buf[6];   /* ebx esi edi ebp esp eip */
 - **Parameters**: `env` — buffer receiving the saved context.
 - **Returns**: `0` when called directly; `val` (the `longjmp`
   argument) when the context is restored.
-- **Details**: Saves `ebx/esi/edi/ebp/esp/eip`. Volatile locals
-  modified between `setjmp` and `longjmp` have indeterminate values
-  on the second return — the standard C rule applies.
+- **Details**: Saves `ebx/esi/edi/ebp/esp/eip`. Non-`volatile`
+  locals modified between `setjmp` and `longjmp` have indeterminate
+  values on the second return (C11 7.13.2.1); `volatile` locals are
+  safe — the compiler must reload them from memory.
 
 ### `_Noreturn void longjmp(jmp_buf env, int val)`
 

@@ -16,8 +16,9 @@ typedef int jmp_buf[6];   /* ebx esi edi ebp esp eip */
 - **返回值**：直接调用时返回 `0`；上下文被恢复时返回 `val`
   （`longjmp` 的参数）。
 - **详细说明**：保存 `ebx/esi/edi/ebp/esp/eip`。在 `setjmp` 与
-  `longjmp` 之间被修改的 volatile 局部变量在第二次返回时值不
-  确定——适用标准 C 规则。
+  `longjmp` 之间被修改的**非** `volatile` 局部变量在第二次返回
+  时值不确定（C11 7.13.2.1）；`volatile` 局部变量是安全的——
+  编译器必须从内存重新读取其值。
 
 ### `_Noreturn void longjmp(jmp_buf env, int val)`
 
