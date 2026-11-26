@@ -34,13 +34,15 @@
 
 ## P1（可能坏）
 
-### P1-1 用户堆元数据全局共享，但虚拟地址空间是每进程私有的 ⬜
+### P1-1 用户堆元数据全局共享，但虚拟地址空间是每进程私有的 ✅（`b101c39`）
 
 `src/os/syscall.c:126-285`：`user_heap_next` 与 `user_free_list` 是全局变量，而 `user_alloc/user_free/user_realloc` 使用的是 `ring3_current_mm()` 的私有 `user_mm`。
 
 - 进程 A `MEMORY_FREE` 后，`user_free_list` 指向 A 地址空间中的 `user_block`；进程 B `MEMORY_MALLOC` 复用时，`user_find_free/user_restore_pages` 在 B 的 CR3 下解引用该用户虚拟地址。若 B 未映射同一 VA，会被 `isr14` demand-map 成全零页（`src/os/trap.c`），读到 `pages=0,next=0`；若 B 恰好映射了同 VA，则读到无关数据。
 - `user_heap_next` 全局递增使各进程堆 VA 不复用，浪费 1 GiB 用户地址空间；但真正危险是 free list 跨 mm。
 - `user_free` 只校验 `magic/free`，不校验 `block->pages` 上界、`address+pages*PAGE_SIZE<=USER_HEAP_END`，也不校验页是否属于该 block；`paging_mm_unmap`（`src/mm/paging.c`）未像 `paging_mm_get_phys` 那样检查 `USER_MM_SPACE_LIMIT`，对 `>=0x40000000` 的地址会按 `&0x1FF` 回绕到 pd0/pt0，可能误清低地址映射。
+
+- 修复（`b101c39`）：`struct user_mm` 新增 `user_heap_next`/`user_free_list`（`user_block` 前置声明保持 opaque），`paging_mm_create` 按 mm 初始化；`user_alloc`/`user_find_free`/`user_remove_free`/`user_restore_pages`/`user_free`/`user_realloc` 全部改为显式传 `mm`（SYS_MEMORY 分发处取一次）；`user_free` 增加 `block->pages==0 || block+pages*PAGE_SIZE>USER_HEAP_END` 上界拒绝。QEMU 新增 `heap.elf` 双 vt 并发场景验证隔离。`paging_mm_unmap` 的 `USER_MM_SPACE_LIMIT` 检查未动（遗留）。
 
 影响：多 Ring3 进程同时使用 mini-libc 堆时可能映射错误页、泄漏 PMM 页或破坏其它进程堆。建议：把 user heap free list/next 放进 `struct user_mm`（或按 mm 分链），并在 `user_free/user_realloc` 校验 block 范围、pages 上界与 `USER_HEAP_END`，同时给 `paging_mm_unmap` 补 `virtual_addr < USER_MM_SPACE_LIMIT` 检查。
 
