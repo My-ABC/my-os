@@ -58,6 +58,36 @@ def check_page_faults(session):
     session.pass_check("shell survives page-fault process termination")
 
 
+def check_bufcheck(session):
+    # bufcheck.elf (R3-N1): syscall buffers in the borrowed low-4MiB
+    # supervisor identity map must be rejected with -1; legal user
+    # buffers must still work. It halts in the foreground afterwards,
+    # so Ctrl+C is needed to return to the shell.
+    start = len(session.serial3_data)
+    session.send_line("run bufcheck.elf")
+    session.wait_for_regex(rb"BADW-REJ", timeout=10)
+    session.wait_for_regex(rb"BADR-REJ", timeout=5)
+    session.wait_for_regex(rb"GOODW-OK", timeout=5)
+    if b"BADW-FAIL" in bytes(session.serial3_data[start:]) or \
+            b"BADR-FAIL" in bytes(session.serial3_data[start:]) or \
+            b"GOODW-FAIL" in bytes(session.serial3_data[start:]):
+        raise IntegrationFailure("bufcheck reported a validation failure")
+    session.pass_check("syscall buffers in borrowed supervisor range rejected")
+
+    # The legal IO_READ blocks for a line; feed it one.
+    session.send_line("hi")
+    session.wait_for_regex(rb"GOODR-OK", timeout=8)
+    session.pass_check("legal writable user buffer accepted by IO_READ")
+
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    session.monitor_read_until(b"(qemu)", 3)
+    session.wait_for("^C", timeout=5)
+    ps_start = len(session.serial_data)
+    session.send_line("ps")
+    session.wait_for_regex(rb"\[PS\] 8 DEAD", start=ps_start, timeout=8)
+    session.pass_check("bufcheck.elf reaped after Ctrl+C")
+
+
 def check_user_oom(session):
     # oom.elf drains the user heap through SYS_MEMORY until the PMM is
     # empty, then touches permitted-but-unmapped heap pages. The demand
@@ -75,7 +105,7 @@ def check_user_oom(session):
 
     ps_start = len(session.serial_data)
     session.send_line("ps")
-    session.wait_for_regex(rb"\[PS\] 10 DEAD", start=ps_start, timeout=5)
+    session.wait_for_regex(rb"\[PS\] 11 DEAD", start=ps_start, timeout=5)
     session.pass_check("oom.elf is reaped after the out-of-memory kill")
 
     session.send_line("echo oom-suite-ok")

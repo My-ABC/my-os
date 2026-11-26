@@ -313,23 +313,32 @@ uint32_t sys_user_heap_contains(uint32_t addr) {
     return addr >= USER_HEAP_START && addr < USER_HEAP_END;
 }
 
-/* Validate that every page covering [addr, addr+len) is actually mapped
- * in the current process's address space. Range-permission checks are
- * not sufficient: a permitted-but-unmapped page (e.g. an unregistered
- * image range or a not-yet-demand-paged stack page) would fault in
- * kernel context and panic. */
-static int sys_user_page_mapped(uint32_t page) {
+/* Validate that every page covering [addr, addr+len) is mapped for
+ * the requested access in the current process's address space.
+ * Range-permission checks are not sufficient: a permitted-but-unmapped
+ * page (e.g. an unregistered image range or a not-yet-demand-paged
+ * stack page) would fault in kernel context and panic. The PTE must
+ * be present and user-accessible; write targets additionally require
+ * PAE_WRITABLE. This also rejects the borrowed supervisor identity
+ * map below 4 MiB that paging_mm_create copies into every user_mm —
+ * without the USER/WRITABLE checks a syscall pointer into that range
+ * would read/write arbitrary physical memory as the kernel. */
+static int sys_user_page_ok(uint32_t page, int writable) {
     struct user_mm *mm = ring3_current_mm();
-    return mm != 0 && paging_mm_get_phys(mm, page) != 0U;
+    if (mm == 0) return 0;
+    uint64_t pte = paging_mm_get_pte(mm, page);
+    if ((pte & PAE_PRESENT) == 0U || (pte & PAE_USER) == 0U) return 0;
+    if (writable != 0 && (pte & PAE_WRITABLE) == 0U) return 0;
+    return 1;
 }
 
-static int sys_user_buffer_ok(uint32_t addr, uint32_t len) {
+static int sys_user_buffer_ok(uint32_t addr, uint32_t len, int writable) {
     if (len == 0U) return 1;
     if (addr >= USER_SPACE_END || len > USER_SPACE_END - addr) return 0;
     uint32_t last = addr + len - 1U;
     for (uint32_t page = addr & ~(PAGE_SIZE - 1U); page <= last;
          page += PAGE_SIZE) {
-        if (!sys_user_page_mapped(page)) {
+        if (!sys_user_page_ok(page, writable)) {
             return 0;
         }
     }
@@ -346,7 +355,7 @@ static int sys_copy_user_string(uint32_t addr, char *dst, uint32_t dst_size) {
         if (a >= USER_SPACE_END) return -1;
         uint32_t page = a & ~(PAGE_SIZE - 1U);
         if (page != checked_page) {
-            if (!sys_user_page_mapped(page)) return -1;
+            if (!sys_user_page_ok(page, 0)) return -1;
             checked_page = page;
         }
         char c = *(const volatile char *)a;
@@ -420,7 +429,7 @@ static int sysfs_fopen(uint32_t user_path, uint32_t mode) {
 }
 
 static int sysfs_fread(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
-    if (!sys_user_buffer_ok(buf, size)) return -1;
+    if (!sys_user_buffer_ok(buf, size, 1)) return -1;
     if (size == 0U) return 0;
 
     uint8_t *kbuf = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
@@ -446,7 +455,7 @@ static int sysfs_fread(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
 
 static int sysfs_fwrite(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
     if (fd->mode != SYSFS_O_RDWR) return -1;
-    if (!sys_user_buffer_ok(buf, size)) return -1;
+    if (!sys_user_buffer_ok(buf, size, 0)) return -1;
     if (size == 0U) return 0;
     if ((uint64_t)fd->offset + size > FAT32_MAX_FILE_SIZE) return -1;
 
@@ -518,7 +527,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                      * positive sizes and buffers that are not wholly
                      * inside permitted user ranges before any write. */
                     if ((int32_t)a2 <= 0 ||
-                        !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2)) {
+                        !sys_user_buffer_ok(a1, (uint32_t)(int32_t)a2, 1)) {
                         return (uint32_t)-1;
                     }
                     int gets_rc = sys_gets((char *)a1, (int)a2, frame);
@@ -582,7 +591,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return rtc_to_unix_timestamp(&time);
                 }
                 case TIME_TO: { // a1: offset seconds, a2: rtc_time_t *buf
-                    if (!sys_user_buffer_ok(a2, sizeof(rtc_time_t))) {
+                    if (!sys_user_buffer_ok(a2, sizeof(rtc_time_t), 1)) {
                         return (uint32_t)-1;
                     }
                     rtc_time_t time;
@@ -656,7 +665,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     syscall_switch_frame = (uint32_t)ring3_yield_current(frame);
                     return 0;
                 case PROC_LIST: {
-                    if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
+                    if (!sys_user_buffer_ok(a1, a2, 1)) return (uint32_t)-1;
                     uint32_t pids[RING3_PROCESS_COUNT];
                     uint32_t states[RING3_PROCESS_COUNT];
                     uint32_t fg = ring3_foreground_pid_vt((int)ring3_current_vt());
@@ -769,7 +778,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return is_dir != 0 ? (uint32_t)-2 : size;
                 }
                 case FS_GETCWD: {
-                    if (!sys_user_buffer_ok(a1, a2)) return (uint32_t)-1;
+                    if (!sys_user_buffer_ok(a1, a2, 1)) return (uint32_t)-1;
                     char cwd[SYSFS_PATH_MAX];
                     int length = fat32_get_cwd(cwd, sizeof(cwd));
                     if (length < 0 || (uint32_t)length + 1U > a2) {
@@ -797,7 +806,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return fat32_move(old_path, new_path) == 0 ? 0U : (uint32_t)-1;
                 }
                 case FS_READDIR: {
-                    if (!sys_user_buffer_ok(a2, a3)) return (uint32_t)-1;
+                    if (!sys_user_buffer_ok(a2, a3, 1)) return (uint32_t)-1;
                     char path[SYSFS_PATH_MAX];
                     if (sysfs_resolve_path(a1, path, sizeof(path)) != 0) {
                         return (uint32_t)-1;

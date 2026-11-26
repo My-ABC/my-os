@@ -110,6 +110,7 @@ void paging_mm_map(struct user_mm *mm, uint32_t virtual_addr,
                    uint64_t physical_addr, uint32_t flags);
 void paging_mm_unmap(struct user_mm *mm, uint32_t virtual_addr);
 uint64_t paging_mm_get_phys(struct user_mm *mm, uint32_t virtual_addr);
+uint64_t paging_mm_get_pte(struct user_mm *mm, uint32_t virtual_addr);
 
 /* Load a new CR3 and return the previously active one. Loading CR3
  * flushes non-global TLB entries. */
