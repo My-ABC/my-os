@@ -1,4 +1,5 @@
 #include "panic.h"
+#include "pit.h"
 #include "ring3.h"
 #include "signal.h"
 #include "vt.h"
@@ -33,6 +34,7 @@ struct ring3_process {
     uint32_t sig_handler[NSIG];
     uint32_t sig_active;            /* signal number whose handler is running, 0 = none */
     struct irq_frame sig_saved_frame; /* interrupted context restored by sigreturn */
+    uint32_t sleep_deadline;        /* PIT ticks; 0 = not sleeping */
     struct irq_frame *frame;
 };
 
@@ -264,6 +266,7 @@ static int ring3_schedule_internal(void (*func)(void),
         processes[i].sig_handler[s] = SIG_DFL;
     }
     processes[i].sig_active = 0U;
+    processes[i].sleep_deadline = 0U;
     processes[i].frame = frame;
     if (foreground) foreground_pid[processes[i].vt] = processes[i].pid;
 
@@ -288,6 +291,22 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     irq_handler(32);
     if (panic_in_progress) return frame;
     ring3_signal_scan(frame);
+
+    /* Wake sleepers whose deadline passed. sleep_deadline is kept so
+     * the restarted TIME_SLEEP sees the expiry itself and clears it —
+     * clearing here would make the restart recompute a fresh deadline
+     * and double the sleep. */
+    {
+        uint32_t now = pit_ticks();
+        for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+            struct ring3_process *p = &processes[i];
+            if (p->state == RING3_PROCESS_SLEEPING &&
+                p->sleep_deadline != 0U &&
+                (int32_t)(now - p->sleep_deadline) >= 0) {
+                p->state = RING3_PROCESS_READY;
+            }
+        }
+    }
 
     if (current_process >= 0 && (frame->cs & 3U) != 3U) {
         return frame;
@@ -327,7 +346,8 @@ struct irq_frame *ring3_timer_switch(struct irq_frame *frame) {
     return processes[next].frame;
 }
 
-struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
+static struct irq_frame *yield_current_internal(struct irq_frame *frame,
+                                                  uint32_t new_state) {
     uint32_t flags = irq_save();
     if (current_process < 0 || kernel_frame == 0 ||
         (kernel_frame->cs & 3U) != 0U ||
@@ -338,12 +358,41 @@ struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
 
     struct ring3_process *process = &processes[(uint32_t)current_process];
     process->frame = frame;
-    process->state = RING3_PROCESS_READY;
+    process->state = new_state;
     current_process = -1;
     tss_set_kernel_stack((uint32_t)stack_top);
     paging_switch_cr3(paging_kernel_cr3());
     /* Keep IRQs disabled until the assembly stub switches back to the shell. */
     return kernel_frame;
+}
+
+struct irq_frame *ring3_yield_current(struct irq_frame *frame) {
+    return yield_current_internal(frame, RING3_PROCESS_READY);
+}
+
+struct irq_frame *ring3_sleep_yield_current(struct irq_frame *frame) {
+    return yield_current_internal(frame, RING3_PROCESS_SLEEPING);
+}
+
+uint32_t ring3_sleep_deadline(void) {
+    if (current_process < 0) return 0U;
+    return processes[(uint32_t)current_process].sleep_deadline;
+}
+
+void ring3_sleep_begin(uint32_t deadline_ticks) {
+    if (current_process < 0) return;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    p->sleep_deadline = deadline_ticks;
+    p->state = RING3_PROCESS_SLEEPING;
+}
+
+void ring3_sleep_end(void) {
+    if (current_process < 0) return;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    p->sleep_deadline = 0U;
+    if (p->state == RING3_PROCESS_SLEEPING) {
+        p->state = RING3_PROCESS_READY;
+    }
 }
 
 struct user_mm *ring3_current_mm(void) {
@@ -366,7 +415,8 @@ int ring3_pid_vt(uint32_t pid) {
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
-             processes[i].state == RING3_PROCESS_RUNNING)) {
+             processes[i].state == RING3_PROCESS_RUNNING ||
+             processes[i].state == RING3_PROCESS_SLEEPING)) {
             irq_restore(flags);
             return (int)processes[i].vt;
         }
@@ -398,7 +448,8 @@ int ring3_set_foreground(uint32_t pid) {
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
-             processes[i].state == RING3_PROCESS_RUNNING)) {
+             processes[i].state == RING3_PROCESS_RUNNING ||
+             processes[i].state == RING3_PROCESS_SLEEPING)) {
             foreground_pid[processes[i].vt] = pid;
             irq_restore(flags);
             return 0;
@@ -413,7 +464,8 @@ int ring3_set_background(uint32_t pid) {
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
-             processes[i].state == RING3_PROCESS_RUNNING)) {
+             processes[i].state == RING3_PROCESS_RUNNING ||
+             processes[i].state == RING3_PROCESS_SLEEPING)) {
             if (foreground_pid[processes[i].vt] == pid) {
                 foreground_pid[processes[i].vt] = 0U;
             }
@@ -470,7 +522,8 @@ int ring3_kill(uint32_t pid) {
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
-             processes[i].state == RING3_PROCESS_RUNNING)) {
+             processes[i].state == RING3_PROCESS_RUNNING ||
+             processes[i].state == RING3_PROCESS_SLEEPING)) {
             processes[i].state = RING3_PROCESS_DEAD;
             ring3_foreground_release(&processes[i]);
             if (current_process != (int32_t)i) {
@@ -586,7 +639,8 @@ int ring3_signal_send(uint32_t pid, uint32_t sig) {
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         if (processes[i].pid == pid &&
             (processes[i].state == RING3_PROCESS_READY ||
-             processes[i].state == RING3_PROCESS_RUNNING)) {
+             processes[i].state == RING3_PROCESS_RUNNING ||
+             processes[i].state == RING3_PROCESS_SLEEPING)) {
             processes[i].sig_pending |= 1U << sig;
             irq_restore(flags);
             return 0;
@@ -656,6 +710,16 @@ uint32_t ring3_signal_sigreturn(struct irq_frame *frame) {
 void ring3_signal_scan(struct irq_frame *frame) {
     int current_kernel_frame =
         current_process >= 0 && (frame->cs & 3U) != 3U;
+    /* A sleeping process cannot observe its pending signal until it
+     * runs again — wake it and abandon the rest of the sleep. */
+    for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
+        struct ring3_process *p = &processes[i];
+        if (p->state == RING3_PROCESS_SLEEPING &&
+            p->sig_pending != 0U) {
+            p->state = RING3_PROCESS_READY;
+            p->sleep_deadline = 0U;
+        }
+    }
     for (uint32_t i = 0; i < RING3_PROCESS_COUNT; ++i) {
         struct ring3_process *p = &processes[i];
         if (p->state != RING3_PROCESS_READY &&

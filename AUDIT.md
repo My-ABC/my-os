@@ -279,7 +279,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 影响：跨进程内存破坏/信息泄漏的确定性原语，且 WP=0 使对只读用户页（ELF text/rodata）的写入也静默成功（应返回 EFAULT 而非写穿）。建议：新增按 access mode 校验的 helper——读要求 `PAE_USER`，写要求 `PAE_USER|PAE_WRITABLE`；`sys_user_buffer_ok` 增加 `writable` 参数，所有 memcpy 目的端传 1、源端传 0；`sys_copy_user_string` 只要求 USER。
 - 修复（`277ca70`）：`paging_mm_get_pte` 暴露原始 PTE；`sys_user_page_ok` 要求 `PAE_PRESENT|PAE_USER`（写路径加 `PAE_WRITABLE`），替换原 `sys_user_page_mapped`；`sys_user_buffer_ok` 增加 `writable` 参数。调用点：写方向 `IO_READ`/`sysfs_fread`/`TIME_TO`/`PROC_LIST`/`FS_GETCWD`/`FS_READDIR` 传 1；读方向 `sys_copy_user_string`（IO_WRITE/path）/`sysfs_fwrite` 传 0。QEMU 新增 `bufcheck.elf` 场景验证 0x00100000 读写均返回 -1、合法 buffer 正常。
 
-#### R3-N2 `TIME_SLEEP` 在内核态忙等全程不让出，`sleep()/usleep()` 冻结所有 Ring 3 进程 ⬜
+#### R3-N2 `TIME_SLEEP` 在内核态忙等全程不让出，`sleep()/usleep()` 冻结所有 Ring 3 进程 ✅
 
 `src/os/syscall.c:594-606`：`TIME_SLEEP` 用 TSC deadline + `pause` 在内核态忙等，只在 `pit_ticks()` 变化时做信号检查，没有任何 `ring3_yield_current`。而 `ring3_timer_switch`（`src/os/ring3.c:290-292`）对 `frame->cs` 为内核 CS 的中断帧直接 `return frame`——IRQ0 在 syscall 期间永不调度。
 
@@ -287,6 +287,8 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 - 次级：`sys_gets` 只在 `i==0` 时 yield（为避免重启丢行中字符），行中等键时 `hlt` 同样不让出——用户输到一半走开会让其它进程无限期饿死。
 
 建议：`TIME_SLEEP` 循环里周期性 `ring3_yield_current`（需像 IO_READ 一样回退 eip/返回 klass 重启，或接受 sleep 被信号中断返回）；`sys_gets` 行中等待可考虑把已读字符暂存到内核侧再 yield。
+
+**已修复**：新增 `RING3_PROCESS_SLEEPING` + 每进程 `sleep_deadline`（PIT tick）。Ring 3 的 `TIME_SLEEP` 首次进入时把 deadline 写入并经 `ring3_sleep_yield_current` 挂起（eip 回退 2 + `syscall_switch_frame` + 返回 klass 的重启契约）；IRQ0 的 `ring3_timer_switch` 到期把 SLEEPING 翻回 READY（保留 deadline 让重启的 syscall 自己清零，避免睡眠翻倍）；`ring3_signal_scan` 对有 pending 信号的睡眠者置 READY 并清 deadline（放弃剩余睡眠），`ring3_kill`/`vt_pid_alive`/`PROC_LIST` 均覆盖 SLEEPING；内核态调用方保留 TSC 忙等。新增 `sleep.elf` QEMU 场景验证：睡眠中 F2 在 ~10ms 切换 vt、睡眠正常唤醒、Ctrl+C 可杀死睡眠进程。`sys_gets` 行中等待的次级问题未动。
 
 #### R3-N3 mini-libc `fgets(stdin)`/`fscanf` 尾随空白永远等不到 `'\n'`，正常路径挂起 ⬜
 

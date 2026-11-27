@@ -50,7 +50,7 @@ English: [English version](../en/04-syscall-abi.md)
 |--------|------|------|------|------|
 | 1 | `TIME_GET` | 无 | Unix 时间戳 | `rtc_read_time` + `rtc_to_unix_timestamp`，返回当前 UTC 时间的 Unix 时间戳。 |
 | 2 | `TIME_TO` | `ecx` = 有符号偏移（**秒**），`edx` = `rtc_time_t *` 用户缓冲区 | 0 或 -1 | 读取 RTC 并按给定偏移执行 `rtc_convert_timezone`，把结果 `rtc_time_t`（8 字节：秒、分、时、日、月、年）拷贝到用户缓冲区。缓冲区必须通过用户指针校验。 |
-| 3 | `TIME_SLEEP` | `ecx` = 时长（**微秒**） | 0；TSC 未校准时返回 -1 | 基于已校准 TSC 忙等至截止时刻；信号处置按 PIT tick（10ms）粒度轮询，已投递信号可提前中断睡眠。支持亚毫秒精度；睡眠期间占用 CPU。 |
+| 3 | `TIME_SLEEP` | `ecx` = 时长（**微秒**） | 0；TSC 未校准时返回 -1 | Ring 3 调用方进入 `RING3_PROCESS_SLEEPING` 睡到 PIT tick 截止点（10ms 粒度），让出 CPU 使其它进程与 `vt_service` 得以运行；经 yield-rewind 契约重启 syscall，到期返回 0。挂起信号会提前唤醒（放弃剩余睡眠）；`PROC_KILL` 可杀死睡眠中进程。内核态调用方保留原 TSC 忙等。 |
 
 ## `SYS_MEMORY`（3）
 
@@ -77,7 +77,7 @@ English: [English version](../en/04-syscall-abi.md)
 | 1 | `PROC_GETPID` | 无 | 当前 Ring 3 进程 PID | 内核上下文调用时返回 0。 |
 | 2 | `PROC_EXIT` | `ecx` = 退出码（已接受，暂不记录） | 不返回 | 终止当前 Ring 3 进程并回收其资源（见下文"进程退出"）。内核上下文调用时退化为普通返回 0。 |
 | 3 | `PROC_YIELD` | 无 | 0 | 主动让出 CPU，保存当前 Ring 3 上下文并返回 Shell；进程之后由 PIT 调度恢复。 |
-| 4 | `PROC_LIST` | `ecx` = 缓冲区，`edx` = 大小 | 进程数或 -1 | 枚举存活进程为 12 字节记录 `{pid, state, is_foreground}`；`state` 取 `RING3_PROCESS_*` 值。缓冲区须通过用户指针校验且容纳 `count * 12` 字节。 |
+| 4 | `PROC_LIST` | `ecx` = 缓冲区，`edx` = 大小 | 进程数或 -1 | 枚举存活进程为 12 字节记录 `{pid, state, is_foreground}`；`state` 取 `RING3_PROCESS_*` 值（0 未用、1 就绪、2 运行、3 死亡、4 睡眠）。缓冲区须通过用户指针校验且容纳 `count * 12` 字节。 |
 | 5 | `PROC_SET_FG` | `ecx` = pid（`0` 取消前台） | 0 或 -1 | 经 `ring3_set_foreground`/`ring3_set_background` 设置或清除前台进程。 |
 | 6 | `PROC_EXEC` | `ecx` = FAT32 上的 ELF32 路径 | 0 或 -1 | 读取文件、`elf32_load` 校验装载，并**以前台**调度为 Ring 3 进程（与 Shell `run` 命令同路径）。失败返回 -1；不返回新 pid。 |
 

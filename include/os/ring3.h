@@ -17,6 +17,16 @@ int ring3_schedule_mm(void (*func)(void), struct user_mm *mm,
 struct user_mm *ring3_current_mm(void);
 struct irq_frame *ring3_timer_switch(struct irq_frame *frame);
 struct irq_frame *ring3_yield_current(struct irq_frame *frame);
+/* Sleep-aware yield: same diversion as ring3_yield_current but keeps
+ * the process in RING3_PROCESS_SLEEPING so the scheduler skips it
+ * until ring3_timer_switch wakes it at sleep_deadline. */
+struct irq_frame *ring3_sleep_yield_current(struct irq_frame *frame);
+
+/* Per-process sleep state used by SYS_TIME/TIME_SLEEP. sleep_deadline
+ * is in PIT ticks (pit_ticks()); 0 means "not sleeping". */
+uint32_t ring3_sleep_deadline(void);
+void ring3_sleep_begin(uint32_t deadline_ticks);
+void ring3_sleep_end(void);
 uint32_t ring3_current_pid(void);
 uint32_t ring3_current_vt(void);
 int ring3_pid_vt(uint32_t pid);
@@ -32,6 +42,7 @@ struct irq_frame *ring3_terminate_current(void);
 #define RING3_PROCESS_READY  1U
 #define RING3_PROCESS_RUNNING 2U
 #define RING3_PROCESS_DEAD   3U
+#define RING3_PROCESS_SLEEPING 4U
 #define RING3_PROCESS_COUNT  4U
 
 #endif

@@ -1,3 +1,4 @@
+import re
 import time
 
 from common import IntegrationFailure
@@ -134,6 +135,56 @@ def check_heap_vt_isolation(session):
             f"expected 2 HEAP-OK lines, got {tail.count(b'HEAP-OK')}")
     session.pass_check("per-process user heaps isolate concurrent mallocs")
     session.send_key("f1")                     # back to vt0
+
+
+def check_sleep_vt_switch(session):
+    # R3-N2: TIME_SLEEP must park the process in SLEEPING so the idle
+    # loop keeps servicing vt_pending. Run sleep.elf (500 ms) on vt0,
+    # press F2 immediately, and require the switch well before the
+    # sleep ends — pre-fix it only happened after the process exited.
+    session.wait_for("[VT] shell3 started on vt 0", timeout=20)
+    session.wait_for("[VT] shell3 started on vt 1", timeout=20)
+    session.send_key("f1")
+    session.wait_for("[VT] switched to vt 0", timeout=5)
+    session.send_line("run sleep.elf")
+    time.sleep(0.1)
+    start = time.monotonic()
+    session.send_key("f2")
+    session.wait_for("[VT] switched to vt 1", timeout=5)
+    elapsed = time.monotonic() - start
+    if elapsed > 0.45:
+        raise IntegrationFailure(
+            f"vt switch took {elapsed:.2f}s during TIME_SLEEP")
+    session.pass_check(f"F2 switches vt during TIME_SLEEP ({elapsed*1000:.0f} ms)")
+    session.send_key("f1")                     # back to vt0
+    session.wait_for("[VT] switched to vt 0", timeout=5)
+    session.wait_for_regex(rb"SLEEP-OK", timeout=10)
+    session.pass_check("sleep.elf woke and completed")
+
+    # Ctrl+C must kill a process parked in SLEEPING. shell3 `ps`
+    # prints to COM3; capture a fresh offset so stale DEAD rows from
+    # the earlier heap runs do not satisfy the check.
+    session.send_line("run sleep.elf")
+    time.sleep(0.3)
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    time.sleep(0.5)
+    ps_start = len(session.serial3_data)
+    session.send_line("ps")
+    # wait_for_regex cannot offset into serial3_data, so poll the
+    # COM3 buffer slice directly.
+    deadline = time.monotonic() + 8
+    found = False
+    while time.monotonic() < deadline:
+        session._read_serial_clients()
+        if re.search(rb"\d+\s+DEAD",
+                     bytes(session.serial3_data[ps_start:])):
+            found = True
+            break
+        time.sleep(0.05)
+    if not found:
+        raise IntegrationFailure(
+            "sleeping process not reaped after Ctrl+C")
+    session.pass_check("Ctrl+C kills a process sleeping in TIME_SLEEP")
 
 
 def check_user_oom(session):

@@ -108,7 +108,8 @@ static int vt_pid_alive(uint32_t pid) {
     for (uint32_t i = 0; i < count; ++i) {
         if (pids[i] == pid &&
             (states[i] == RING3_PROCESS_READY ||
-             states[i] == RING3_PROCESS_RUNNING)) {
+             states[i] == RING3_PROCESS_RUNNING ||
+             states[i] == RING3_PROCESS_SLEEPING)) {
             return 1;
         }
     }
