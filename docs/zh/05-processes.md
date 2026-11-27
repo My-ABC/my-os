@@ -11,6 +11,14 @@
 以及供页错误处理器使用的 ELF 镜像区间记录。前台 PID **按 vt 分槽**
 跟踪（`foreground_pid[VT_COUNT]`）。
 
+固定的每进程用户地址：
+
+| 地址 | 用途 |
+|---|---|
+| `0x00810000`、`0x00820000` | 用户栈顶（`USER_STACK_TOP_0/1`），各 32 KiB |
+| `0x00900000` | 每进程 sigreturn 跳板（`USER_SIG_TRAMPOLINE`）；保留地址，测试 ELF 不要加载到这里 |
+| `0x01000000`–`0x40000000` | 用户堆（`USER_HEAP_START`/`USER_HEAP_END`） |
+
 ## 生命周期
 
 - `ring3_schedule(entry)` / `ring3_schedule_mm(...)` /

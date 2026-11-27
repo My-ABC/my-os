@@ -11,6 +11,7 @@ English | [中文](../zh/02-memory.md)
 | `0x00800000` | Boot-time mapping smoke-test page (transient) |
 | `0x01000000`–`0x40000000` | Ring 3 user heap (`USER_HEAP_START`/`USER_HEAP_END`) |
 | `0x00810000`, `0x00820000` | Per-process Ring 3 user stack tops (`USER_STACK_TOP_0/1`), 32 KiB each growing down |
+| `0x00900000` | Per-process sigreturn trampoline (`USER_SIG_TRAMPOLINE`); reserved, never load test ELFs here |
 | ELF image ranges | Demand-mapped per live Ring 3 process |
 | `< 0xC0000000` | User range (`USER_SPACE_END`) |
 | `0xC0000000`+ | Kernel higher-half mapping (`KERNEL_VIRT_BASE`) |

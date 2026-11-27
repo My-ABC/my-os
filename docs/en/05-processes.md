@@ -12,6 +12,14 @@ point, an optional `parent_pid`, and recorded ELF image ranges used by
 the page-fault handler. The foreground PID is tracked **per vt**
 (`foreground_pid[VT_COUNT]`).
 
+Fixed per-process user addresses:
+
+| Address | Use |
+|---|---|
+| `0x00810000`, `0x00820000` | User stack tops (`USER_STACK_TOP_0/1`), 32 KiB each |
+| `0x00900000` | Per-process sigreturn trampoline (`USER_SIG_TRAMPOLINE`); reserved, never load test ELFs here |
+| `0x01000000`–`0x40000000` | User heap (`USER_HEAP_START`/`USER_HEAP_END`) |
+
 ## Lifecycle
 
 - `ring3_schedule(entry)` / `ring3_schedule_mm(...)` /
