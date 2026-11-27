@@ -668,6 +668,7 @@ static const char *state_name(int state) {
         case PROC_ST_READY:   return "READY";
         case PROC_ST_RUNNING: return "RUNNING";
         case PROC_ST_DEAD:    return "DEAD";
+        case PROC_ST_SLEEPING: return "SLEEPING";
         default:              return "UNUSED";
     }
 }

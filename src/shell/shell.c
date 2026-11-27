@@ -285,6 +285,7 @@ int cmd_ps(int argc, char *argv[]) {
         if (states[i] == RING3_PROCESS_READY) state = "READY";
         else if (states[i] == RING3_PROCESS_RUNNING) state = "RUNNING";
         else if (states[i] == RING3_PROCESS_DEAD) state = "DEAD";
+        else if (states[i] == RING3_PROCESS_SLEEPING) state = "SLEEPING";
         printf("%d    %s%s\n", pids[i], state,
                ring3_foreground_pid_vt(VT_FALLBACK) == pids[i]
                    ? " (FOREGROUND)" : "");
