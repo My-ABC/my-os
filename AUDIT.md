@@ -353,6 +353,8 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 9. `src/os/syscall.c:855-867` `sys_call` 是内核态 `int 0x80` 包装：`current_process < 0`（内核/idle 上下文）时 `PROC_EXIT`/`PROC_YIELD` 等静默无效或走默认分支，属未文档化的边界。
 10. `src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）；`FS_OPEN` 的 mode 未限定 `<= SYSFS_O_RDWR` 之外的位（`mode > 1` 已拒，OK）。
 11. `ps` 把 SLEEPING 进程显示为 `UNUSED` ✅（用户实测反馈）：`src/shell/shell_ring3.c` `state_name` 与 `src/shell/shell.c` `cmd_ps` 的状态映射都缺 `PROC_ST_SLEEPING`/`RING3_PROCESS_SLEEPING` 分支，落到 default/"UNUSED"。表现：snake.elf 运行中（绝大部分时间在 `TIME_SLEEP`）`ps` 显示 `pid=3/4 UNUSED`，但进程存活且 `kill` 正常（`ring3_kill` 已覆盖 SLEEPING）。附带观察：`ring3_process_list` 返回全部 4 个槽位（含 pid=0 空槽），ring3 shell 的 `ps` 会多打 `0 UNUSED` 行；内核 shell `cmd_ps` 跳过 pid==0 不受影响。已修：两处状态映射补 `SLEEPING` 字符串。
+12. VBE 光标残影/串扰（用户实测反馈）：snake.elf 运行中切到 VT1 后，①光标"一直在串"——光标是画进像素 framebuffer 的（`src/drivers/vbe.c` `vbe_draw_cursor` 画 cell 底部 2 行前景色像素），`vbe_scroll_up` 按像素行拷贝会把光标条当内容滚走留下永久残影；非活动 vt 的 backing store 里也烧着光标像素，`vbe_console_switched` 切回再画一个新的而旧残影不清除，光标条越积越多。②字符"会串"——`vbe_erase_cursor` 用**背景色**填充光标 cell 底部 2 行而非恢复原字符：光标落在已有字符的 cell 上（滚屏后、`\b`、VT 切回恢复光标位置）时字符下两行被抹掉显示残缺；且屏幕是纯像素缓冲没有字符 cell 层，无法区分"光标覆盖区"与"字符像素"，写字符/滚屏/切 vt 都可能留下光标条或吃掉字符笔画。修法方向：引入字符 cell 缓冲层（cell→glyph+颜色，光标只作渲染态），或滚屏/切 vt 时先整屏重绘文本再画光标。
+13. `vbe_putchar` 的 `\b` 处理只向左一步并用空格 glyph 覆盖（`src/drivers/vbe.c:380-385`），不擦除 cell 内残余像素之外的内容、也不触发 `vbe_scroll_up` 的行逻辑；连续 `\b` 跨行/跨屏边界行为未定义（停在 col 0 不回退到上一行末尾）。
 
 ### 复核结论（本轮确认无新问题）
 
