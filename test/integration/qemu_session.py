@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 import socket
@@ -95,6 +96,8 @@ class QemuSession:
             "-serial", f"tcp:127.0.0.1:{serial3_port},server=off,nodelay=on",
             "-monitor", f"unix:{self.monitor_path},server=on,wait=off",
         ]
+        if os.environ.get("MYOS_QEMU_INTLOG"):
+            command += ["-d", "int", "-D", os.environ["MYOS_QEMU_INTLOG"]]
         try:
             self.process = subprocess.Popen(
                 command, cwd=ROOT,

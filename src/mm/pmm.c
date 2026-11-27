@@ -193,6 +193,19 @@ static uint64_t pmm_alloc_page_from(uint32_t first_frame, uint32_t wrap) {
                           ? g_pmm.total_frames - first_frame : 0U);
     while (scanned < limit) {
         if (frame >= g_pmm.total_frames) frame = 0U;
+        /* A bitmap byte of 0xFF marks 8 consecutive used frames — skip
+         * the whole byte at once. total_frames covers the 64 GiB
+         * ceiling (16M frames) while real machines expose far fewer
+         * usable frames, so the all-ones tail dominated every scan and
+         * made bulk allocation (e.g. the oom.elf drain) take minutes
+         * under TCG. Only all-ones bytes are skipped, so no free frame
+         * is ever jumped over. */
+        if (g_pmm.bitmap[frame >> 3] == 0xFFU) {
+            uint32_t skip = 8U - (frame & 7U);
+            frame += skip;
+            scanned += skip;
+            continue;
+        }
         if (!pmm_is_frame_used(frame)) {
             uint32_t eflags = pmm_disable_interrupts();
             if (!pmm_is_frame_used(frame)) {

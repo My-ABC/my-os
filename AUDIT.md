@@ -168,13 +168,15 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 7. `src/drivers/vbe.c:125-133`：`vbe_map_framebuffer` 按 `pitch*height` 映射到 `0xE0000000`，无上限/重叠检查；极端模式可能覆盖 `0xE8000000` VT backing 或 `0xF0000000` KMAP。`pitch*height` 也可能 32-bit 回绕。
 8. `src/drivers/vt.c`：`vt_fb_stride` 计算失败只打印日志，已 spawn 的 vt 仍会置 `switch_enabled`，F 键请求会被接受但 `vt_do_switch` 因 backing 缺失拒绝，用户只看到 serial 日志。
 9. `src/mm/paging.c`：`paging_try_reclaim_page_table` 回收页表后只 `flush_tlb(0)`，未按需刷其它地址；`paging_mm_unmap` 缺 `USER_MM_SPACE_LIMIT` 检查（与 P1-1 相关）。✅（unmap 已补上限检查；reclaim TLB 项保留观察）
-10. `src/mm/pmm.c`：`pmm_get_free_frames` 每次 O(位图全扫)，`g_pmm.used_frames` 维护但未被查询路径使用；高位 `pmm_alloc_page_at_or_above` 只在测试宏路径验证。
+10. `src/mm/pmm.c`：`pmm_get_free_frames` 每次 O(位图全扫)（仅 pmm_init 调用，启动一次，可接受）；`g_pmm.used_frames` 维护但未被查询路径使用；高位 `pmm_alloc_page_at_or_above` 只在测试宏路径验证。✅（`pmm_alloc_page_from` 热路径已加 0xFF 字节跳过——见下方测试发现）
 11. `src/drivers/acpi.c`：已全量重读。RSDP/FADT/DSDT 定位依赖固件表长度与签名，AML `_S5` 解析是启发式且未做完整 AML 边界校验；reset/shutdown 走多级 fallback，失败最终 `hlt`。固件可信前提下可接受，建议后续加表长度/checksum 复核。
 12. `src/drivers/rtc.c`：`rtc_read_time` 未校验 month/day 范围；`rtc_convert_timezone` 对极大 `offset_seconds` 会长循环；`rtc_to_unix_timestamp` 在 RTC 年份 <1970 时结果不可靠。
 13. `src/os/panic.c`/`panic_blue_screen`：倒计时会 `sti` 等 PIT；若 panic 发生在 `current_process<0` 且仍有 READY Ring3 进程，IRQ0 理论上可切走显示 panic 的上下文。边界场景，建议 panic 路径关中断 busy-wait 或屏蔽调度。✅（panic_in_progress 置位后 ring3_timer_switch 不再切换）
 14. `boot/*.asm`/`gdt/idt`：32-bit protected mode 下 TSS 描述符为 8 字节，DF TSS(0x30) 与普通 TSS(0x28) 不重叠；`regs.h` 与 `interrupt.asm` 栈帧契约有 host 侧测试覆盖。无新增 P0-P2。
 
 > **测试发现（非审计条目）**：为 P3 补 host 测试时抓到真 bug——`src/lib/stdio.c` `int_to_str` 对负数 `str++` 跳过 `'-'` 后 `return p - str` 少算符号位，`sprintf("%d", -42)` 输出 `-4`（INT_MIN 输出 `-214748364`）。`int_to_str_padded` 的 `is_negative` 单独计长不受影响。修复：`negative` 标志补回返回长度（`0ed2c07`）。既有测试无任何负数 `%d` 用例是漏网原因；现已补 -1/-9/-10/-99/-100/INT_MIN+1 边界与 padded 全内容断言。
+
+> **测试发现（QEMU 偶发定位）**：连续 `make test-qemu` 通过率一度跌到 1/5，`-d int` + 分场景复现定位出两个独立原因，均非 R3-N3 回归：① `check_page_faults` 的 stack.elf 断言是**测试竞态**——`STACK-OK` 走 COM3、`[PAGE FAULT]` 走 COM1，两 socket 独立排空，COM1 行可滞后于 COM3 标记；改为 `wait_for_regex` 等待文本（测试健壮性修复）。② oom.elf 排干 PMM 的 malloc 循环**真实超时**——`pmm_alloc_page_from` 逐帧扫 `PMM_MAX_FRAMES`（64GiB 上限 = 16M 帧）位图，实际可用帧仅 ~32K，其余全 1 尾部主导每次分配扫描，碎片化下 oom.elf 的 ~2 万次页分配需数分钟（TCG 下 >240s）。修复：`pmm_alloc_page_from` 遇 `0xFF` 位图字节整段跳过 8 帧（只跳全 1 区，不会跳过空闲帧），OOM 检查恢复 60s 超时后 6/6 连续通过。`pmm_get_free_frames` 仍是 O(全扫)但仅启动调用一次。
 
 ---
 

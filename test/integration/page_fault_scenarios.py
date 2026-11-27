@@ -10,9 +10,12 @@ def check_page_faults(session):
     stack_start = len(session.serial_data)
     session.send_line("run stack.elf")
     session.wait_for_regex(rb"STACK-OK", start=stack_start, timeout=8)
-    if b"Demand-mapped user page" not in \
-            session.serial_data[stack_start:]:
-        raise IntegrationFailure("user stack growth did not demand-map pages")
+    # STACK-OK arrives on COM3 while the "[PAGE FAULT]" diagnostics are
+    # COM1 — the two sockets are drained independently, so the COM1
+    # lines can lag the COM3 marker under TCG. Wait for the text
+    # instead of checking the buffer snapshot once.
+    session.wait_for_regex(rb"Demand-mapped user page", start=stack_start,
+                           timeout=8)
     session.pass_check("user stack growth demand-maps registered pages")
 
     # stack.elf halts forever in the foreground, so the console belongs
@@ -249,7 +252,7 @@ def check_user_oom(session):
     session.wait_for_regex(rb"OOM-NEXT", start=oom_start, timeout=15)
     session.wait_for_regex(
         rb"\[PAGE FAULT\] Out of memory for user page",
-        start=oom_start, timeout=240,
+        start=oom_start, timeout=60,
     )
     session.pass_check("out-of-memory demand-map fault terminates the process")
 
