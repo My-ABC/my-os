@@ -251,6 +251,12 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Fuzz syscall-ABI inputs (bad pointers, lengths, signal numbers) from user-mode test ELFs.
   - [ ] Fuzz the shell line editor (escapes, quotes, history) and the ELF loader with generated inputs.
 
+## Fun (entertainment)
+
+- [ ] **Make `snake.elf` flicker-free**
+  - [ ] Snake currently repaints via full-screen `IO_WRITE` bursts every ~120 ms, so the display visibly flickers; also interacts with the VBE cursor-ghosting issue (AUDIT P3 #12).
+  - [ ] Ideas: double-buffered backing store with a "commit" syscall, ANSI-style cursor-addressed redraw (home/row-col escape), or diff-based updates so only changed cells are rewritten.
+
 ## 64-bit Mode
 
 > **Deprecated — not planned for now.** This section is kept for reference
