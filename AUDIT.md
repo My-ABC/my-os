@@ -352,6 +352,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 8. `mini-libc/src/stdlib.c:51-53` `xalloc` 的 align 归一化 `while (a < align) a <<= 1`：用户伪造 malloc header 的 `align` 字段为非 2 幂大值（如 `0x80000001`）会让 `a` 溢出为 0 后死循环——仅自伤（header 在自己地址空间），但 `hdr_of` 不校验 align 幂次/上界。
 9. `src/os/syscall.c:855-867` `sys_call` 是内核态 `int 0x80` 包装：`current_process < 0`（内核/idle 上下文）时 `PROC_EXIT`/`PROC_YIELD` 等静默无效或走默认分支，属未文档化的边界。
 10. `src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）；`FS_OPEN` 的 mode 未限定 `<= SYSFS_O_RDWR` 之外的位（`mode > 1` 已拒，OK）。
+11. `ps` 把 SLEEPING 进程显示为 `UNUSED`（用户实测反馈，记录未修）：`src/shell/shell_ring3.c` `state_name` 与 `src/shell/shell.c` `cmd_ps` 的状态映射都缺 `PROC_ST_SLEEPING`/`RING3_PROCESS_SLEEPING` 分支，落到 default/"UNUSED"。表现：snake.elf 运行中（绝大部分时间在 `TIME_SLEEP`）`ps` 显示 `pid=3/4 UNUSED`，但进程存活且 `kill` 正常（`ring3_kill` 已覆盖 SLEEPING）。附带观察：`ring3_process_list` 返回全部 4 个槽位（含 pid=0 空槽），ring3 shell 的 `ps` 会多打 `0 UNUSED` 行；内核 shell `cmd_ps` 跳过 pid==0 不受影响。修法：两处状态映射补 `SLEEPING` 字符串即可。
 
 ### 复核结论（本轮确认无新问题）
 
