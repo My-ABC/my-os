@@ -83,12 +83,16 @@ class ArchitectureContractTests(unittest.TestCase):
         ring3 = source("src/os/ring3.c")
         self.assertIn("#define PROC_YIELD", header)
         self.assertIn("case PROC_YIELD:", function_body(syscall, "syscall_handler"))
-        yield_body = function_body(ring3, "ring3_yield_current")
+        yield_body = function_body(ring3, "yield_current_internal")
         self.assertIn("uint32_t flags = irq_save()", yield_body)
         self.assertIn("(frame->cs & 3U) != 3U", yield_body)
         self.assertIn("process->frame = frame", yield_body)
-        self.assertIn("process->state = RING3_PROCESS_READY", yield_body)
+        self.assertIn("process->state = new_state", yield_body)
         self.assertIn("return kernel_frame", yield_body)
+        wrapper = function_body(ring3, "ring3_yield_current")
+        self.assertIn("RING3_PROCESS_READY", wrapper)
+        sleep_wrapper = function_body(ring3, "ring3_sleep_yield_current")
+        self.assertIn("RING3_PROCESS_SLEEPING", sleep_wrapper)
 
     def test_tss_kernel_stack_update_targets_esp0(self):
         body = function_body(source("src/arch/x86/tss.c"), "tss_set_kernel_stack")

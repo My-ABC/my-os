@@ -14,7 +14,8 @@ enum {
     PROC_ST_UNUSED  = 0,
     PROC_ST_READY   = 1,
     PROC_ST_RUNNING = 2,
-    PROC_ST_DEAD    = 3
+    PROC_ST_DEAD    = 3,
+    PROC_ST_SLEEPING = 4
 };
 
 typedef struct {

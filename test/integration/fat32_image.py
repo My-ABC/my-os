@@ -238,6 +238,16 @@ def create_test_disk(directory):
         check=True,
     )
     add_root_file(disk_path, "heap.elf", heap_path.read_bytes())
+
+    sleep_path = Path(directory) / "sleep.elf"
+    subprocess.run(
+        ["nasm", "-f", "bin",
+         str(ROOT / "test" / "integration" / "sleep_demo.asm"),
+         "-o", str(sleep_path)],
+        cwd=ROOT,
+        check=True,
+    )
+    add_root_file(disk_path, "sleep.elf", sleep_path.read_bytes())
     return disk_path
 
 

@@ -50,7 +50,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 |----|------|-----------|---------|---------|
 | 1 | `TIME_GET` | none | Unix timestamp | `rtc_read_time` + `rtc_to_unix_timestamp`; returns the current UTC time as a Unix timestamp. |
 | 2 | `TIME_TO` | `ecx` = signed offset in **seconds**, `edx` = `rtc_time_t *` user buffer | 0 or -1 | Reads the RTC and applies `rtc_convert_timezone` with the given offset, then copies the resulting `rtc_time_t` (8 bytes: second, minute, hour, day, month, year) into the user buffer. The buffer must pass user-pointer validation. |
-| 3 | `TIME_SLEEP` | `ecx` = duration in **microseconds** | 0, or -1 when the TSC is uncalibrated | Busy-waits on the calibrated TSC until the deadline; signal dispositions are polled once per PIT tick (10 ms), so a delivered signal can abandon the sleep early. Sub-millisecond precision; burns CPU while sleeping. |
+| 3 | `TIME_SLEEP` | `ecx` = duration in **microseconds** | 0, or -1 when the TSC is uncalibrated | Ring 3 callers park in `RING3_PROCESS_SLEEPING` until a PIT-tick deadline (10 ms granularity), yielding the CPU so other processes and `vt_service` run; the syscall restarts via the yield-rewind contract and returns 0 on expiry. Pending signals wake the sleeper early (deadline abandoned); `PROC_KILL` works on sleeping processes. Kernel-context callers keep the legacy TSC busy-wait. |
 
 ## `SYS_MEMORY` (3)
 
@@ -77,7 +77,7 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 | 1 | `PROC_GETPID` | none | current Ring 3 PID | Returns 0 when called from kernel context. |
 | 2 | `PROC_EXIT` | `ecx` = exit status (accepted, not recorded yet) | does not return | Terminates the current Ring 3 process and reclaims its resources (see "Process exit" below). From kernel context it degenerates to a plain 0 return. |
 | 3 | `PROC_YIELD` | none | 0 | Voluntarily yields the CPU, saving the current Ring 3 context and returning to the shell; the process is resumed by PIT scheduling. |
-| 4 | `PROC_LIST` | `ecx` = buffer, `edx` = size | process count, or -1 | Enumerates live processes into 12-byte records `{pid, state, is_foreground}`; `state` uses `RING3_PROCESS_*` values. Buffer must pass user-pointer validation and hold `count * 12` bytes. |
+| 4 | `PROC_LIST` | `ecx` = buffer, `edx` = size | process count, or -1 | Enumerates live processes into 12-byte records `{pid, state, is_foreground}`; `state` uses `RING3_PROCESS_*` values (0 unused, 1 ready, 2 running, 3 dead, 4 sleeping). Buffer must pass user-pointer validation and hold `count * 12` bytes. |
 | 5 | `PROC_SET_FG` | `ecx` = pid (`0` clears the foreground) | 0 or -1 | Sets or clears the foreground process via `ring3_set_foreground`/`ring3_set_background`. |
 | 6 | `PROC_EXEC` | `ecx` = ELF32 path on FAT32 | 0 or -1 | Reads the file, validates/loads it with `elf32_load`, and schedules it as a **foreground** Ring 3 process (same path as the shell `run` command). Returns -1 on any failure; the new pid is not reported. |
 

@@ -617,18 +617,59 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return 0;
                 }
                 case TIME_SLEEP: { // a1: microseconds
-                    if (tsc_freq_hz() == 0U) return (uint32_t)-1;
-                    uint64_t deadline = tsc_read() + tsc_cycles_for_us(a1);
-                    uint32_t last_tick = pit_ticks();
-                    for (;;) {
-                        if ((int64_t)(tsc_read() - deadline) >= 0) break;
-                        if (pit_ticks() != last_tick) {
-                            last_tick = pit_ticks();
-                            if (sys_signal_check(frame)) return 0;
+                    if (a1 == 0U) return 0;
+                    if (ring3_current_pid() == 0U) {
+                        /* Kernel-context caller: keep the TSC busy wait. */
+                        if (tsc_freq_hz() == 0U) return (uint32_t)-1;
+                        uint64_t deadline = tsc_read() + tsc_cycles_for_us(a1);
+                        uint32_t last_tick = pit_ticks();
+                        for (;;) {
+                            if ((int64_t)(tsc_read() - deadline) >= 0) break;
+                            if (pit_ticks() != last_tick) {
+                                last_tick = pit_ticks();
+                                if (sys_signal_check(frame)) return 0;
+                            }
+                            __asm__ volatile ("pause");
                         }
-                        __asm__ volatile ("pause");
+                        return 0;
                     }
-                    return 0;
+                    /* Ring 3: park in SLEEPING until the PIT deadline.
+                     * sleep_deadline survives the yield so the restarted
+                     * syscall observes the expiry itself; the timer only
+                     * flips state back to READY. */
+                    /* Deliver pending signals before (re)arming the
+                     * sleep so a signal wake can abandon it. */
+                    if (sys_signal_check(frame)) return 0;
+                    uint32_t dl = ring3_sleep_deadline();
+                    if (dl == 0U) {
+                        /* PIT_FREQUENCY=100 → 1 tick = 10000 µs; round
+                         * up so short sleeps still get a full tick. */
+                        uint32_t per_tick = 1000000U / PIT_FREQUENCY;
+                        uint32_t ticks = a1 / per_tick;
+                        if (a1 % per_tick != 0U) ticks++;
+                        if (ticks == 0U) ticks = 1U;
+                        dl = pit_ticks() + (uint32_t)ticks;
+                        ring3_sleep_begin(dl);
+                    }
+                    if ((int32_t)(pit_ticks() - dl) >= 0) {
+                        ring3_sleep_end();
+                        return 0;
+                    }
+                    frame->eip -= 2;
+                    struct irq_frame *skframe = ring3_sleep_yield_current(frame);
+                    if (skframe == 0) {
+                        /* Degenerate: nowhere to divert — restore and
+                         * busy-wait the remainder. */
+                        frame->eip += 2;
+                        ring3_sleep_end();
+                        while ((int32_t)(pit_ticks() - dl) < 0) {
+                            if (sys_signal_check(frame)) return 0;
+                            __asm__ volatile ("pause");
+                        }
+                        return 0;
+                    }
+                    syscall_switch_frame = (uint32_t)skframe;
+                    return klass;
                 }
                 default:
                     return 0;
