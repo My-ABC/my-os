@@ -74,6 +74,24 @@ static int sys_keyboard_wait_yield(struct irq_frame *frame) {
     return 1;
 }
 
+/* Mid-line yield resume state: a yield restarts the whole syscall, so
+ * characters already consumed would be lost. Park {pid, buf, len} per
+ * pid slot; the restarted IO_READ restores them and keeps appending.
+ * Collisions (pids 8 apart) degrade to a dropped partial line, never
+ * corruption — the buf pointer must match too. */
+struct gets_wait_slot {
+    uint32_t pid;
+    char *buf;
+    int len;
+};
+#define GETS_WAIT_SLOTS 8
+static struct gets_wait_slot gets_waits[GETS_WAIT_SLOTS];
+
+static void gets_wait_clear(uint32_t pid) {
+    if (pid == 0U) return;   /* kernel context owns no slot */
+    gets_waits[pid & (GETS_WAIT_SLOTS - 1U)].pid = 0U;
+}
+
 /* gets() variant that stops when a signal is delivered, fatal, or the
  * CPU is yielded to another process. Returns 0 on a completed line,
  * 1 on a signal abort, 2 when the wait was yielded (the syscall is
@@ -81,6 +99,11 @@ static int sys_keyboard_wait_yield(struct irq_frame *frame) {
 static int sys_gets(char *buf, int size, struct irq_frame *frame) {
     int i = 0;
     int vt = (int)ring3_current_vt();
+    uint32_t cur_pid = ring3_current_pid();
+    if (cur_pid != 0U) {
+        struct gets_wait_slot *w = &gets_waits[cur_pid & 7U];
+        if (w->pid == cur_pid && w->buf == buf) i = w->len;
+    }
     while (i < size - 1) {
         /* Only the foreground process on this vt may consume keys;
          * a background reader (e.g. the shell while `run` hosts a
@@ -93,6 +116,7 @@ static int sys_gets(char *buf, int size, struct irq_frame *frame) {
                 /* A fatal abort already switched to the kernel CR3 and
                  * released the mm; writing buf there would fault. */
                 if (syscall_exit_frame == 0U) buf[i] = '\0';
+                gets_wait_clear(cur_pid);
                 return 1;
             }
             continue;
@@ -100,18 +124,30 @@ static int sys_gets(char *buf, int size, struct irq_frame *frame) {
         if (c == 0) {
             if (sys_signal_check(frame)) {
                 if (syscall_exit_frame == 0U) buf[i] = '\0';
+                gets_wait_clear(cur_pid);
                 return 1;
             }
-            /* Yield only before the first character: a yield restarts
-             * the whole syscall, so yielding mid-line would drop the
-             * characters already consumed. */
-            if (i == 0 && sys_keyboard_wait_yield(frame)) return 2;
+            /* Yield whenever no key is pending — including mid-line:
+             * the consumed prefix is parked in gets_waits so the
+             * restarted syscall resumes the same line. Without this a
+             * process that typed part of a line and walked away hlt'd
+             * in kernel context and starved the idle loop (vt_service)
+             * and every other process until Enter. */
+            if (cur_pid != 0U) {
+                struct gets_wait_slot *w = &gets_waits[cur_pid & 7U];
+                w->pid = cur_pid;
+                w->buf = buf;
+                w->len = i;
+            }
+            if (sys_keyboard_wait_yield(frame)) return 2;
+            if (cur_pid != 0U) gets_wait_clear(cur_pid);
             __asm__ volatile ("hlt" ::: "memory");
             continue;
         }
         if (c == '\n' || c == '\r') {
             buf[i] = '\0';
             putchar('\n');
+            gets_wait_clear(cur_pid);
             return 0;
         } else if (c == '\b') {
             if (i > 0) {
@@ -126,6 +162,7 @@ static int sys_gets(char *buf, int size, struct irq_frame *frame) {
         }
     }
     buf[i] = '\0';
+    gets_wait_clear(cur_pid);
     return 0;
 }
 uint32_t syscall_switch_frame;

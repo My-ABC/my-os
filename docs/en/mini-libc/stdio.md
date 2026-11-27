@@ -76,7 +76,11 @@ There is no real buffering yet — console output goes to
 - **Returns**: next character as `int`, or `EOF` on error/signal
   abort.
 - **Details**: Reads one byte via `IO_GETCHAR`; blocks when the
-  buffer is empty.
+  buffer is empty. Never returns `'\n'`: stdin is line-buffered and
+  the kernel `IO_READ` strips the newline, so `in_getch`
+  synthesizes a virtual `'\n'` at each line end that `getchar`
+  filters back out — this keeps `fgets`/`scanf` line semantics
+  working while preserving the "no newline" contract.
 
 ### `int getline(char *buf, int size)`
 
@@ -144,7 +148,9 @@ extern FILE *stdout;
 - **Returns**: `buf` on success, `NULL` on EOF/error before any
   char.
 - **Details**: Reads at most `size-1` chars, keeps the trailing
-  newline.
+  newline. On `stdin` the kernel `IO_READ` consumes the real
+  newline without storing it, so mini-libc appends a virtual `'\n'`
+  per line — `fgets` sees normal line-buffered semantics.
 
 ### `int fprintf(FILE *f, const char *fmt, ...)` / `int fscanf(FILE *f, const char *fmt, ...)`
 

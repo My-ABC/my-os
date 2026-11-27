@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +56,8 @@ TESTS = [
 ]
 # negative test: must abort; checked separately
 AFail = ("negative", "afail.elf", "negative/afail.c")
+# interactive stdin test: needs typed input lines after `run`
+Stdin = ("stdio", "stdin.elf", "stdio/stdin.c", "DONE-stdin")
 # power test: power_reboot() reaches the kernel ACPI handler; the
 # actual reset/poweroff is hardware-level and does not complete
 # under QEMU, so we only verify the syscall path end-to-end
@@ -141,6 +144,7 @@ def main():
         # session per chunk.
         chunks = [TESTS[i:i + 7] for i in range(0, len(TESTS), 6)]
         chunks.append([AFail + (None,)])   # negative test, own session
+        chunks.append([Stdin])             # interactive stdin, own session
         chunks.append([Power + (None,)])   # power test, own session
         results = []
         for chunk in chunks:
@@ -222,6 +226,15 @@ def run_chunk(session, chunk, results):
         before = len(session.serial_all_text())
         try:
             session.send_line(f"run {disk_name}")
+            if disk_name == "stdin.elf":
+                # Feed the interactive stdin test: two full lines, one
+                # long line for the truncation check, then 'z'/'y'
+                # single-char lines for the getchar contract checks.
+                time.sleep(0.5)
+                for line in ("stdin-line-one", "stdin-line-two",
+                             "stdin-line-three-long", "z", "y"):
+                    session.send_line(line)
+                    time.sleep(0.15)
             # wait for the complete DONE line, not just the tag prefix
             session.wait_for_regex(
                 marker.encode() + rb" fails=\d+", timeout=40)

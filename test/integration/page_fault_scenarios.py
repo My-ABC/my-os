@@ -187,6 +187,32 @@ def check_sleep_vt_switch(session):
     session.pass_check("Ctrl+C kills a process sleeping in TIME_SLEEP")
 
 
+def check_iowait_vt_switch(session):
+    # R3-N3: a process blocked in IO_READ *mid-line* (chars typed, no
+    # Enter) must yield so vt_service keeps running — pre-fix it hlt'd
+    # in kernel context and F2 could not switch until Enter.
+    session.send_key("f1")
+    session.wait_for("[VT] switched to vt 0", timeout=5)
+    session.send_line("run iowait.elf")
+    time.sleep(0.5)                          # let it block in IO_READ
+    session.send_text("ab")                  # partial line: i=2, no Enter
+    time.sleep(0.3)
+    start = time.monotonic()
+    session.send_key("f2")
+    session.wait_for("[VT] switched to vt 1", timeout=5)
+    elapsed = time.monotonic() - start
+    if elapsed > 0.3:
+        raise IntegrationFailure(
+            f"vt switch took {elapsed:.2f}s during mid-line IO_READ")
+    session.pass_check(f"F2 switches vt during mid-line IO_READ ({elapsed*1000:.0f} ms)")
+    session.send_key("f1")
+    session.wait_for("[VT] switched to vt 0", timeout=5)
+    session.send_text("cde")
+    session.send_named_key("ret")            # completes "abcde"
+    session.wait_for_regex(rb"LINE-OK", timeout=8)
+    session.pass_check("mid-line IO_READ resumed and completed the line")
+
+
 def check_user_oom(session):
     # oom.elf drains the user heap through SYS_MEMORY until the PMM is
     # empty, then touches permitted-but-unmapped heap pages. The demand

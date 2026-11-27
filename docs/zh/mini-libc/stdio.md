@@ -67,6 +67,9 @@
 - **参数**：无。
 - **返回值**：下一个字符（`int`），错误/信号中止返回 `EOF`。
 - **详细说明**：经 `IO_GETCHAR` 读一个字节；缓冲区空时阻塞。
+  从不返回 `'\n'`：stdin 是行缓冲，内核 `IO_READ` 剥掉换行，
+  `in_getch` 在每行末尾合成虚拟 `'\n'`、由 `getchar` 滤掉——
+  `fgets`/`scanf` 得到正常行语义，"不返回换行"契约保持不变。
 
 ### `int getline(char *buf, int size)`
 
@@ -130,6 +133,8 @@ extern FILE *stdout;
 - **参数**：`buf` — 目标；`size` — 容量；`f` — 流。
 - **返回值**：成功返回 `buf`；任何字符之前 EOF/错误返回 `NULL`。
 - **详细说明**：最多读 `size-1` 个字符，保留行尾换行。
+  `stdin` 上内核 `IO_READ` 消费真实换行但不存入，mini-libc
+  为每行补一个虚拟 `'\n'`——`fgets` 看到的是正常的行缓冲语义。
 
 ### `int fprintf(FILE *f, const char *fmt, ...)` / `int fscanf(FILE *f, const char *fmt, ...)`
 

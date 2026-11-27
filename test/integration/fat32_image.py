@@ -248,6 +248,16 @@ def create_test_disk(directory):
         check=True,
     )
     add_root_file(disk_path, "sleep.elf", sleep_path.read_bytes())
+
+    iowait_path = Path(directory) / "iowait.elf"
+    subprocess.run(
+        ["nasm", "-f", "bin",
+         str(ROOT / "test" / "integration" / "iowait_demo.asm"),
+         "-o", str(iowait_path)],
+        cwd=ROOT,
+        check=True,
+    )
+    add_root_file(disk_path, "iowait.elf", iowait_path.read_bytes())
     return disk_path
 
 
