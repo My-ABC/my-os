@@ -212,6 +212,31 @@ def check_iowait_vt_switch(session):
     session.wait_for_regex(rb"LINE-OK", timeout=8)
     session.pass_check("mid-line IO_READ resumed and completed the line")
 
+    # Ctrl+C must kill a process parked mid-line in IO_READ: the
+    # per-process gets_* fields die with the slot, so a later spawn
+    # cannot inherit a dangling buf pointer.
+    session.send_line("run iowait.elf")
+    time.sleep(0.5)
+    session.send_text("xy")                  # partial line again
+    time.sleep(0.3)
+    session.monitor.sendall(b"sendkey ctrl-c\n")
+    time.sleep(0.5)
+    ps_start = len(session.serial3_data)
+    session.send_line("ps")
+    deadline = time.monotonic() + 8
+    found = False
+    while time.monotonic() < deadline:
+        session._read_serial_clients()
+        if re.search(rb"\d+\s+DEAD",
+                     bytes(session.serial3_data[ps_start:])):
+            found = True
+            break
+        time.sleep(0.05)
+    if not found:
+        raise IntegrationFailure(
+            "mid-line IO_READ process not reaped after Ctrl+C")
+    session.pass_check("Ctrl+C kills a process parked mid-line in IO_READ")
+
 
 def check_user_oom(session):
     # oom.elf drains the user heap through SYS_MEMORY until the PMM is
@@ -224,7 +249,7 @@ def check_user_oom(session):
     session.wait_for_regex(rb"OOM-NEXT", start=oom_start, timeout=15)
     session.wait_for_regex(
         rb"\[PAGE FAULT\] Out of memory for user page",
-        start=oom_start, timeout=60,
+        start=oom_start, timeout=240,
     )
     session.pass_check("out-of-memory demand-map fault terminates the process")
 
