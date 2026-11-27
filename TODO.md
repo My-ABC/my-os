@@ -140,6 +140,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Enumerate display-class PCI devices and identify GPU candidates (bochs-display, virtio-gpu, VMware SVGA, QXL).
   - [ ] Extend the framebuffer abstraction to cover GPU-provided scanout surfaces.
   - [ ] Evaluate 2D/3D acceleration paths (bochs 2D, virtio-gpu, or a userspace graphics stack); keep the scope experimental.
+- [ ] **Add PS/2 mouse support**
+  - [ ] Implement the PS/2 auxiliary-port protocol (0x60/0x64 command bytes, IRQ12, 3-byte packet decode with sign extension).
+  - [ ] Expose pointer position/buttons to Ring 3 (new syscall op or input-event queue) so shells/games can use it.
+  - [ ] Validate under QEMU `-device usb-tablet`/`i8042` mouse fixtures.
 - [ ] **Complete ACPI support**
   - [ ] Organize ACPI table discovery, mapping, length checks, and checksum validation into bounded common interfaces.
   - [ ] Parse MADT to provide processor and interrupt-controller information.
@@ -205,6 +209,10 @@ This document tracks completed work and the project roadmap. When an item is com
 - [ ] **Implement window management and input dispatch**
   - [ ] Implement window management, compositing, input-event dispatch, and focus management.
   - [ ] Define a virtual-canvas or multi-window layout model for graphical output.
+- [ ] **Support ANSI escape sequences on the console**
+  - [ ] Parse CSI sequences (cursor position `ESC[row;colH`, erase display/line, SGR colors, scroll regions) in the VT/VBE output path so ported CLI tools render correctly.
+  - [ ] Decide scope: full ECMA-48 vs a pragmatic subset; document in `docs/*/14-mini-libc` or the shell docs.
+  - [ ] Unblocks flicker-free `snake.elf` (see "Fun" TODO) via cursor-addressed redraw instead of full-screen repaint.
 - [ ] **Build the user-space GUI layer**
   - [ ] Provide user-space drawing/window interfaces via syscalls or shared-memory buffers.
   - [ ] Build a basic GUI toolkit or widget set and example applications.
