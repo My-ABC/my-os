@@ -249,10 +249,15 @@ static int in_getch(void) {
     if (!in_have || in_pos >= in_len) {
         int rc = syscall2(SYS_IO, IO_READ, (unsigned)in_buf, IN_CAP - 1);
         if (rc < 0) return -1;
-        in_len = (size_t)rc;
         in_pos = 0;
         in_have = 1;
-        if (in_len == 0) return -1; /* empty line: treat as EOF */
+        if (rc == 0) { in_len = 0; return -1; } /* empty line: EOF */
+        /* The kernel strips '\n'/'\r' from IO_READ results. Append a
+         * virtual newline so line-oriented consumers (fgets, fscanf,
+         * fgetc/fread on stdin) see proper line boundaries; getchar()
+         * filters it back out to preserve its no-newline contract. */
+        in_buf[rc] = '\n';
+        in_len = (size_t)rc + 1;
     }
     return (unsigned char)in_buf[in_pos++];
 }
@@ -482,7 +487,14 @@ done:
 }
 
 int getchar(void) {
-    return in_getch();
+    /* Console input is line-buffered: in_getch synthesizes a '\n' at
+     * each line end for fgets/fscanf, but getchar's contract is to
+     * never return it. */
+    int c;
+    do {
+        c = in_getch();
+    } while (c == '\n');
+    return c;
 }
 
 int getline(char *buf, int size) {

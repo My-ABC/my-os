@@ -21,6 +21,7 @@ from page_fault_scenarios import (
     check_heap_isolation,
     check_heap_vt_isolation,
     check_sleep_vt_switch,
+    check_iowait_vt_switch,
     check_kernel_fault_panic,
     check_page_faults,
     check_user_oom,
@@ -116,7 +117,8 @@ def run_vt_heap_session(qemu, kernel, timeout):
     tempdir = tempfile.TemporaryDirectory(prefix="myos-qemu-shell3-")
     try:
         disk = create_shell3_test_disk(tempdir.name)
-        run_session([check_heap_vt_isolation, check_sleep_vt_switch], qemu, kernel, disk,
+        run_session([check_heap_vt_isolation, check_sleep_vt_switch,
+                     check_iowait_vt_switch], qemu, kernel, disk,
                     timeout)
         print("✓ PASS: vt heap-isolation session", flush=True)
     finally:

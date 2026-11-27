@@ -290,7 +290,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 **已修复**：新增 `RING3_PROCESS_SLEEPING` + 每进程 `sleep_deadline`（PIT tick）。Ring 3 的 `TIME_SLEEP` 首次进入时把 deadline 写入并经 `ring3_sleep_yield_current` 挂起（eip 回退 2 + `syscall_switch_frame` + 返回 klass 的重启契约）；IRQ0 的 `ring3_timer_switch` 到期把 SLEEPING 翻回 READY（保留 deadline 让重启的 syscall 自己清零，避免睡眠翻倍）；`ring3_signal_scan` 对有 pending 信号的睡眠者置 READY 并清 deadline（放弃剩余睡眠），`ring3_kill`/`vt_pid_alive`/`PROC_LIST` 均覆盖 SLEEPING；内核态调用方保留 TSC 忙等。新增 `sleep.elf` QEMU 场景验证：睡眠中 F2 在 ~10ms 切换 vt、睡眠正常唤醒、Ctrl+C 可杀死睡眠进程。`sys_gets` 行中等待的次级问题未动。
 
-#### R3-N3 mini-libc `fgets(stdin)`/`fscanf` 尾随空白永远等不到 `'\n'`，正常路径挂起 ⬜
+#### R3-N3 mini-libc `fgets(stdin)`/`fscanf` 尾随空白永远等不到 `'\n'`，正常路径挂起 ✅
 
 内核 `IO_READ`（`sys_gets`，`src/os/syscall.c:112-115`）把 `'\n'`/`'\r'` 吃掉只回显，`in_buf` 里**不含换行符**。mini-libc `in_getch`（`src/stdio.c:243-258`）按行缓冲分发字符：
 
@@ -299,6 +299,8 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 - `getline()`（`src/stdio.c:488-493`）直接走 `IO_READ`，返回值不含 `'\n'`（与 POSIX getline 返回含换行的长度不符），且头文件已声明不可与 getchar 混用——属已知设计，但 `fgets` 无任何注释说明此限制。
 
 建议：`in_getch` 行尾补一个虚拟 `'\n'`（或 EOF 语义改为"行结束"），让 `fgets`/`scanf` 行为与 hosted C 一致；至少在 `fgets`/`stdio.h` 注释中声明 stdin 行为。
+
+**已修复**：① mini-libc `in_getch` 在每次 `IO_READ` 返回 `rc>0` 后向行缓冲追加虚拟 `'\n'`（`in_len = rc + 1`），`fgets`/`scanf`/`fscanf` 由此获得正常行尾语义——连读两行不串行（虚拟换行被上行消费，下次 `in_getch` 触发新 `IO_READ`）；`getchar()` 循环滤掉 `'\n'` 以保持"不返回换行"契约。② 内核 `sys_gets` 新增 `gets_waits[8]` 按 `pid & 7` 索引的挂起槽 `{pid, buf, i}`：等待按键前无论 `i==0` 与否都先存槽再 `sys_keyboard_wait_yield`（此前仅空缓冲让出，行中 `hlt` 会饿死 `vt_service`），重启时从槽恢复已读字节数；所有出口清槽。同 pid&7 碰撞的退化仅为丢失部分已读行。测试：mini-libc 新增 `stdio/stdin.elf`（fgets×3 含小缓冲截断 + getchar 过滤断言，runner 注入 5 行输入）；QEMU 新增 `iowait.elf` 场景——IO_READ 行中（已敲 2 字符未回车）按 F2 在 ~10ms 切 vt、补全回车后 LINE-OK。
 
 ### P2
 
