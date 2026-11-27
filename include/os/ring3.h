@@ -28,6 +28,13 @@ uint32_t ring3_sleep_deadline(void);
 void ring3_sleep_begin(uint32_t deadline_ticks);
 void ring3_sleep_end(void);
 uint32_t ring3_current_pid(void);
+/* Mid-line IO_READ park/resume, per process slot. Kernel context is a
+ * no-op. take() consumes the record and returns the parked byte count
+ * for `buf` (-1 when absent/mismatched); park() records it before a
+ * yield; clear() drops it. */
+int32_t ring3_gets_take(char *buf);
+void ring3_gets_park(char *buf, uint32_t pos);
+void ring3_gets_clear(void);
 uint32_t ring3_current_vt(void);
 int ring3_pid_vt(uint32_t pid);
 uint32_t ring3_foreground_pid_vt(int vt);

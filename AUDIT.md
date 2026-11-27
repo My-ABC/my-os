@@ -300,7 +300,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 建议：`in_getch` 行尾补一个虚拟 `'\n'`（或 EOF 语义改为"行结束"），让 `fgets`/`scanf` 行为与 hosted C 一致；至少在 `fgets`/`stdio.h` 注释中声明 stdin 行为。
 
-**已修复**：① mini-libc `in_getch` 在每次 `IO_READ` 返回 `rc>0` 后向行缓冲追加虚拟 `'\n'`（`in_len = rc + 1`），`fgets`/`scanf`/`fscanf` 由此获得正常行尾语义——连读两行不串行（虚拟换行被上行消费，下次 `in_getch` 触发新 `IO_READ`）；`getchar()` 循环滤掉 `'\n'` 以保持"不返回换行"契约。② 内核 `sys_gets` 新增 `gets_waits[8]` 按 `pid & 7` 索引的挂起槽 `{pid, buf, i}`：等待按键前无论 `i==0` 与否都先存槽再 `sys_keyboard_wait_yield`（此前仅空缓冲让出，行中 `hlt` 会饿死 `vt_service`），重启时从槽恢复已读字节数；所有出口清槽。同 pid&7 碰撞的退化仅为丢失部分已读行。测试：mini-libc 新增 `stdio/stdin.elf`（fgets×3 含小缓冲截断 + getchar 过滤断言，runner 注入 5 行输入）；QEMU 新增 `iowait.elf` 场景——IO_READ 行中（已敲 2 字符未回车）按 F2 在 ~10ms 切 vt、补全回车后 LINE-OK。
+**已修复**：① mini-libc `in_getch` 在每次 `IO_READ` 返回 `rc>0` 后向行缓冲追加虚拟 `'\n'`（`in_len = rc + 1`），`fgets`/`scanf`/`fscanf` 由此获得正常行尾语义——连读两行不串行（虚拟换行被上行消费，下次 `in_getch` 触发新 `IO_READ`）；`getchar()` 循环滤掉 `'\n'` 以保持"不返回换行"契约。② 内核 `sys_gets` 的行中挂起状态存在 `struct ring3_process` 的 `gets_buf`/`gets_pos` 字段上（`ring3_gets_take`/`park`/`clear`）：等待按键前无论 `i==0` 与否都先存再 `sys_keyboard_wait_yield`（此前仅空缓冲让出，行中 `hlt` 会饿死 `vt_service`），重启时恢复已读字节数；`release_process_resources` 与 spawn 均清零，kill/复用槽位不会继承悬垂 buf；内核态调用方（`current_process < 0`）三个入口均为 no-op，走原 `hlt` 忙等。测试：mini-libc 新增 `stdio/stdin.elf`（fgets×3 含小缓冲截断 + getchar 过滤断言，runner 注入 5 行输入）；QEMU 新增 `iowait.elf` 场景——IO_READ 行中（已敲 2 字符未回车）按 F2 在 ~10ms 切 vt、补全回车后 LINE-OK。
 
 ### P2
 

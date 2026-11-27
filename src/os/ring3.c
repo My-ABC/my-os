@@ -35,6 +35,8 @@ struct ring3_process {
     uint32_t sig_active;            /* signal number whose handler is running, 0 = none */
     struct irq_frame sig_saved_frame; /* interrupted context restored by sigreturn */
     uint32_t sleep_deadline;        /* PIT ticks; 0 = not sleeping */
+    char *gets_buf;                 /* mid-line IO_READ park: user buf */
+    uint32_t gets_pos;              /* chars consumed before the yield */
     struct irq_frame *frame;
 };
 
@@ -113,6 +115,8 @@ static void release_process_resources(struct ring3_process *process) {
     }
     process->image_start = 0U;
     process->image_end = 0U;
+    process->gets_buf = 0;
+    process->gets_pos = 0U;
 }
 
 static int find_runnable_process(void) {
@@ -267,6 +271,8 @@ static int ring3_schedule_internal(void (*func)(void),
     }
     processes[i].sig_active = 0U;
     processes[i].sleep_deadline = 0U;
+    processes[i].gets_buf = 0;
+    processes[i].gets_pos = 0U;
     processes[i].frame = frame;
     if (foreground) foreground_pid[processes[i].vt] = processes[i].pid;
 
@@ -408,6 +414,35 @@ uint32_t ring3_current_pid(void) {
 uint32_t ring3_current_vt(void) {
     if (current_process < 0) return VT_FALLBACK;
     return processes[(uint32_t)current_process].vt;
+}
+
+/* Mid-line IO_READ resume state, stored per process slot: a yield
+ * restarts the whole syscall, so characters already consumed would be
+ * lost without this. Kernel context (current_process < 0) owns no
+ * slot and every entry point is a no-op for it. Dead/terminated
+ * processes drop the record via release_process_resources; slot reuse
+ * re-zeroes it at spawn. */
+int32_t ring3_gets_take(char *buf) {
+    if (current_process < 0) return -1;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    int32_t pos = (p->gets_buf == buf) ? (int32_t)p->gets_pos : -1;
+    p->gets_buf = 0;
+    p->gets_pos = 0U;
+    return pos;
+}
+
+void ring3_gets_park(char *buf, uint32_t pos) {
+    if (current_process < 0) return;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    p->gets_buf = buf;
+    p->gets_pos = pos;
+}
+
+void ring3_gets_clear(void) {
+    if (current_process < 0) return;
+    struct ring3_process *p = &processes[(uint32_t)current_process];
+    p->gets_buf = 0;
+    p->gets_pos = 0U;
 }
 
 int ring3_pid_vt(uint32_t pid) {
