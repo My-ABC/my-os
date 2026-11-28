@@ -228,11 +228,13 @@ def run_chunk(session, chunk, results):
             session.send_line(f"run {disk_name}")
             if disk_name == "stdin.elf":
                 # Feed the interactive stdin test: two full lines, one
-                # long line for the truncation check, then 'z'/'y'
-                # single-char lines for the getchar contract checks.
+                # long line for the truncation check, 'z'/'y'
+                # single-char lines for the getchar contract checks,
+                # and a final line for the read(0) fd mapping check.
                 time.sleep(0.5)
                 for line in ("stdin-line-one", "stdin-line-two",
-                             "stdin-line-three-long", "z", "y"):
+                             "stdin-line-three-long", "z", "y",
+                             "fd-read-line"):
                     session.send_line(line)
                     time.sleep(0.15)
             # wait for the complete DONE line, not just the tag prefix
@@ -249,6 +251,11 @@ def run_chunk(session, chunk, results):
                    else "no DONE line")
             if fail_lines:
                 msg += " | " + "; ".join(fail_lines)
+            # write(1)/write(2) must reach COM3 (IO_WRITE mirror)
+            if disk_name == "unistd.elf" and ok:
+                if "W1-OK" not in seg or "W2-OK" not in seg:
+                    ok = False
+                    msg += " | console write markers missing"
             results.append((tag, ok, msg))
         except IntegrationFailure as e:
             results.append((tag, False, str(e)))

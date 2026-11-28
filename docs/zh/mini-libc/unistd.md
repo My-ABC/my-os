@@ -50,19 +50,26 @@
 
 ## fd 级 I/O
 
-语义与 `fs.h` 的 `fs_read`/`fs_write`/`fs_close` 完全一致。
+语义与 `fs.h` 的 `fs_read`/`fs_write`/`fs_close` 一致，但 fd 0–2
+在未被当作文件打开时会路由到控制台（见下）。
 
 ### `ssize_t read(int fd, void *buf, size_t count)`
 
 - **参数**：`fd`；`buf` — 目标；`count` — 最多字节数。
 - **返回值**：读取字节数（EOF 处短读），或 `-1`。
-- **详细说明**：—
+- **详细说明**：fd 0 未被当作文件打开时映射到控制台：`IO_READ`
+  返回**整行**（无 `'\n'`、NUL 结尾、至多 `count-1` 字符）；返回
+  `0` 表示提交了空行而非 EOF。勿与 `fgets(stdin)`/`getchar()` 混用
+  ——它们共享同一内核行缓冲。其它 fd 走 `fs_read`。
 
 ### `ssize_t write(int fd, const void *buf, size_t count)`
 
 - **参数**：`fd`；`buf` — 源；`count` — 字节数。
 - **返回值**：写入字节数，或 `-1`。
-- **详细说明**：—
+- **详细说明**：fd 1/2 未被当作文件打开时映射到控制台：输出经
+  `IO_WRITE`（VGA + COM3），按 4096 字节分块；内嵌 NUL 会提前截
+  断一块（控制台仅文本），fd 2 与 fd 1 共用同一流（无独立
+  stderr）。其它 fd 走 `fs_write`。
 
 ### `int close(int fd)`
 

@@ -128,6 +128,8 @@ only handle `FS_FILE_REG` files (no console streams — those live in
   `"r+"` etc.
 - **Returns**: `FILE *` or `NULL` on error.
 - **Details**: Unbuffered — every operation is a syscall.
+  `"a"` positions the fd offset at EOF once at open time (not
+  POSIX per-write append; see `stdio.h` `fopen` for the caveat).
 
 ### `int fs_fclose(FILE *f)`
 

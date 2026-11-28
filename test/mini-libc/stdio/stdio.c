@@ -54,6 +54,30 @@ int main(void) {
     }
     CHK(fopen("nosuchfile.xyz", "r") == 0, "fopen-missing");
 
+    /* fopen "a" positions the fd offset at EOF once, at open time.
+     * (Not POSIX per-write append — but there is no lseek, so the
+     * offset can only move forward anyway.) */
+    FILE *af = fopen("tapp.txt", "w");
+    CHK(af != 0, "append-create");
+    if (af) {
+        fwrite("abc", 1, 3, af);
+        fclose(af);
+    }
+    af = fopen("tapp.txt", "a");
+    CHK(af != 0, "append-open-a");
+    if (af) {
+        fwrite("def", 1, 3, af);
+        fclose(af);
+    }
+    af = fopen("tapp.txt", "r");
+    CHK(af != 0, "append-readback-open");
+    if (af) {
+        char abuf[16] = { 0 };
+        CHK(fread(abuf, 1, 6, af) == 6 &&
+            strcmp(abuf, "abcdef") == 0, "append-content");
+        fclose(af);
+    }
+
     /* fprintf to stdout stream */
     fprintf(stdout, "fprintf-%s-%d\n", "ok", 7);
     fputs("fputs-line\n", stdout);

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static int fails;
 #define CHK(c, n) do { if (c) printf("ok %s\n", n); \
@@ -47,6 +48,16 @@ int main(void) {
          * getchar blocks for a new line — runner sends 'y'+Enter. */
         c = getchar();
         CHK(c == 'y', "getchar-next-line");
+    }
+
+    /* read(0)/write(1) fd mapping: read(0) pulls one whole console
+     * line through IO_READ — runner types "fd-read-line" + Enter. */
+    {
+        char fdbuf[64];
+        ssize_t n = read(0, fdbuf, sizeof(fdbuf));
+        printf("  read0 -> n=%d [%s]\n", (int)n, fdbuf);
+        CHK(n == 12 && strcmp(fdbuf, "fd-read-line") == 0,
+            "read-fd0-line");
     }
 
     printf("DONE-stdin fails=%d\n", fails);

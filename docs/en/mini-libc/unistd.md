@@ -55,19 +55,29 @@ Types come from `sys/types.h`: `pid_t` (int), `ssize_t` (int),
 
 ## fd-level I/O
 
-Identical semantics to `fs_read`/`fs_write`/`fs_close` in `fs.h`.
+Same as `fs_read`/`fs_write`/`fs_close` in `fs.h`, except fds 0–2
+route to the console when they were not opened as files (see below).
 
 ### `ssize_t read(int fd, void *buf, size_t count)`
 
 - **Parameters**: `fd`; `buf` — destination; `count` — max bytes.
 - **Returns**: bytes read (short at EOF), or `-1` on error.
-- **Details**: —
+- **Details**: `fd == 0` maps to the console when fd 0 was not opened
+  as a file: `IO_READ` returns **one whole line** (no `'\n'`,
+  NUL-terminated, up to `count-1` chars); a return of `0` means an
+  empty line was submitted, not EOF. Do not mix with
+  `fgets(stdin)`/`getchar()` — they share the same kernel line
+  buffer. Other fds go to `fs_read`.
 
 ### `ssize_t write(int fd, const void *buf, size_t count)`
 
 - **Parameters**: `fd`; `buf` — source; `count` — bytes.
 - **Returns**: bytes written, or `-1` on error.
-- **Details**: —
+- **Details**: `fd == 1 || fd == 2` maps to the console when that fd
+  was not opened as a file: output goes through `IO_WRITE` (VGA +
+  COM3), chunked at 4096 bytes; embedded NUL bytes truncate a chunk
+  early (console is text-only), and `fd == 2` shares the same stream
+  (no separate stderr). Other fds go to `fs_write`.
 
 ### `int close(int fd)`
 

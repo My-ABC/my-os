@@ -5,12 +5,45 @@
 #include <stdlib.h>
 #include "sys/syscall.h"
 
+/* The kernel fd table is global, never reaped on process exit, and
+ * hands out indices from 0 — so a real file can legitimately own
+ * fd 0/1/2. unistd read()/write() route fds 0-2 to the console only
+ * when mini-libc did not open them as files; track opens here.
+ * (Kernel cap is SYSFS_MAX_FDS=8; 16 gives headroom.) */
+#define FS_TRACK_MAX 16
+static int fs_tracked[FS_TRACK_MAX];
+static int fs_tracked_n;
+
+static void fs_track_add(int fd) {
+    if (fd < 0 || fs_tracked_n >= FS_TRACK_MAX) return;
+    fs_tracked[fs_tracked_n++] = fd;
+}
+
+static void fs_track_remove(int fd) {
+    for (int i = 0; i < fs_tracked_n; ++i) {
+        if (fs_tracked[i] == fd) {
+            fs_tracked[i] = fs_tracked[--fs_tracked_n];
+            return;
+        }
+    }
+}
+
+int fs_owns_fd(int fd) {
+    for (int i = 0; i < fs_tracked_n; ++i)
+        if (fs_tracked[i] == fd) return 1;
+    return 0;
+}
+
 int fs_open(const char *path, int mode) {
-    return syscall2(SYS_FS, FS_OPEN, (unsigned)path, (unsigned)mode);
+    int fd = syscall2(SYS_FS, FS_OPEN, (unsigned)path, (unsigned)mode);
+    fs_track_add(fd);
+    return fd;
 }
 
 int fs_close(int fd) {
-    return syscall1(SYS_FS, FS_CLOSE, (unsigned)fd);
+    int rc = syscall1(SYS_FS, FS_CLOSE, (unsigned)fd);
+    if (rc == 0) fs_track_remove(fd);
+    return rc;
 }
 
 int fs_read(int fd, void *buf, unsigned size) {
@@ -69,6 +102,26 @@ static FILE *file_alloc(void) {
     return f;
 }
 
+/* No lseek in the ABI: positioning "at end" means advancing the fd
+ * offset by reading to EOF. sysfs_fread re-reads the whole file per
+ * call, so one stat-sized read is cheapest; fall back to small
+ * chunks if malloc fails. */
+static int fs_seek_end(int fd, const char *path) {
+    int size = fs_stat(path);
+    if (size <= 0) return 0;   /* missing/empty: offset already 0 */
+    char *buf = (char *)malloc((size_t)size);
+    if (buf != 0) {
+        int n = fs_read(fd, buf, (unsigned)size);
+        free(buf);
+        return n < 0 ? -1 : 0;
+    }
+    char chunk[256];
+    for (;;) {
+        int n = fs_read(fd, chunk, sizeof(chunk));
+        if (n <= 0) return n < 0 ? -1 : 0;
+    }
+}
+
 FILE *fs_fopen(const char *path, const char *mode) {
     int omode;
     if (mode == 0 || (mode[0] != 'r' && mode[0] != 'w' &&
@@ -77,7 +130,11 @@ FILE *fs_fopen(const char *path, const char *mode) {
         return 0;
     }
     /* kernel only has RDONLY/RDWR; 'w'/'a' both map to RDWR (the
-     * caller unlinks first if truncation is wanted — no O_TRUNC yet) */
+     * caller unlinks first if truncation is wanted — no O_TRUNC yet).
+     * 'a' positions the offset at EOF once, at open time — NOT the
+     * POSIX per-write append: there is no lseek, so the offset can
+     * never move back anyway, but a future lseek would allow
+     * overwriting from the start. */
     omode = (mode[0] == 'r') ? FS_O_RDONLY : FS_O_RDWR;
     int fd = fs_open(path, omode);
     if (fd < 0) {
@@ -90,6 +147,12 @@ FILE *fs_fopen(const char *path, const char *mode) {
         return 0;
     }
     f->fd = fd;
+    if (mode[0] == 'a' && fs_seek_end(fd, path) != 0) {
+        fs_close(fd);
+        free(f);
+        errno = EIO;
+        return 0;
+    }
     return f;
 }
 

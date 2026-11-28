@@ -107,6 +107,10 @@ extern FILE *stdout;
   `"a"`, `"r+"`, ...
 - **Returns**: `FILE *` on success, `NULL` on error.
 - **Details**: No buffering; see `fs.h` for mode semantics.
+  `"a"` seeks the fd offset to EOF **once at open time** — it is not
+  POSIX per-write append (no `lseek` exists, so the offset can only
+  move forward anyway, but a future `lseek` would allow overwriting
+  from the start). `"w"` does not truncate existing tails either.
 
 ### `int fclose(FILE *f)`
 

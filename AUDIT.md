@@ -308,12 +308,14 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 ### P2
 
-#### R3-N4 `fopen(path,"a")` 不追加反而从文件头覆盖；`write(1)`/`read(0)` 不映射到控制台 ⬜
+#### R3-N4 `fopen(path,"a")` 不追加反而从文件头覆盖；`write(1)`/`read(0)` 不映射到控制台 ✅
 
 - `mini-libc/src/fs.c:72-94` `fs_fopen` 把 `'a'` 与 `'w'` 一样映射为 `FS_O_RDWR`，内核 fd `offset=0`；`fs_fwrite` 按 offset 写 → `"a"` 模式从文件**开头**覆盖写，与 POSIX 追加语义完全相反，属静默数据破坏（`"w"` 不截断已有尾部至少注释承认了，`"a"` 连注释都没有）。内核 ABI 无 lseek/append 模式，无法用现有 syscall 实现真正追加。
 - `mini-libc/src/unistd.c:41-47` `read/write` 直接转 `fs_read/fs_write`：`write(1, buf, n)`（STDOUT_FILENO）会查内核全局 `sysfs_fds[1]`——要么返回 -1（fd 未用），要么**写进恰好占用 fd 1 的无关文件**；`read(0,...)` 同理。标准 fd 0/1/2 与内核 fd 表完全不关联，unistd 层 I/O 对控制台不可用。
 
 建议：`fs_fopen` 对 `'a'` 显式返回 ENOSYS/EINVAL 直至内核支持追加或 lseek；`unistd read/write` 对 fd 0/1/2 路由到 `IO_READ`/`IO_WRITE`/`in_getch` 系列，或文档声明不支持。
+
+**已修复**（mini-libc 层，未动内核 fd 表）：① `fs_fopen` 遇 `'a'` 时经新增 `fs_seek_end` 把 fd offset 读到 EOF——ABI 无 lseek，用 `fs_stat` 拿大小后一次性 `fs_read` 穿越（malloc 失败退化为 256B 分块）；语义为"打开时定位到末尾"而非 POSIX 每写追加，已写入 stdio/fs 文档。② `unistd read/write`：`fd==0`（未被文件占用）→ `IO_READ` 整行；`fd==1/2`（未被文件占用）→ `IO_WRITE` 分块输出。关键坑：内核 fd 表全局、从 0 分配且进程退出不回收，真实文件完全可能拿到 fd 0/1/2——曾尝试"烧掉 fd 0-2"方案导致全局表泄漏耗尽，改为 mini-libc 内 fd 追踪表（`fs_owns_fd`，fs_open/fs_close 登记/注销），仅当 fd 0-2 未被本进程打开为文件时才路由控制台。附带确认：`printf`/`fprintf(stdout)` 走独立 `cbuf`→`IO_WRITE` 路径，不经 `write(1)`，本修复只影响直接调 `read`/`write` 的程序。测试：`stdio/stdio` 加 append 读回断言（abc+w→a 写 def→读回 abcdef）；`os/unistd` 加 `write(1)/write(2)` 返回值断言 + runner 校验 COM3 出现 `W1-OK`/`W2-OK`；`stdio/stdin` 末尾加 `read(0)` 整行断言（runner 注入第 6 行 `fd-read-line`）。mini-libc 套件 19/19。
 
 #### R3-N5 `execve` 成功后调用进程不退出，新旧进程并存 ⬜
 

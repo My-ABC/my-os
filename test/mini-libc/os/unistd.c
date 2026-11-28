@@ -28,6 +28,17 @@ int main(void) {
     CHK(n > 0, "read");
     close(fd);
 
+    /* fd 0/1/2 map to the console: write(1)/write(2) go through
+     * IO_WRITE (VGA + COM3), read(0) reads one console line. */
+    {
+        const char *w1 = "W1-OK\n";
+        ssize_t wn = write(1, w1, 6);
+        CHK(wn == 6, "write-fd1-ret");
+        const char *w2 = "W2-OK\n";
+        CHK(write(2, w2, 6) == 6, "write-fd2-ret");
+        CHK(write(1, 0, 0) == 0, "write-fd1-empty");
+    }
+
     errno = 0;
     CHK(lseek(fd, 0, 0) == -1 && errno == ENOSYS, "lseek-enosys");
     errno = 0;

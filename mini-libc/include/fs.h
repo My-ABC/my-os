@@ -42,6 +42,10 @@ int fs_rename(const char *old_path, const char *new_path);
  * kind byte ('-' file / 'd' dir) + ' ' + name + '\n';
  * returns byte count or <0 */
 int fs_readdir(const char *path, void *buf, unsigned size);
+/* nonzero when `fd` is a file descriptor this process opened via
+ * fs_open/fs_fopen (i.e. belongs to a real file, not the console
+ * std fds that unistd read()/write() special-case) */
+int fs_owns_fd(int fd);
 
 /* ---- FILE: buffered-unaware stream over an fs fd ----
  *
