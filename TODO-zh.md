@@ -258,6 +258,10 @@
   - [ ] 用 QEMU 中的畸形磁盘镜像对 FAT32 解析（目录项、文件名、损坏扇区）做模糊测试。
   - [ ] 用用户态测试 ELF 对系统调用 ABI 输入（坏指针、长度、信号编号）做模糊测试。
   - [ ] 对 shell 行编辑器（转义、引号、历史）和 ELF 加载器用生成的输入做模糊测试。
+- [ ] **将 `docs/` 发布到 GitHub Pages**
+  - [ ] 选一个能处理现有 `docs/en` + `docs/zh` Markdown 目录树及其相对互链的静态站点生成器（如带 i18n 的 mkdocs-material，或简单的双语构建）。
+  - [ ] 配置 GitHub Pages（Actions 工作流或 `gh-pages` 分支），push 到 `dev`/`main` 时自动重新部署。
+  - [ ] 验证两种语言都能正常渲染，内部链接（`06-memory-isolation.md`、`mini-libc/*.md` 等）可解析。
 
 ## 娱乐
 

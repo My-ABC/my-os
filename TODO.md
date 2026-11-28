@@ -258,6 +258,10 @@ This document tracks completed work and the project roadmap. When an item is com
   - [ ] Fuzz filesystem parsing (FAT32 directory entries, names, corrupt sectors) with malformed disk images in QEMU.
   - [ ] Fuzz syscall-ABI inputs (bad pointers, lengths, signal numbers) from user-mode test ELFs.
   - [ ] Fuzz the shell line editor (escapes, quotes, history) and the ELF loader with generated inputs.
+- [ ] **Publish `docs/` to GitHub Pages**
+  - [ ] Pick a static-site generator that handles the existing `docs/en` + `docs/zh` Markdown trees with their relative cross-links (e.g. mkdocs-material with `i18n`, or a simple two-locale build).
+  - [ ] Configure GitHub Pages (Actions workflow or `gh-pages` branch) so pushes to `dev`/`main` redeploy the site.
+  - [ ] Verify both locales render and internal links (`06-memory-isolation.md`, `mini-libc/*.md`, etc.) resolve.
 
 ## Fun (entertainment)
 
