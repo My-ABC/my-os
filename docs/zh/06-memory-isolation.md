@@ -34,6 +34,8 @@
   `paging_mm_release` 永不释放它们。
 - 4 MiB 以下和 1 GiB 以上的用户映射都会被拒绝，使低恒等区与未使用的
   PDPT[1..2] 区间保持内核专用。
+- `paging_mm_map` 拒绝覆盖已存在的 PTE——重映射必须先
+  `paging_mm_unmap`，避免误映射泄漏旧物理页或悄悄改权限。
 
 ## 验证
 

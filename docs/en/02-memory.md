@@ -33,7 +33,9 @@ The kernel is linked at virtual `0xC0000000` / physical `0x100000`
   temporarily maps a physical page at `0xF0000000` with interrupts
   disabled, and `paging_unmap_physical()` restores them.
 - `paging_map_page()` refuses user mappings (`PAGE_USER`) inside kernel
-  address space; `paging_unmap_page()` warns on missing entries.
+  address space, refuses to overwrite an already-present PTE, and
+  refuses when the PDE is a 2 MiB large page (`PAE_PAGE_SIZE`);
+  `paging_unmap_page()` warns on missing entries.
 - `paging_init()` builds the runtime tables: kernel high-half mapping,
   low identity coverage needed by the kernel, and leaves user ranges
   unmapped for demand paging.

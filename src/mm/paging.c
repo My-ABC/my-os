@@ -170,10 +170,26 @@ void paging_map_page(uint32_t virtual_addr, uint64_t physical_addr,
     }
     if ((flags & PAGE_USER) != 0U) pde->value |= PAE_USER;
 
+    /* A PDE flagged PAE_PAGE_SIZE is a 2 MiB large page, not a page
+     * table — refuse before interpreting its address as a PT. */
+    if ((pde->value & PAE_PAGE_SIZE) != 0U) {
+        paging_restore_interrupts(eflags);
+        serial_print("[PAGING] Refusing map over 2 MiB large page\n");
+        return;
+    }
+
     struct page_table *pt =
         (struct page_table *)paging_map_physical(paging_entry_physical(pde->value));
     if (pt == NULL) {
         paging_restore_interrupts(eflags);
+        return;
+    }
+    /* Refuse to overwrite a live PTE: silently replacing it would leak
+     * the old physical page and hide double-map bugs in callers. */
+    if ((pt->entries[pt_index].value & PAE_PRESENT) != 0U) {
+        paging_unmap_physical();
+        paging_restore_interrupts(eflags);
+        serial_print("[PAGING] Refusing to overwrite existing PTE\n");
         return;
     }
     pt->entries[pt_index].value = (physical_addr & PAE_ADDRESS_MASK) |
@@ -342,6 +358,14 @@ void paging_mm_map(struct user_mm *mm, uint32_t virtual_addr,
         (struct page_table *)paging_map_physical(pt_phys);
     if (pt == NULL) {
         paging_restore_interrupts(eflags);
+        return;
+    }
+    /* Refuse to overwrite a live PTE: silently replacing it would leak
+     * the old physical page. Callers that need remap must unmap first. */
+    if ((pt->entries[pt_index].value & PAE_PRESENT) != 0U) {
+        paging_unmap_physical();
+        paging_restore_interrupts(eflags);
+        serial_print("[PAGING] Refusing to overwrite existing user PTE\n");
         return;
     }
     pt->entries[pt_index].value = (physical_addr & PAE_ADDRESS_MASK) |

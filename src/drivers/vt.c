@@ -19,7 +19,7 @@
  * VBE scanout map at 0xE0000000 only occupies ~4 MiB. Keeping them
  * here leaves ~740 MiB of headroom for kernel image growth and never
  * overlaps KERNEL_HEAP_START (kmalloc maps pages with
- * paging_map_page, which overwrites PTEs unconditionally).
+ * paging_map_page, which refuses to overwrite live PTEs).
  * The stride is derived from the real mode size at init
  * (1280x800x32 scanout is 4,096,000 B -> 4 MiB stride). */
 #define VT_FB_BASE      0xE8000000U

@@ -115,11 +115,11 @@
 
 建议：demand-map 至少区分 stack/image/heap subrange，或记录“已提交堆页”位图，仅允许已分配页 fault-in。
 
-### P2-4 `paging_map_page`/`paging_mm_map` 无条件覆盖已有 PTE，且不拒绝 2 MiB 大页 ⬜
+### P2-4 `paging_map_page`/`paging_mm_map` 无条件覆盖已有 PTE，且不拒绝 2 MiB 大页 ✅
 
-`src/mm/paging.c`：内核 `paging_map_page` 与用户 `paging_mm_map` 都直接写 `pt->entries[pt_index]`，不检查旧 PTE；当 PDE 已是 `PAE_PAGE_SIZE` 大页时，`paging_map_page` 会把 PDE 值当 PT 物理地址写 PTE，破坏映射。当前多数调用点依赖“新地址未映射”约定，缺少防御。
+`src/mm/paging.c`：内核 `paging_map_page` 与用户 `paging_mm_map` 都直接写 `pt->entries[pt_index]`，不检查旧 PTE；当 PDE 已是 `PAE_PAGE_SIZE` 大页时，`paging_map_page` 会把 PDE 值当 PT 物理地址写 PTE，破坏映射。
 
-建议：映射前检查 `paging_mm_get_phys/paging_get_page_physical`；对已存在映射返回错误或要求先 unmap；对大页 PDE 拒绝或先 split。
+- 修复：两函数在写 PTE 前检查 `PAE_PRESENT` 已置位则拒绝（serial 打印告警，重映射须先 unmap）；`paging_map_page` 额外在把 PDE 当 PT 映射**之前**拒绝 `PAE_PAGE_SIZE` 大页。`mm_ensure_pt` 原本已拒绝大页 PDE，用户侧无需改动。全部调用点（trap demand-map、user_alloc/restore、elf、sig trampoline/stack、vt/vbe/acpi/heap 内核映射）均不依赖覆盖语义，QEMU 全套通过。
 
 ### P2-5 全局 `sysfs_fds` 不回收、`FS_READDIR` 4 KiB staging 截断、`FS_READ/FS_WRITE` 每次整文件重读 ⬜
 
@@ -219,7 +219,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 3. ~~**P1-3 `krealloc` size 上限**~~ ✅（`2d75e54`）
 4. **P1-5 FAT32/ATA 重入**：为 kernel shell 与 Ring3 并发 FS 加临界区/缓冲隔离。
 5. **P2-1/P2-3 syscall buffer 与 demand-map**：明确“已提交页”语义，避免栈页误拒与堆 UAF 被掩盖。
-6. **P2-4 页表覆盖**：`paging_map_page/paging_mm_map` 增加冲突检测。
+6. ~~**P2-4 页表覆盖**~~ ✅：两函数拒绝覆盖已存在 PTE，`paging_map_page` 拒绝大页 PDE。
 7. **P2-5/P2-11 fd/FS 语义**：fd 随进程回收，readdir/report 截断，read/write 偏移语义。
 8. **P2-6 FAT32 事务顺序**：delete/move 改为“先提交目录项、后释放簇链”。
 9. **P2-7/P2-8/P2-9/P2-10**：FAT 分配性能、mm 创建失败原子性、VT backing 泄漏、set2 键盘状态。

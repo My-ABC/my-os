@@ -41,6 +41,9 @@ Each Ring 3 process owns a private address space through `struct user_mm`
   `paging_mm_release`.
 - User mappings below 4 MiB and above 1 GiB are refused, keeping the
   low identity region and the unused PDPT[1..2] range kernel-only.
+- `paging_mm_map` refuses to overwrite an already-present PTE — remap
+  requires `paging_mm_unmap` first, so a stray double-map cannot leak
+  the old physical page or silently change permissions.
 
 ## Verification
 

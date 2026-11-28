@@ -31,7 +31,8 @@
 - 物理地址上限 36 位（< 64 GiB），`PMM_PHYSICAL_CEILING`。
 - 页表页没有永久映射；`paging_map_physical()` 在 `0xF0000000` 临时
   映射一个物理页并关中断，`paging_unmap_physical()` 恢复现场。
-- `paging_map_page()` 拒绝在内核地址空间建立 `PAGE_USER` 映射；
+- `paging_map_page()` 拒绝在内核地址空间建立 `PAGE_USER` 映射、拒绝覆盖
+  已存在的 PTE，也拒绝 PDE 为 2 MiB 大页（`PAE_PAGE_SIZE`）的映射；
   `paging_unmap_page()` 对缺失项告警。
 - `paging_init()` 建立运行时页表：内核高半区映射、内核所需的低端恒等
   覆盖，用户区留空交给按需分页。
