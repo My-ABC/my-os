@@ -70,6 +70,14 @@ void serial_print(const char* str) {
     }
 }
 
+void serial_flush(void) {
+    /* LSR bit 6 (TEMT): transmitter holding register and FIFO empty —
+     * everything queued has actually left the UART. */
+    for (uint32_t i = 0; i < SERIAL_TX_TIMEOUT; ++i) {
+        if (inb(SERIAL_COM1 + 5) & 0x40) return;
+    }
+}
+
 void serial_print_hex(uint32_t num) {
     serial_print("0x");
     for (int i = 28; i >= 0; i -= 4) {

@@ -464,6 +464,9 @@ void acpi_shutdown(void) {
         serial_print("[ACPI] writing S5 sleep_value=");
         serial_print_hex(sleep_value);
         serial_putchar('\n');
+        /* S5 can cut power the instant this write lands; drain the
+         * UART first or the tail of the line is lost. */
+        serial_flush();
 
         if (access_size == 2) {
             volatile uint16_t* pm1a_cnt_mem = (volatile uint16_t*)memory_address;
@@ -496,6 +499,7 @@ void acpi_shutdown(void) {
         serial_print("[ACPI] writing S5 sleep_value=");
         serial_print_hex(sleep_value);
         serial_putchar('\n');
+        serial_flush();
 
         if (access_size == 2) {
             outw((uint16_t)pm1a_cnt, (uint16_t)sleep_value);
@@ -519,34 +523,46 @@ void acpi_shutdown(void) {
     // 如果关机成功，代码不会执行到这里
     serial_print("[ACPI] ACPI shutdown failed, trying fallback methods\n");
 
-    // 备用方案: 尝试使用常见的 ACPI I/O 端口
+    // 备用方案: 尝试使用常见的 ACPI I/O 端口。每次写之前先排空 UART
+    // 并打印标记——任一写生效机器立即断电，排在后面的诊断会丢失。
     serial_print("[ACPI] trying common ACPI I/O ports\n");
-    
+    serial_flush();
+
     // 尝试端口 0xB004
+    serial_print("[ACPI] powering off via port 0xB004\n");
+    serial_flush();
     outw(0xB004, 0x2000);
     for (int i = 0; i < 100000; i++) {
         __asm__ volatile ("nop");
     }
-    
+
     // 尝试端口 0x604
+    serial_print("[ACPI] powering off via port 0x604\n");
+    serial_flush();
     outw(0x604, 0x2000);
     for (int i = 0; i < 100000; i++) {
         __asm__ volatile ("nop");
     }
-    
+
     // 尝试端口 0x4004
+    serial_print("[ACPI] powering off via port 0x4004\n");
+    serial_flush();
     outw(0x4004, 0x2000);
     for (int i = 0; i < 100000; i++) {
         __asm__ volatile ("nop");
     }
-    
+
     // 备用方案: 尝试通过 PCI 来关机
     serial_print("[ACPI] trying PCI power management\n");
+    serial_flush();
+    serial_print("[ACPI] powering off via PCI 0xCF9\n");
+    serial_flush();
     outw(0xCF9, 0x0E);  // 尝试关机而不是重启
-    
+
     // 最后的备用方案: 停机
     serial_print("[ACPI] all shutdown methods failed, halting\n");
-    
+    serial_flush();
+
     while (1) {
         __asm__ volatile ("hlt");
     }
