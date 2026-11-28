@@ -46,12 +46,9 @@
 
 影响：多 Ring3 进程同时使用 mini-libc 堆时可能映射错误页、泄漏 PMM 页或破坏其它进程堆。建议：把 user heap free list/next 放进 `struct user_mm`（或按 mm 分链），并在 `user_free/user_realloc` 校验 block 范围、pages 上界与 `USER_HEAP_END`，同时给 `paging_mm_unmap` 补 `virtual_addr < USER_MM_SPACE_LIMIT` 检查。
 
-### P1-2 `user_realloc` 在校验前解引用用户可控指针 ⬜
+### P1-2 `user_realloc` 在校验前解引用用户可控指针 ✅
 
-`src/os/syscall.c:258-270`：`user_realloc(ptr,size)` 直接计算 `block=ptr-sizeof(struct user_block)` 并读取 `block->magic/block->free`，没有先做 `user_free` 同款的 `USER_HEAP_START..USER_HEAP_END` 范围检查。`MEMORY_REALLOC` 的 `a1` 完全由用户控制；`kfault` 仍保留 `MEMORY_REALLOC` 坏指针作为 panic demo。
-
-- 指向未映射地址 → 内核页错误 panic；指向可控用户内存且伪造 `USER_BLOCK_MAGIC` → 可能让 `memcpy(new_ptr, ptr, copy_size)` 从任意地址复制到用户（信息泄漏）或误释放。
-- 这是 syscall ABI 边界缺陷，不只是演示路径。建议：与 `user_free` 一致先做范围检查，再校验 magic/free；demo 另找稳定触发方式。
+`src/os/syscall.c` `user_realloc`：修复后三重防护——①入口 `size > USER_HEAP_END - USER_HEAP_START` 拒绝（同 P1-6）；②`ptr` 范围检查（`[USER_HEAP_START + sizeof(user_block), USER_HEAP_END)`）在读 `block->magic` 之前，与 `user_free` 契约对齐；③`copy_size` 不再信 `block->size`/`block->pages`（用户可伪造），改按 `min(block->size, size)` 后再用块范围钳制到 `USER_HEAP_END` 的实际容量截断。kfault.elf 载体已改为 free-list `next` 伪造（见 P1-7），panic 消息不变（`Illegal kernel page fault`）。
 
 ### P1-3 `krealloc` 缺少与 `kmalloc` 相同的 `size` 上限检查，可回绕出巨大 `block->size` ✅（`2d75e54`）
 
@@ -82,7 +79,15 @@
 `src/os/syscall.c` `user_alloc`/`user_realloc`：`user_pages_for_size(size) = (size + sizeof(user_block) + PAGE_SIZE-1)/PAGE_SIZE` 全程 32-bit。`MEMORY_MALLOC(0xFFFFFF20)` 级别的 size 使 `size+20+4095` 回绕，`pages` 算出 0 → 分配循环一次不跑 → 返回 `pages=0`、`size=huge` 的 block；mini-libc 随后 `calloc`/`realloc` 按 huge size memset/memcpy → demand-map 至 PMM 耗尽挂死（实测 `malloc(0xFFFFFF00)` 返回 `0x1000028` 非空）。`user_realloc` 同型：`user_pages_for_size(size)` 回绕为 0 时 `0 <= block->pages` 恒真，走"收缩"分支把 `block->size` 刷成 huge 值。
 
 - 修复：`user_alloc`/`user_realloc` 入口拒绝 `size > USER_HEAP_END - USER_HEAP_START`（堆总跨度 ~1008 MiB，任何更大 size 本就不可能满足）；此后 `size+header+pad` 与 `pages*PAGE_SIZE` 均不再回绕，既有 `USER_HEAP_END` 边界检查恢复有效。QEMU 实测 `malloc/calloc(0xFFFFFF00)` 返回 NULL+ENOMEM。
-- 遗留同类：`user_find_free`/`user_remove_free`/`user_restore_pages` 遍历 `block->next`/`block->pages` 时不校验（user_block 头在用户可写页内，`next` 可被伪造成任意地址 → 内核态解引用 → panic）；`user_realloc` 入口仍缺 `ptr` 范围检查（P1-2）。⬜
+- 遗留同类：free-list 元数据信任问题单独立项为 P1-7。
+
+### P1-7 free-list 元数据存放在用户可写堆页，内核遍历零校验 ⬜（设计问题，非加校验可解）
+
+`struct user_block`（magic/size/pages/free/**next**）位于用户可写堆页内。`user_find_free`/`user_remove_free`/`user_restore_pages` 遍历 `block->next`、读取 `block->pages` 时**零校验**：用户 free 一个块后覆写其 `next` 为任意地址，下一次 `MEMORY_MALLOC` 让内核解引用 → `Illegal kernel page fault` panic（kfault.elf 现用此路径做 panic demo）。`user_free`/`user_realloc` 虽有 magic+范围校验，但只能挡"块头不在堆内"，挡不住"next 指向堆内未映射页/伪造 pages"。
+
+- **这不是加校验能根治的**：块头本身在用户地址空间，任何字段都可被改写；要让内核信任它就必须把元数据移出用户可写页（slab/专用元数据区，或块头放只读映射）。在此之前任何 Ring 3 程序都能 DoS 内核（panic 整机）。
+- 影响面：`next` 伪造 → 内核 panic；`pages`/`size` 伪造 → `user_free`/`user_realloc` 的 unmap/拷贝范围被钳到 `USER_HEAP_END`（P1-2 已加），最坏是误 unmap 同进程其它块的页（UAF 自伤）或 demand-map 放大内存压力。
+- 建议方向：将 `user_block` 元数据迁出用户页（如内核侧 slab 按 mm 分配），或至少把 free-list 改为内核数组/链表；工作量中等，需单独立项。
 
 ---
 

@@ -267,10 +267,10 @@ def check_user_oom(session):
 
 
 def check_kernel_fault_panic(session):
-    # kfault.elf passes an unregistered user pointer to MEMORY_REALLOC;
-    # user_realloc dereferences the block header in kernel mode with no
-    # validation, which must panic. (IO_WRITE/IO_READ now validate user
-    # pointers and return -1, so they can no longer trigger this.)
+    # kfault.elf frees a heap block, overwrites its free-list `next`
+    # pointer with an unmapped address, then mallocs: user_find_free
+    # walks the forged link and dereferences it in kernel mode, which
+    # must panic. (P1-2 closed the MEMORY_REALLOC bad-pointer path.)
     # A panic reboots the machine, so this scenario needs a fresh session
     # and must run after all other checks.
     session.wait_for("MyOS v0.0.1", timeout=15)

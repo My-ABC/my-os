@@ -319,7 +319,17 @@ static void *user_realloc(struct user_mm *mm, void *ptr, uint32_t size) {
         return 0;
     }
 
-    struct user_block *block = (struct user_block *)((uint32_t)ptr - sizeof(struct user_block));
+    /* Range-check before dereferencing the header, same contract as
+     * user_free: ptr must point just past a user_block inside the
+     * heap, otherwise the magic/pages reads below fault in kernel
+     * mode. */
+    uint32_t ptr_addr = (uint32_t)ptr;
+    if (ptr_addr < USER_HEAP_START + sizeof(struct user_block) ||
+        ptr_addr >= USER_HEAP_END) {
+        return 0;
+    }
+
+    struct user_block *block = (struct user_block *)(ptr_addr - sizeof(struct user_block));
     if (block->magic != USER_BLOCK_MAGIC || block->free != 0U) {
         return 0;
     }
@@ -333,7 +343,17 @@ static void *user_realloc(struct user_mm *mm, void *ptr, uint32_t size) {
     if (new_ptr == 0) {
         return 0;
     }
+    /* block->size and block->pages live in user-writable memory and
+     * can be forged: bound the copy by the block's extent clamped to
+     * the heap end, not by the recorded fields. */
+    uint32_t max_pages = (USER_HEAP_END - (uint32_t)block) / PAGE_SIZE;
+    uint32_t cap_pages = block->pages < max_pages ? block->pages : max_pages;
+    uint32_t capacity = cap_pages == 0U ? 0U
+        : cap_pages * PAGE_SIZE - (uint32_t)sizeof(struct user_block);
     uint32_t copy_size = block->size < size ? block->size : size;
+    if (copy_size > capacity) {
+        copy_size = capacity;
+    }
     memcpy(new_ptr, ptr, copy_size);
     user_free(mm, ptr);
     return new_ptr;

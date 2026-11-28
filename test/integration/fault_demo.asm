@@ -11,9 +11,9 @@ global fault_demo_end
 ;   1 = faultu.elf : print a marker, then touch an unregistered user address
 ;   2 = faultp.elf : print a marker, then write to its own read-only code page
 ;   3 = oom.elf    : exhaust the user heap, then fault until demand mapping fails
-;   4 = kfault.elf : pass an unregistered user pointer to MEMORY_REALLOC
-;                    so the kernel faults while dereferencing the block
-;                    header (panic demo)
+;   4 = kfault.elf : forge a freed heap block's free-list `next` pointer
+;                    so the next malloc makes user_find_free dereference
+;                    it in kernel mode (panic demo)
 %ifndef FAULT_MODE
 %define FAULT_MODE 0
 %endif
@@ -27,7 +27,7 @@ global fault_demo_end
 %define SYS_MEMORY   3
 %define IO_WRITE     1
 %define MEMORY_MALLOC 1
-%define MEMORY_REALLOC 3
+%define MEMORY_FREE   4
 
 fault_demo_start:
     db 0x7F, "ELF", 1, 1, 1, 0
@@ -119,13 +119,25 @@ fault_demo_code:
     mov ebx, IO_WRITE
     mov ecx, kfault_msg + VBASE
     int 0x80
-    ; 0x50000000 is a user address outside every registered range;
-    ; user_realloc dereferences ptr-sizeof(user_block) in kernel mode
-    ; with no validation and must panic.
+    ; user_block headers live in user-writable heap pages and
+    ; user_find_free/user_remove_free walk block->next with no
+    ; validation. Free a 1-page block, overwrite its `next` field
+    ; (header+16 == ptr-4) with an unmapped address, then malloc a
+    ; 2-page block: the search advances past our block and the kernel
+    ; dereferences 0xDEADBEEF -> illegal kernel page fault -> panic.
     mov eax, SYS_MEMORY
-    mov ebx, MEMORY_REALLOC
-    mov ecx, 0x50000000
-    mov edx, 16
+    mov ebx, MEMORY_MALLOC
+    mov ecx, 64
+    int 0x80
+    mov esi, eax              ; esi = payload ptr A
+    mov eax, SYS_MEMORY
+    mov ebx, MEMORY_FREE
+    mov ecx, esi
+    int 0x80
+    mov dword [esi - 4], 0xDEADBEEF
+    mov eax, SYS_MEMORY
+    mov ebx, MEMORY_MALLOC
+    mov ecx, 5000             ; needs 2 pages > block->pages (1)
     int 0x80
 %endif
 .halt:
