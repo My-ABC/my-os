@@ -252,7 +252,7 @@ int cmd_ring3(int argc, char *argv[]) {
         return -1;
     }
     paging_mm_map(mm, (uint32_t)user_entry, (uint32_t)user_entry,
-                  PAGE_PRESENT | PAGE_WRITABLE | PAGE_USER | PAGE_BORROWED);
+                  PAGE_PRESENT | PAGE_USER | PAGE_BORROWED);
     if (paging_mm_get_phys(mm, (uint32_t)user_entry) == 0U) {
         paging_mm_release(mm);
         printf("Unable to map Ring 3 code\n");

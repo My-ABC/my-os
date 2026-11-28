@@ -789,8 +789,8 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     if (mm == 0) return (uint32_t)-1;
                     paging_mm_map(mm, (uint32_t)user_entry,
                                   (uint32_t)user_entry,
-                                  PAGE_PRESENT | PAGE_WRITABLE |
-                                  PAGE_USER | PAGE_BORROWED);
+                                  PAGE_PRESENT | PAGE_USER |
+                                  PAGE_BORROWED);
                     if (paging_mm_get_phys(mm, (uint32_t)user_entry) == 0U) {
                         paging_mm_release(mm);
                         return (uint32_t)-1;

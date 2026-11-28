@@ -227,11 +227,11 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 建议：`xalloc` 入口加 `size > UINT32_MAX - (MH_HDR + align + 8)` 上限检查并返回 ENOMEM。
 
-#### R2-N2 `elf_run_vt` 的 -7（mm 耗尽）被当作永久 spawn 失败，瞬时内存压力会永久禁用 vt ⬜
+#### R2-N2 `elf_run_vt` 的 -7（mm 耗尽）被当作永久 spawn 失败，瞬时内存压力会永久禁用 vt ✅（-7→RETRY 部分）
 
 `src/kernel.c` `shell3_spawn_on_vt`：只有 `rc == -8`（进程表满）映射为 `VT_SPAWN_RETRY`；`paging_mm_create` 失败时 `elf_run_vt` 返回 -7，被当作 ELF 装载错误 → `vt_latch_spawn_failed` 永久关 F 键。`USER_MM_MAX=8` 的 mm 槽在进程密集/泄漏场景下会耗尽，属于可恢复资源不足，却走了永久失败路径。同函数还有次级问题：`fat32_read_file` 对超 `FAT32_MAX_FILE_SIZE` 的文件截断返回 0（P3-6），`elf_run_vt` 会拿截断镜像解析，大概率 -2 永久 latch。
 
-建议：-7 也映射为 RETRY；spawn 前先 `fat32_stat` 校验 size ≤ FAT32_MAX_FILE_SIZE。
+- 修复：`shell3_spawn_on_vt` 现把 `-7` 与 `-8` 都映射为 `VT_SPAWN_RETRY`（瞬时资源不足重试，不再永久 latch）。次级问题（`fat32_stat` 预检 size ≤ `FAT32_MAX_FILE_SIZE`）未做，仍 ⬜。
 
 #### R2-N3 `elf32_load` 的段复制依赖 CR0.WP=0，脆弱且未文档化 ⬜
 
@@ -323,14 +323,12 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 建议：要么 `PROC_EXEC` 成功路径对当前进程 `ring3_terminate_current`（真 exec），要么修正 unistd.h 注释把它定义为 spawn-and-continue。
 
-#### R3-N6 `user_entry` 演示代码页被映射为 `WRITABLE|USER|BORROWED` 且所有 mm 共享同一物理页 ⬜
+#### R3-N6 `user_entry` 演示代码页被映射为 `WRITABLE|USER|BORROWED` 且所有 mm 共享同一物理页 ✅（去 WRITABLE 部分）
 
-`src/os/syscall.c:702-715`（`PROC_RUN_USERCODE`）与 `src/shell/shell.c:254-255`（`cmd_ring3`）都把 `(uint32_t)user_entry` 处的物理页以 `PAGE_PRESENT|PAGE_WRITABLE|PAGE_USER|PAGE_BORROWED` 映射进新 mm。`linker.ld:28-33` 的 `.user.text` 位于低半区恒等映射内，`physical=vaddr=user_entry`，**每个进程映射的是同一物理页**。
+`src/os/syscall.c`（`PROC_RUN_USERCODE`）与 `src/shell/shell.c`（`cmd_ring3`）都把 `(uint32_t)user_entry` 处的物理页以 `PAGE_PRESENT|PAGE_USER|PAGE_BORROWED` 映射进新 mm（`PAGE_WRITABLE` 已移除）。`linker.ld:28-33` 的 `.user.text` 位于低半区恒等映射内，`physical=vaddr=user_entry`，**每个进程映射的是同一物理页**。
 
-- 任一 Ring 3 进程向自己的 `user_entry` VA 写入即可改写共享代码页：之后所有 `ring3`/`PROC_RUN_USERCODE` 启动的演示进程执行被注入的代码（跨进程代码注入/破坏）；`user_prefix` 字符串同页可改。
-- `WRITABLE` 也无必要——演示代码只读即可。
-
-建议：去掉 `PAGE_WRITABLE`（代码页只读）；更彻底的做法是每次 spawn 分配私有物理页拷贝代码，或干脆废弃该演示路径。
+- ~~任一 Ring 3 进程向自己的 `user_entry` VA 写入即可改写共享代码页~~ → 用户态写该页现在触发保护错误杀进程；内核恒等映射仍可写（WP=0 下 supervisor 本就可写），彻底隔离需每次 spawn 私有物理页拷贝。
+- `user_prefix` 字符串同页只读使用（`lodsb`），不受影响。
 
 #### R3-N7 `fprintf`/`fwrite` 到 REG 文件逐字符 `FS_WRITE`，每次内核整文件 read-modify-write ⬜
 
