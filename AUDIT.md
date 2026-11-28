@@ -356,7 +356,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 ### P3
 
-1. `src/os/syscall.c` 各 `SYS_*` 已知 class 的 `default:` 子操作分支一律 `return 0`——拼错 op 号静默"成功"，建议返回 -1/ENOSYS（未知 class 已正确返回 -1）。
+1. ~~`src/os/syscall.c` 各 `SYS_*` 已知 class 的 `default:` 子操作分支一律 `return 0`——拼错 op 号静默"成功"~~ ✅：六处子操作 default 统一改为 `return (uint32_t)-1`，与未知 class 一致；已 grep 确认无调用方依赖"未知 op 返回 0"。中英 `04-syscall-abi.md` 返回值约定与错误语义小节已同步。
 2. `mini-libc/src/stdlib.c:204` `strtol` 在 `acc=2^31`（`LONG_MIN` 边界）时 `-(long)acc` 构成 `-(LONG_MIN)` UB（x86 上碰巧正确）；`abs(INT_MIN)`/`labs(LONG_MIN)` 同型 UB。
 3. `mini-libc/src/stdio.c:213-221` `snprintf(NULL, 0, ...)` 因 `buf==0` 走 console 分支把内容打印到屏幕，而非只计算返回长度；`snprintf` 其余截断语义正确。
 4. `mini-libc/src/stdio.c:480` `vfscanf` 的 `eof_hit` 只在**字面量**分支设置；`scanf("%s")`/`%d` 在输入流首字符即 EOF 时经 `goto done` 返回 0 而非 EOF（POSIX 应为 EOF）。

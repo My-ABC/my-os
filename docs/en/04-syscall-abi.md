@@ -16,7 +16,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
   - `eax` also carries the return value on exit
   - All other general-purpose registers are preserved by `pushad`/`popad`
 - **Interrupt state**: a trap gate does not clear IF, so the handler inherits the caller's interrupt state (Ring 3 user EFLAGS is `0x202`, i.e. IF=1). IRQ0 (PIT) and IRQ1 (keyboard) can therefore fire while the handler runs: the keyboard IRQ fills the scancode ring buffer, so the `keyboard_wait_key` blocking wait inside `IO_READ`/`IO_GETCHAR` is woken normally. IRQ0 sees a kernel-mode frame (`cs & 3 != 3`), and `ring3_timer_switch` does not switch in the middle of a kernel syscall; processes can explicitly yield at a safe syscall boundary with `PROC_YIELD`.
-- **Return value**: `eax`. Undefined classes return `-1` (`0xFFFFFFFF`); unknown sub-operation numbers inside a known class return 0. **There is no errno; error semantics are not uniform.**
+- **Return value**: `eax`. Both undefined classes and unknown sub-operation numbers inside a known class return `-1` (`0xFFFFFFFF`). **There is no errno; error semantics are not uniform.**
 - **Ring 0 calls**: the kernel can invoke calls via `sys_call(klass, op, arg1, arg2, arg3)` (inline `int 0x80`) or raw `int 0x80`. In kernel context `ring3_current_pid()` returns 0, so `PROC_GETPID` returns 0 and `IO_WRITE` is silently dropped by the foreground check (which requires `pid != 0`).
 - C wrappers: `sys_call` plus `sys_malloc`/`sys_calloc`/`sys_realloc`/`sys_free`/`sys_shutdown`/`sys_reboot`/`sys_getpid` (`include/os/syscall.h`).
 
@@ -61,7 +61,7 @@ Definitions live in `include/os/syscall.h`, implementation in `src/os/syscall.c`
 | 3 | `MEMORY_REALLOC` | `ecx` = pointer, `edx` = new byte count | new pointer, 0 on failure; `ptr == 0` behaves like malloc, `size == 0` behaves like free |
 | 4 | `MEMORY_FREE` | `ecx` = pointer | 0; `NULL` or out-of-range pointers are silently ignored |
 
-User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`), allocated and mapped page-by-page as USER pages; each block has a `struct user_block` header (magic `0x55534552`), and freed blocks go on a free list for reuse while the block's first page stays mapped.
+User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`), allocated and mapped page-by-page as USER pages; each block has a `struct user_block` header (magic `0x55534552`), and freed blocks go on a free list for reuse while the block's first page stays mapped. Requests larger than the heap span are rejected up front (`MEMORY_MALLOC`/`CALLOC`/`REALLOC` return 0), and `MEMORY_REALLOC`/`MEMORY_FREE` range-check the pointer against the heap before reading the block header.
 
 ## `SYS_POWER` (4)
 
@@ -111,7 +111,7 @@ User heap range: `0x01000000`–`0x40000000` (`USER_HEAP_START`/`USER_HEAP_END`)
 - **Path resolution**: every path argument is a user-mode NUL-terminated string, first resolved and normalized against the current working directory (`fat32_resolve_path`, sharing the same `g_cwd` as the shell; relative paths, `.` and `..` are supported), then passed to FAT32. Paths are limited to 127 characters.
 - **File descriptors**: the kernel keeps one global fd table (`SYSFS_MAX_FDS` = 8 entries); an fd is a table index 0–7. The table is global, not per-process; exiting processes do **not** auto-close their fds (a later process may inherit offset state — a known limitation).
 - **Read/write semantics**: the FAT32 layer only offers whole-file I/O, so `FS_READ` re-reads the entire file (≤ `FAT32_MAX_FILE_SIZE` = 1 MiB) into a kernel buffer on every call and copies out the data at the offset; `FS_WRITE` uses read-modify-write: read the existing content, overwrite at the offset, and write the whole file back at `max(old size, offset+length)`. Large files and frequent small writes are inefficient — a known limitation.
-- **User-pointer validation**: `IO_WRITE`, `IO_READ`, the FS calls, and `TIME_TO` validate pointers — `IO_WRITE` copies via `sys_copy_user_string` (4096-byte cap), `IO_READ`/FS/`TIME_TO` check `sys_user_buffer_ok`; invalid pointers return -1 instead of panicking. Validation requires pages to be *mapped* in the current `user_mm` (`paging_mm_get_phys`), not merely inside a registered range. `IO_GETCHAR` takes no pointer and `MEMORY_*` still dereference caller pointers directly (see Known limitations).
+- **User-pointer validation**: `IO_WRITE`, `IO_READ`, the FS calls, and `TIME_TO` validate pointers — `IO_WRITE` copies via `sys_copy_user_string` (4096-byte cap), `IO_READ`/FS/`TIME_TO` check `sys_user_buffer_ok`; invalid pointers return -1 instead of panicking. Validation requires pages to be *mapped* in the current `user_mm` (`paging_mm_get_phys`), not merely inside a registered range. `IO_GETCHAR` takes no pointer; `MEMORY_FREE`/`MEMORY_REALLOC` range-check the pointer against the user heap before dereferencing the block header (see Known limitations for what remains unvalidated).
 - **Working directory**: `g_cwd` lives in `src/fs/fat32.c`; the shell's `cd`/prompt and the user-mode `FS_GETCWD`/`FS_CHDIR` share the same directory.
 
 ## Process exit (`PROC_EXIT`)
@@ -127,9 +127,9 @@ and current limitations.
 
 ## Known limitations (to resolve before stabilizing the ABI)
 
-- **Partial user-pointer validation**: `IO_WRITE` and `IO_READ` now copy/validate caller pointers and return -1 on bad input, but `MEMORY_*` still dereference caller pointers directly; an illegal pointer there triggers a page fault that kills the process, and in kernel context a kernel page-fault panic (`kfault.elf` test).
+- **User heap metadata is user-writable**: `MEMORY_FREE`/`MEMORY_REALLOC` now range-check the pointer and clamp copies to the block's mapped capacity, but `struct user_block` (magic/size/pages/next) lives in user-writable pages and the free-list walk (`user_find_free`/`user_remove_free`/`user_restore_pages`) performs no validation — a forged `next` still panics the kernel (`kfault.elf` test). The real fix requires moving block metadata out of user pages.
 - **No ABI versioning**: class/sub-operation numbers are bare integers with no version field.
-- **Non-uniform error semantics**: undefined classes return `-1`, unknown sub-operations and memory-operation failures return 0, and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
+- **Non-uniform error semantics**: undefined classes and unknown sub-operations return `-1`, memory-operation failures return 0 (NULL), and successful calls return 0/pointer/timestamp depending on the call; callers must check each one.
 - **Blocking calls yield only at wait points**: IRQ0 still fires during `IO_READ`/`IO_GETCHAR`, but `ring3_timer_switch` sees a kernel-mode frame and returns without switching. The keyboard waits inside `sys_gets`/`IO_GETCHAR` do yield cooperatively via `sys_keyboard_wait_yield` (the syscall rewinds `eip` and restarts on resume, preserving any partially-read line); other Ring 3 processes therefore run while input is pending, but a syscall doing non-wait work still cannot be preempted.
 - **`IO_READ`/`IO_GETCHAR` only talk to the keyboard**: no file/console abstraction, and no foreground check — a background process on the same vt can consume keystrokes intended for the foreground process. Arrow keys are delivered as the control bytes `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT` (0x01–0x04); `IO_GETCHAR` returns them as ordinary char values while `IO_READ` stores them raw in the buffer and echoes them — consumers needing line editing should filter them or use `IO_GETCHAR`.
 - **No device-access interfaces** (serial, raw ATA, etc.) and no process create/wait calls (`PROC_EXIT` exists; `kill` is still shell-only).

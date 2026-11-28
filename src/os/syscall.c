@@ -645,7 +645,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case IO_CONSOLE_INFO:
                     return ((uint32_t)vga_rows() << 16) | vga_columns();
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         case SYS_TIME:
             switch (op) {
@@ -720,7 +720,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return klass;
                 }
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         case SYS_MEMORY: {
             struct user_mm *mm = ring3_current_mm();
@@ -744,7 +744,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     user_free(mm, (void *)a1);
                     return 0;
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         }
         case SYS_POWER:
@@ -831,7 +831,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                            ? 0U : (uint32_t)-1;
                 }
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         case SYS_FS:
             switch (op) {
@@ -938,7 +938,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                     return rc < 0 ? (uint32_t)-1 : (uint32_t)rc;
                 }
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         case SYS_SIG:
             switch (op) {
@@ -961,7 +961,7 @@ uint32_t syscall_handler(struct irq_frame *frame) {
                 case SIG_RETURN:
                     return ring3_signal_sigreturn(frame);
                 default:
-                    return 0;
+                    return (uint32_t)-1;
             }
         default:
             return -1;

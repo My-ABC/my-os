@@ -16,7 +16,7 @@ English: [English version](../en/04-syscall-abi.md)
   - `eax` 同时承载返回值
   - 除 `eax` 外所有通用寄存器由 `pushad`/`popad` 保证不变
 - **中断状态**：陷阱门不清除 IF，handler 继承调用者的中断状态（Ring 3 用户态 EFLAGS 为 `0x202`，即 IF=1）。因此 IRQ0（PIT）和 IRQ1（键盘）可以在 handler 执行期间触发：键盘 IRQ 会把扫描码放入环形缓冲，`IO_READ`/`IO_GETCHAR` 的 `keyboard_wait_key` 阻塞等待因此可以被正常唤醒。IRQ0 命中的是内核态帧（`cs & 3 != 3`），`ring3_timer_switch` 不会在内核系统调用中途切换；进程可以在安全的系统调用边界通过 `PROC_YIELD` 主动让出 CPU。
-- **返回值**：`eax`。未定义的大类返回 `-1`（`0xFFFFFFFF`）；已知大类内未知的子操作号返回 0。**没有 errno，错误语义不统一**。
+- **返回值**：`eax`。未定义的大类与已知大类内未知的子操作号都返回 `-1`（`0xFFFFFFFF`）。**没有 errno，错误语义不统一**。
 - **Ring 0 调用**：内核可通过 `sys_call(klass, op, arg1, arg2, arg3)`（内联 `int 0x80`）或直接 `int 0x80` 调用。内核上下文中 `ring3_current_pid()` 返回 0，因此 `PROC_GETPID` 返回 0，`IO_WRITE` 因前后台检查（要求 `pid != 0`）被静默丢弃。
 - C 侧封装：`sys_call` 以及 `sys_malloc`/`sys_calloc`/`sys_realloc`/`sys_free`/`sys_shutdown`/`sys_reboot`/`sys_getpid`（`include/os/syscall.h`）。
 
@@ -61,7 +61,7 @@ English: [English version](../en/04-syscall-abi.md)
 | 3 | `MEMORY_REALLOC` | `ecx` = 指针，`edx` = 新字节数 | 新指针，失败返回 0；`ptr == 0` 等价于 malloc，`size == 0` 等价于 free |
 | 4 | `MEMORY_FREE` | `ecx` = 指针 | 0；`NULL` 或越界指针被静默忽略 |
 
-用户堆范围：`0x01000000`–`0x40000000`（`USER_HEAP_START`/`USER_HEAP_END`），按页分配并映射为 USER 页；块头 `struct user_block`（magic `0x55534552`），释放后进入空闲链表供复用，块所在的首页映射保留。
+用户堆范围：`0x01000000`–`0x40000000`（`USER_HEAP_START`/`USER_HEAP_END`），按页分配并映射为 USER 页；块头 `struct user_block`（magic `0x55534552`），释放后进入空闲链表供复用，块所在的首页映射保留。超过堆跨度的请求在入口直接拒绝（`MEMORY_MALLOC`/`CALLOC`/`REALLOC` 返回 0）；`MEMORY_REALLOC`/`MEMORY_FREE` 在读取块头前会把指针范围校验到堆内。
 
 ## `SYS_POWER`（4）
 
@@ -111,7 +111,7 @@ English: [English version](../en/04-syscall-abi.md)
 - **路径解析**：所有路径参数都是用户态 NUL 结尾字符串，先按当前工作目录解析并规范化（`fat32_resolve_path`，与 Shell 共用同一个 `g_cwd`，支持相对路径、`.`、`..`），再调用 FAT32。路径最长 127 字符。
 - **文件描述符**：内核维护一张全局 fd 表（`SYSFS_MAX_FDS` = 8 项），fd 是表项下标 0–7。fd 表是全局的、不是每进程独立的；进程退出时**不会**自动关闭其打开的 fd（后续进程可能继承同一文件偏移状态，属已知限制）。
 - **读写语义**：FAT32 层只有整文件读写接口，因此 `FS_READ` 每次调用都重新读取整个文件（≤ `FAT32_MAX_FILE_SIZE` = 1 MiB）到内核缓冲再拷贝偏移处数据；`FS_WRITE` 采用 read-modify-write：读出现有内容、在偏移处覆盖、按 `max(原大小, 偏移+长度)` 整文件写回。大文件/频繁小写性能较差，属已知限制。
-- **用户指针校验**：`IO_WRITE`、`IO_READ`、FS 系列调用和 `TIME_TO` 都会校验指针——`IO_WRITE` 经 `sys_copy_user_string` 拷贝（4096 字节上限），`IO_READ`/FS/`TIME_TO` 用 `sys_user_buffer_ok` 检查；非法指针返回 -1 而不是 panic。校验要求页面在当前 `user_mm` 中*已映射*（`paging_mm_get_phys`），而不仅是落在已登记范围内。`IO_GETCHAR` 无指针参数，`MEMORY_*` 仍直接解引用调用方指针（见已知限制）。
+- **用户指针校验**：`IO_WRITE`、`IO_READ`、FS 系列调用和 `TIME_TO` 都会校验指针——`IO_WRITE` 经 `sys_copy_user_string` 拷贝（4096 字节上限），`IO_READ`/FS/`TIME_TO` 用 `sys_user_buffer_ok` 检查；非法指针返回 -1 而不是 panic。校验要求页面在当前 `user_mm` 中*已映射*（`paging_mm_get_phys`），而不仅是落在已登记范围内。`IO_GETCHAR` 无指针参数；`MEMORY_FREE`/`MEMORY_REALLOC` 在解引用块头前会把指针范围校验到用户堆内（仍未校验的部分见已知限制）。
 - **工作目录**：`g_cwd` 存于 `src/fs/fat32.c`，Shell 的 `cd`/提示符与用户态 `FS_GETCWD`/`FS_CHDIR` 共享同一目录。
 
 ## 进程退出（`PROC_EXIT`）
@@ -127,9 +127,9 @@ pending/blocked/handler 状态、Ctrl+C `SIGINT` 投递、经
 
 ## 已知限制（ABI 稳定化前需解决）
 
-- **部分用户指针校验**：`IO_WRITE`/`IO_READ` 现已拷贝/校验调用方指针并在非法输入时返回 -1，但 `MEMORY_*` 仍直接解引用用户指针；非法指针会触发页错误终止进程，内核上下文则进入 kernel page fault panic（`kfault.elf` 测试覆盖）。
+- **用户堆元数据可被用户改写**：`MEMORY_FREE`/`MEMORY_REALLOC` 现已做指针范围检查并把拷贝量钳制到块的实际映射容量，但 `struct user_block`（magic/size/pages/next）位于用户可写页内，空闲链表遍历（`user_find_free`/`user_remove_free`/`user_restore_pages`）零校验——伪造 `next` 仍会让内核 panic（`kfault.elf` 测试覆盖）。根治需要把块元数据移出用户页。
 - **无 ABI 版本**：大类/子操作号是裸整数，无版本字段。
-- **错误语义不统一**：未定义大类返回 `-1`，未知子操作与内存操作失败返回 0，成功调用各自返回 0/指针/时间戳，调用方需逐个判断。
+- **错误语义不统一**：未定义大类与未知子操作返回 `-1`，内存操作失败返回 0（NULL），成功调用各自返回 0/指针/时间戳，调用方需逐个判断。
 - **阻塞调用只在等待点让出**：`IO_READ`/`IO_GETCHAR` 期间 IRQ0 照常触发，但 `ring3_timer_switch` 看到的是内核态帧而直接返回。`sys_gets`/`IO_GETCHAR` 内的键盘等待会经 `sys_keyboard_wait_yield` 合作式让出（syscall 回退 `eip`、恢复后重启，已读部分行不丢失）；因此输入等待期间其它 Ring 3 进程可以运行，但做非等待工作的 syscall 仍不可被抢占。
 - **`IO_READ`/`IO_GETCHAR` 只认键盘**：不经过文件/控制台抽象，且无前台检查——同一 vt 上的后台进程可以消费本应属于前台进程的按键。方向键以控制字节 `KEYBOARD_KEY_UP`/`DOWN`/`LEFT`/`RIGHT`（0x01–0x04）形式下发：`IO_GETCHAR` 将其作为普通字符返回，`IO_READ` 原样写入缓冲区并回显——需要行编辑的调用方应自行过滤或改用 `IO_GETCHAR`。
 - **无设备访问接口**（串口、ATA 直访等）；无进程创建/等待类调用（`PROC_EXIT` 已有，`kill` 仍只能由 Shell 发起）。
