@@ -180,6 +180,11 @@ size_t fs_fread(void *buf, size_t size, size_t count, FILE *f) {
         errno = EBADF;
         return 0;
     }
+    if (size != 0 && count > (size_t)-1 / size) {
+        f->err = 1;
+        errno = EINVAL;
+        return 0;
+    }
     size_t total = size * count;
     size_t done = 0;
     while (done < total) {
@@ -196,6 +201,11 @@ size_t fs_fwrite(const void *buf, size_t size, size_t count, FILE *f) {
     if (f == 0 || f->fd < 0 || buf == 0 || size == 0 || count == 0) {
         if (f) f->err = 1;
         errno = EBADF;
+        return 0;
+    }
+    if (size != 0 && count > (size_t)-1 / size) {
+        f->err = 1;
+        errno = EINVAL;
         return 0;
     }
     size_t total = size * count;

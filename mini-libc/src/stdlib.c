@@ -44,14 +44,27 @@ void abort(void) {
 
 #define MH_MAGIC 0x4D484452u   /* "MHDR" */
 #define MH_HDR   16u
+/* Alignments beyond this are rejected: the pow2-rounding loop and the
+ * ksize computation below both assume align stays well below 2^32. */
+#define XALLOC_MAX_ALIGN 0x100000u
 
 static void *xalloc(size_t size, size_t align) {
+    if (align > XALLOC_MAX_ALIGN) {
+        errno = ENOMEM;
+        return 0;
+    }
     if (align < sizeof(void *)) align = sizeof(void *);
     /* round non-power-of-two alignments up to the next power of two */
     size_t a = 8;
     while (a < align) a <<= 1;
     align = a;
 
+    /* ksize must not wrap: a wrapped small ksize would under-allocate
+     * while the header still records the huge requested size. */
+    if (size > (size_t)UINT32_MAX - (MH_HDR + align + 8)) {
+        errno = ENOMEM;
+        return 0;
+    }
     size_t ksize = size + MH_HDR + align + 8;
     char *k = (char *)syscall1(SYS_MEMORY, MEMORY_MALLOC, (unsigned)ksize);
     if (k == 0) { errno = ENOMEM; return 0; }

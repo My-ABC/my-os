@@ -596,6 +596,11 @@ size_t fread(void *buf, size_t size, size_t count, FILE *f) {
     }
     if (f->kind == FS_FILE_REG) return fs_fread(buf, size, count, f);
     /* console stdin: byte-at-a-time through file_getc_raw */
+    if (size != 0 && count > (size_t)-1 / size) {
+        f->err = 1;
+        errno = EINVAL;
+        return 0;
+    }
     size_t total = size * count, done = 0;
     char *p = (char *)buf;
     while (done < total) {
@@ -615,6 +620,11 @@ size_t fwrite(const void *buf, size_t size, size_t count, FILE *f) {
     }
     if (f->kind == FS_FILE_REG) return fs_fwrite(buf, size, count, f);
     const char *p = (const char *)buf;
+    if (size != 0 && count > (size_t)-1 / size) {
+        f->err = 1;
+        errno = EINVAL;
+        return 0;
+    }
     size_t total = size * count, done = 0;
     while (done < total && file_putc_raw(f, (unsigned char)p[done]) != EOF)
         ++done;
@@ -641,7 +651,7 @@ int fputs(const char *s, FILE *f) {
 
 char *fgets(char *buf, int size, FILE *f) {
     if (buf == 0 || size <= 0 || f == 0) return 0;
-    int i = 0, c;
+    int i = 0, c = 0;   /* c=0: size==1 skips the loop; must not read EOF */
     while (i < size - 1 && (c = file_getc_raw(f)) != EOF) {
         buf[i++] = (char)c;
         if (c == '\n') break;

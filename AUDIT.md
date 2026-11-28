@@ -77,6 +77,13 @@
 - 触发条件不是理论性的：vt0 回退到 ring0 shell 时，vt1 的 shell3 仍可能 READY/RUNNING；或 supervisor 空闲时其它 vt 有活动进程。`vt_spawn_shell` 已特意关中断规避同类问题（`src/drivers/vt.c:149-158`），但 kernel shell 的 FAT32 命令没有等价保护。
 - 建议：给 FAT32/ATA 操作加“非重入”保护（如全局 FS 锁 + IRQ 关闭临界区），或把 `g_sector/g_cluster` 改为调用方提供的缓冲；至少在 kernel shell 的 FAT32 命令入口保存/恢复共享状态并关中断。
 
+### P1-6 `user_pages_for_size`/`pages*PAGE_SIZE` 32-bit 回绕，`MEMORY_MALLOC` 巨值返回 `pages=0` 的块 ✅
+
+`src/os/syscall.c` `user_alloc`/`user_realloc`：`user_pages_for_size(size) = (size + sizeof(user_block) + PAGE_SIZE-1)/PAGE_SIZE` 全程 32-bit。`MEMORY_MALLOC(0xFFFFFF20)` 级别的 size 使 `size+20+4095` 回绕，`pages` 算出 0 → 分配循环一次不跑 → 返回 `pages=0`、`size=huge` 的 block；mini-libc 随后 `calloc`/`realloc` 按 huge size memset/memcpy → demand-map 至 PMM 耗尽挂死（实测 `malloc(0xFFFFFF00)` 返回 `0x1000028` 非空）。`user_realloc` 同型：`user_pages_for_size(size)` 回绕为 0 时 `0 <= block->pages` 恒真，走"收缩"分支把 `block->size` 刷成 huge 值。
+
+- 修复：`user_alloc`/`user_realloc` 入口拒绝 `size > USER_HEAP_END - USER_HEAP_START`（堆总跨度 ~1008 MiB，任何更大 size 本就不可能满足）；此后 `size+header+pad` 与 `pages*PAGE_SIZE` 均不再回绕，既有 `USER_HEAP_END` 边界检查恢复有效。QEMU 实测 `malloc/calloc(0xFFFFFF00)` 返回 NULL+ENOMEM。
+- 遗留同类：`user_find_free`/`user_remove_free`/`user_restore_pages` 遍历 `block->next`/`block->pages` 时不校验（user_block 头在用户可写页内，`next` 可被伪造成任意地址 → 内核态解引用 → panic）；`user_realloc` 入口仍缺 `ptr` 范围检查（P1-2）。⬜
+
 ---
 
 ## P2（隐患）
@@ -221,11 +228,11 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 ### P2
 
-#### R2-N1 mini-libc `xalloc` 的 `ksize` 32-bit 回绕导致分配不足、后续溢出 ⬜
+#### R2-N1 mini-libc `xalloc` 的 `ksize` 32-bit 回绕导致分配不足、后续溢出 ✅
 
-`mini-libc/src/stdlib.c:48-65`：`ksize = size + MH_HDR + align + 8` 在 32-bit `size_t` 上回绕。`malloc(0xFFFFFF00)` 之类的巨大 size 会得到一个很小的 `ksize`，内核只分配一页，但头部 `size` 字段记录原始大值；随后 `calloc` 的 `memset(p,0,total)`、`realloc` 的 `memcpy(np, ptr, min(oldsize,size))` 都按大值读写，必然打爆本进程用户堆（自伤，但可稳定复现崩溃）。`calloc` 的 `nmemb*size` 溢出检查拦不住 `calloc(1, huge)` 这条路径。
+`mini-libc/src/stdlib.c` `xalloc`：`ksize = size + MH_HDR + align + 8` 在 32-bit `size_t` 上回绕。`malloc(0xFFFFFF00)` 之类的巨大 size 会得到一个很小的 `ksize`，内核只分配一页，但头部 `size` 字段记录原始大值；随后 `calloc` 的 `memset(p,0,total)`、`realloc` 的 `memcpy(np, ptr, min(oldsize,size))` 都按大值读写，必然打爆本进程用户堆（自伤，但可稳定复现崩溃）。`calloc` 的 `nmemb*size` 溢出检查拦不住 `calloc(1, huge)` 这条路径。
 
-建议：`xalloc` 入口加 `size > UINT32_MAX - (MH_HDR + align + 8)` 上限检查并返回 ENOMEM。
+- 修复：`xalloc` 入口加 `size > UINT32_MAX - (MH_HDR + align + 8)` → ENOMEM；align 上限 `XALLOC_MAX_ALIGN`（1 MiB）同时覆盖 R3-P3#8 的 pow2 归一化死循环。stdlib 测试新增 malloc/calloc/aligned_alloc 巨值用例。
 
 #### R2-N2 `elf_run_vt` 的 -7（mm 耗尽）被当作永久 spawn 失败，瞬时内存压力会永久禁用 vt ✅（-7→RETRY 部分）
 
@@ -241,10 +248,10 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 ### P3
 
-1. `mini-libc/src/stdio.c` `fgets`：`size==1` 时循环不执行，`c` 未初始化却参与 `i==0 && c==EOF` 判断（UB 读栈值）。
+1. `mini-libc/src/stdio.c` `fgets`：`size==1` 时循环不执行，`c` 未初始化却参与 `i==0 && c==EOF` 判断（UB 读栈值）。✅ `c` 初始化为 0，size==1 返回空串不耗输入；stdin 测试新增 `fgets-size1-empty` 断言。
 2. `mini-libc/src/ctype.c` `iscntrl`：`c < 32` 漏掉 DEL(127)，`iscntrl(0x7F)` 应为真。
 3. `mini-libc/src/time.c` `strftime`：`tm_wday`/`tm_mon` 未校验即索引 `wday_names[8]`/`mon_names[12]`，调用方构造越界 `struct tm` 会造成用户态 OOB 读。
-4. `mini-libc/src/stdio.c` `fread` 与 `fs.c` `fs_fread/fs_fwrite`：`size * count` 为 32-bit `size_t`/`unsigned`，大参数回绕后 `total` 偏小，返回值与实际读写不一致。
+4. `mini-libc/src/stdio.c` `fread` 与 `fs.c` `fs_fread/fs_fwrite`：`size * count` 为 32-bit `size_t`/`unsigned`，大参数回绕后 `total` 偏小，返回值与实际读写不一致。✅ 四处入口加 `count > (size_t)-1 / size` → EINVAL；stdio 测试新增 `fread-overflow` 断言（`fwrite` 同型一并修）。
 5. `src/drivers/ata.c`：`ata_read_sectors`/`ata_write_sectors` 发命令前只做 `ata_wait_400ns`（4 次读），不等 BSY 清零；前一次操作未完成时寄存器写入可能被丢弃。建议命令前补 `ata_wait_bsy_clear`。
 6. `src/fs/fat32_core.c` `fat32_init`：`g_sector[16] != 2` 拒绝单 FAT 卷；`total_sectors==0` 时不回退读 BPB 19-20 的 16-bit 字段（`fat32_image.py` 已做此回退，内核没有），部分合法 FAT32 无法挂载。
 7. `src/os/ring3.c` `ring3_kill`：对 `current_process` 自身置 DEAD 后不切帧，进程要等到 IRQ0 才被回收（窗口内仍可执行）；`ring3_signal_scan`/`ring3_terminate_current` 路径已处理，仅 kill-self 路径有此小窗口。
@@ -351,7 +358,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 5. `mini-libc/src/stdio.c:255` `in_getch` 把空行（内核 rc==0）当 EOF 返回 -1：`getchar()` 在用户按一次回车时返回 EOF，是瞬时错误而非流终止。
 6. `mini-libc/src/stdlib.c:21-25` `_Exit`/`exit` 恒以 `ecx=0` 调 `PROC_EXIT`，`status` 被丢弃（内核本就不记录，但 ABI 注释"ecx: 退出码"有误导）；`signal()`/`kill()` 的早退分支不设 `errno`。
 7. `mini-libc/include/stdint.h`：`intmax_t`/`uintmax_t` 定义为 `int`/`unsigned int`（hosted LP32 通常为 `long long`）；`int_least8_t` 等 least 类型取 `int` 过宽但合法。`inttypes.c` 的 imax\* 与之自洽，仅与 hosted C ABI 有偏差。
-8. `mini-libc/src/stdlib.c:51-53` `xalloc` 的 align 归一化 `while (a < align) a <<= 1`：用户伪造 malloc header 的 `align` 字段为非 2 幂大值（如 `0x80000001`）会让 `a` 溢出为 0 后死循环——仅自伤（header 在自己地址空间），但 `hdr_of` 不校验 align 幂次/上界。
+8. `mini-libc/src/stdlib.c` `xalloc` 的 align 归一化 `while (a < align) a <<= 1`：用户伪造 malloc header 的 `align` 字段为非 2 幂大值（如 `0x80000001`）会让 `a` 溢出为 0 后死循环——仅自伤（header 在自己地址空间），但 `hdr_of` 不校验 align 幂次/上界。✅ `xalloc` 入口 `align > XALLOC_MAX_ALIGN`（1 MiB）→ ENOMEM，伪造 header 的 align 同样被 `realloc`→`xalloc` 路径拦截；`a <<= 1` 不再可能溢出。
 9. `src/os/syscall.c:855-867` `sys_call` 是内核态 `int 0x80` 包装：`current_process < 0`（内核/idle 上下文）时 `PROC_EXIT`/`PROC_YIELD` 等静默无效或走默认分支，属未文档化的边界。
 10. `src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）；`FS_OPEN` 的 mode 未限定 `<= SYSFS_O_RDWR` 之外的位（`mode > 1` 已拒，OK）。
 11. `ps` 把 SLEEPING 进程显示为 `UNUSED` ✅（用户实测反馈）：`src/shell/shell_ring3.c` `state_name` 与 `src/shell/shell.c` `cmd_ps` 的状态映射都缺 `PROC_ST_SLEEPING`/`RING3_PROCESS_SLEEPING` 分支，落到 default/"UNUSED"。表现：snake.elf 运行中（绝大部分时间在 `TIME_SLEEP`）`ps` 显示 `pid=3/4 UNUSED`，但进程存活且 `kill` 正常（`ring3_kill` 已覆盖 SLEEPING）。附带观察：`ring3_process_list` 返回全部 4 个槽位（含 pid=0 空槽），ring3 shell 的 `ps` 会多打 `0 UNUSED` 行；内核 shell `cmd_ps` 跳过 pid==0 不受影响。已修：两处状态映射补 `SLEEPING` 字符串。

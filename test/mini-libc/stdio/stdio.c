@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 static int fails;
 #define CHK(c, n) do { if (c) printf("ok %s\n", n); \
@@ -75,6 +76,10 @@ int main(void) {
         char abuf[16] = { 0 };
         CHK(fread(abuf, 1, 6, af) == 6 &&
             strcmp(abuf, "abcdef") == 0, "append-content");
+        /* size*count overflow must fail instead of wrapping small */
+        errno = 0;
+        CHK(fread(abuf, 0x10000u, 0x10000u, af) == 0 &&
+            errno == EINVAL, "fread-overflow");
         fclose(af);
     }
 

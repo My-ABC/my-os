@@ -38,6 +38,16 @@ int main(void) {
     CHK(aligned_alloc(64, 100) == 0 && errno == EINVAL, "aligned_alloc-nonsize");
     free(a);
 
+    /* ksize / align overflow guards: huge sizes and alignments must
+     * fail with ENOMEM instead of wrapping into a tiny allocation. */
+    errno = 0;
+    CHK(malloc(0xFFFFFF00u) == 0 && errno == ENOMEM, "malloc-huge-enomem");
+    errno = 0;
+    CHK(calloc(1, 0xFFFFFF00u) == 0 && errno == ENOMEM, "calloc-huge-enomem");
+    errno = 0;
+    CHK(aligned_alloc(0x200000u, 0x200000u) == 0 && errno == ENOMEM,
+        "aligned_alloc-hugealign-enomem");
+
     CHK(atoi("  -42") == -42 && atol("010") == 10, "atoi-atol");
     char *e;
     CHK(strtol("0x1f", &e, 0) == 31 && *e == 0, "strtol-hex");

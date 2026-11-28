@@ -50,6 +50,15 @@ int main(void) {
         CHK(c == 'y', "getchar-next-line");
     }
 
+    /* fgets(buf,1): must return an empty string without consuming a
+     * line and without reading an uninitialized c (loop never runs). */
+    {
+        char one[8];
+        memset(one, 'X', sizeof(one));
+        CHK(fgets(one, 1, stdin) == one && one[0] == '\0',
+            "fgets-size1-empty");
+    }
+
     /* read(0)/write(1) fd mapping: read(0) pulls one whole console
      * line through IO_READ — runner types "fd-read-line" + Enter. */
     {
