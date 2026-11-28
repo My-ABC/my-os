@@ -14,9 +14,10 @@
 static int fs_tracked[FS_TRACK_MAX];
 static int fs_tracked_n;
 
-static void fs_track_add(int fd) {
-    if (fd < 0 || fs_tracked_n >= FS_TRACK_MAX) return;
+static int fs_track_add(int fd) {
+    if (fd < 0 || fs_tracked_n >= FS_TRACK_MAX) return -1;
     fs_tracked[fs_tracked_n++] = fd;
+    return 0;
 }
 
 static void fs_track_remove(int fd) {
@@ -36,7 +37,12 @@ int fs_owns_fd(int fd) {
 
 int fs_open(const char *path, int mode) {
     int fd = syscall2(SYS_FS, FS_OPEN, (unsigned)path, (unsigned)mode);
-    fs_track_add(fd);
+    if (fd >= 0 && fs_track_add(fd) != 0) {
+        /* Opened but untrackable: fs_owns_fd would misroute fd 0-2
+         * to the console, so fail the open instead. */
+        syscall1(SYS_FS, FS_CLOSE, (unsigned)fd);
+        return -1;
+    }
     return fd;
 }
 
