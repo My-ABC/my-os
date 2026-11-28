@@ -39,6 +39,57 @@ def add_root_file(image_path, filename, contents):
         offset = fat_start + cluster * 4
         return int.from_bytes(image[offset:offset + 4], "little") & 0x0FFFFFFF
 
+    def set_fat_value(cluster, value):
+        for fat_index in range(fat_count):
+            offset = fat_start + fat_index * fat_size + cluster * 4
+            image[offset:offset + 4] = value.to_bytes(4, "little")
+
+    def free_cluster_chain(first_cluster):
+        cluster = first_cluster
+        for _ in range(data_cluster_count + 2):
+            if cluster < 2 or cluster >= 0x0FFFFFF8:
+                return
+            nxt = fat_value(cluster)
+            set_fat_value(cluster, 0)
+            cluster = nxt
+
+    # Scan the whole root directory once: collect free slots and any
+    # existing entry for this filename (re-added files update in place
+    # instead of accumulating duplicate directory entries).
+    free_slot_offset = None
+    existing_slot_offset = None
+    existing_first_cluster = 0
+    cluster = root_cluster
+    for _ in range(data_cluster_count):
+        directory_offset = data_start + (cluster - 2) * cluster_size
+        for offset in range(0, cluster_size, 32):
+            entry_offset = directory_offset + offset
+            if image[entry_offset] == 0x00:
+                if free_slot_offset is None:
+                    free_slot_offset = entry_offset
+                continue
+            if image[entry_offset] == 0xE5:
+                if free_slot_offset is None:
+                    free_slot_offset = entry_offset
+                continue
+            if image[entry_offset + 11] == 0x0F:
+                continue
+            if bytes(image[entry_offset:entry_offset + 11]) == short_name:
+                existing_slot_offset = entry_offset
+                existing_first_cluster = (
+                    (image[entry_offset + 20] |
+                     (image[entry_offset + 21] << 8)) << 16) | \
+                    int.from_bytes(image[entry_offset + 26:entry_offset + 28],
+                                   "little")
+        if existing_slot_offset is not None:
+            break
+        cluster = fat_value(cluster)
+        if cluster < 2 or cluster >= 0x0FFFFFF8:
+            break
+
+    if existing_slot_offset is not None:
+        free_cluster_chain(existing_first_cluster)
+
     free_clusters = [
         cluster for cluster in range(2, data_cluster_count + 2)
         if fat_value(cluster) == 0
@@ -51,30 +102,19 @@ def add_root_file(image_path, filename, contents):
             free_clusters[index + 1]
             if index + 1 < len(free_clusters) else 0x0FFFFFFF
         )
-        for fat_index in range(fat_count):
-            offset = fat_start + fat_index * fat_size + cluster * 4
-            image[offset:offset + 4] = next_cluster.to_bytes(4, "little")
+        set_fat_value(cluster, next_cluster)
         data_offset = data_start + (cluster - 2) * cluster_size
         chunk = contents[index * cluster_size:(index + 1) * cluster_size]
         image[data_offset:data_offset + cluster_size] = chunk.ljust(cluster_size, b"\0")
 
-    cluster = root_cluster
-    slot_offset = None
-    for _ in range(data_cluster_count):
-        directory_offset = data_start + (cluster - 2) * cluster_size
-        for offset in range(0, cluster_size, 32):
-            if image[directory_offset + offset] in (0, 0xE5):
-                slot_offset = directory_offset + offset
-                break
-        if slot_offset is not None:
-            break
-        cluster = fat_value(cluster)
-        if cluster < 2 or cluster >= 0x0FFFFFF8:
-            break
-    if slot_offset is None:
+    if existing_slot_offset is not None:
+        slot_offset = existing_slot_offset
+    elif free_slot_offset is not None:
+        slot_offset = free_slot_offset
+    else:
         raise IntegrationFailure("no free root directory slot for FAT32 test executable")
 
-    entry = bytearray(32)
+    entry = bytearray(image[slot_offset:slot_offset + 32])
     entry[:11] = short_name
     entry[11] = 0x20
     first_cluster = free_clusters[0]
