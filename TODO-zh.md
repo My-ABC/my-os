@@ -262,8 +262,8 @@
 ## 娱乐
 
 - [ ] **让 `snake.elf` 不闪烁**
-  - [ ] snake 目前每 ~120ms 通过整屏 `IO_WRITE` 重绘。闪烁是 **VBE 特有**问题——VGA 文本模式路径没有此现象；VT 切换残影（AUDIT P3 #12）同样只发生在 VBE。
-  - [ ] 修复方向在 `src/drivers/vbe.c`（cell 层 / damage 跟踪 / 双缓冲提交），而非游戏本身；ANSI 光标定位重绘仍需控制台侧先支持转义序列。
+  - [ ] snake 目前每 ~120ms 通过整屏 `IO_WRITE` 重绘。VGA 和 VBE 都会因整屏重绘闪烁，但 VGA 文本模式 cell 写入便宜、闪烁不明显；VBE 每个 cell 都是往像素 framebuffer 画字模，重绘慢且可见闪烁。VT 切换残影（AUDIT P3 #12）仅 VBE 有。
+  - [ ] 修复方向：游戏侧 diff/光标定位重绘对两条路径都有效；更深的修法在 `src/drivers/vbe.c`（cell 层 / damage 跟踪 / 双缓冲提交）。ANSI 光标定位重绘仍需控制台侧先支持转义序列。
 
 ## 64 位模式
 

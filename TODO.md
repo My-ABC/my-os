@@ -262,8 +262,8 @@ This document tracks completed work and the project roadmap. When an item is com
 ## Fun (entertainment)
 
 - [ ] **Make `snake.elf` flicker-free**
-  - [ ] Snake currently repaints via full-screen `IO_WRITE` bursts every ~120 ms. The flicker is **VBE-specific** — the VGA text-mode path does not exhibit it; VT-switch artifacts (AUDIT P3 #12) are likewise VBE-only.
-  - [ ] Fix direction is therefore in `src/drivers/vbe.c` (cell layer / damage tracking / double-buffered commit), not the game; ANSI cursor-addressed redraw still needs console-side escape support.
+  - [ ] Snake currently repaints via full-screen `IO_WRITE` bursts every ~120 ms. Both VGA and VBE flicker from the full repaint, but it is far less noticeable on VGA (text-mode cell writes are cheap); on VBE each cell is a glyph blit into the pixel framebuffer, so the repaint is visibly slow/flickery. VT-switch artifacts (AUDIT P3 #12) are VBE-only.
+  - [ ] Fix direction: game-side diff/cursor-addressed redraw reduces work on both paths; the deeper fix is in `src/drivers/vbe.c` (cell layer / damage tracking / double-buffered commit). ANSI cursor-addressed redraw still needs console-side escape support.
 
 ## 64-bit Mode
 
