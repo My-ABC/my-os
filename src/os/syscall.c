@@ -151,7 +151,6 @@ struct sysfs_fd {
     uint8_t used;
     uint8_t mode;
     uint32_t offset;
-    uint32_t size;
     char path[SYSFS_PATH_MAX];
 };
 
@@ -469,7 +468,6 @@ static int sysfs_fopen(uint32_t user_path, uint32_t mode) {
             sysfs_fds[i].used = 1U;
             sysfs_fds[i].mode = (uint8_t)mode;
             sysfs_fds[i].offset = 0U;
-            sysfs_fds[i].size = exists ? size : 0U;
             strncpy(sysfs_fds[i].path, path, SYSFS_PATH_MAX - 1U);
             sysfs_fds[i].path[SYSFS_PATH_MAX - 1U] = '\0';
             return (int)i;
@@ -490,7 +488,6 @@ static int sysfs_fread(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
         kfree(kbuf);
         return -1;
     }
-    fd->size = file_size;
     if (fd->offset >= file_size) {
         kfree(kbuf);
         return 0;
@@ -532,7 +529,6 @@ static int sysfs_fwrite(struct sysfs_fd *fd, uint32_t buf, uint32_t size) {
         return -1;
     }
     fd->offset += size;
-    fd->size = needed;
     kfree(kbuf);
     return (int)size;
 }

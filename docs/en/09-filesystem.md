@@ -25,6 +25,10 @@ prototypes live in the private `fat32_int.h` (`g_fs`, `g_sector`,
 Public declarations: `include/fs/fat32.h`. `FAT32_MAX_FILE_SIZE` =
 1 MiB bounds whole-file reads/writes/copies.
 
+`fat32_init` accepts volumes with 1 or 2 FATs and falls back to the
+16-bit Total Sectors BPB field (offset 19) when the 32-bit field is
+zero — the same fallback `fat32_image.py` applies.
+
 ## Name semantics
 
 - Every name written through the public API gets LFN entries preserving

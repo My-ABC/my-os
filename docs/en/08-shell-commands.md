@@ -40,7 +40,7 @@ below.
 | `elf` | — | Load and run the ELF32 demo program built into the kernel image. The demo installs a `SIGINT` handler, prints `Hello from ELF32`, and waits; Ctrl+C delivers the signal, the handler prints `Bye` and exits via `PROC_EXIT`. |
 | `disk` | — | Probe the ATA primary master and mount the FAT32 filesystem. |
 | `ls` | `[dir]` | List a directory (default: current directory). Directories are shown with a trailing `/` and `<DIR>`; files show their size in bytes. |
-| `cat` | `<file>` | Print a file's contents to the screen and serial port. Reads at most 64 KiB. |
+| `cat` | `<file>` | Print a file's contents to the screen and serial port. Reads at most 64 KiB; larger files print a `[cat] truncated:` notice first. |
 | `write` | `<file> <text>...` | Write the given text (arguments joined by spaces, max 1023 bytes) to a file, creating it if needed. |
 | `cp` | `[-r] <src> <dst>` | Copy a file. With `-r`, recursively copy a directory tree (depth limit 32). If `dst` is an existing directory, the source is placed inside it as `dst/<basename>`. `cp` overwrites an existing destination file. Refuses to copy a directory into itself or a descendant. |
 | `mv` | `<src> <dst>` | Move or rename a file or directory. If `dst` is an existing directory, the source is moved inside it as `dst/<basename>`. An existing destination file is replaced; an existing destination directory is refused. Moving a directory updates its `..` entry and refuses to move a directory into its own subtree. |

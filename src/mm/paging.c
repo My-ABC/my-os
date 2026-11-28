@@ -291,13 +291,15 @@ struct user_mm *paging_mm_create(void) {
          * identity map: boot stubs, the initial kernel stack, and other
          * kernel low-memory users stay reachable after any CR3 switch.
          * Entries are private copies marked borrowed so mm_release never
-         * frees kernel-owned low memory. */
+         * frees kernel-owned low memory. A failure here must not hand
+         * back a half-built mm — the missing PT would leave the low
+         * stubs unreachable after the first CR3 switch. */
         for (uint32_t pd = 0; pd < 2U; ++pd) {
             uint64_t pt_phys = 0U;
-            if (!mm_ensure_pt(slot, pd, &pt_phys)) continue;
+            if (!mm_ensure_pt(slot, pd, &pt_phys)) goto mm_fail;
             struct page_table *dst =
                 (struct page_table *)paging_map_physical(pt_phys);
-            if (dst == NULL) continue;
+            if (dst == NULL) goto mm_fail;
             for (uint32_t e = 0; e < PT_ENTRIES; ++e) {
                 dst->entries[e].value =
                     pae_low_pt[pd].entries[e].value | (1ULL << 9);
@@ -305,6 +307,21 @@ struct user_mm *paging_mm_create(void) {
             paging_unmap_physical();
         }
         return &user_mm_objs[i];
+mm_fail:
+        /* Free any PT pages mm_ensure_pt already allocated, then
+         * release the slot so a later create can retry cleanly. */
+        for (uint32_t pd = 0; pd < 2U; ++pd) {
+            struct page_directory_entry *pde = &slot->pd0.entries[pd];
+            if ((pde->value & PAE_PRESENT) == 0U ||
+                (pde->value & PAE_PAGE_SIZE) != 0U) {
+                continue;
+            }
+            pmm_free_page(paging_entry_physical(pde->value));
+            pde->value = 0U;
+        }
+        memset(&slot->pdpt, 0, sizeof(slot->pdpt));
+        memset(&slot->pd0, 0, sizeof(slot->pd0));
+        slot->in_use = 0;
     }
     return 0;
 }

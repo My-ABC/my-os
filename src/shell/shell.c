@@ -473,6 +473,12 @@ int cmd_cat(int argc, char *argv[]) {
     serial_print(path);
     serial_putchar('\n');
     static uint8_t buffer[65536];
+    /* fat32_read_file silently truncates to buffer_size; stat first so
+     * an oversized file is reported instead of looking complete. */
+    uint32_t file_size = 0U;
+    int is_dir = 0;
+    int have_stat = fat32_stat(path, &file_size, &is_dir) == 0 &&
+                    is_dir == 0;
     uint32_t size = 0U;
     if (fat32_read_file(path, buffer, sizeof(buffer), &size) != 0) {
         printf("Unable to read %s\n", path);
@@ -480,6 +486,10 @@ int cmd_cat(int argc, char *argv[]) {
         serial_print(path);
         serial_putchar('\n');
         return -1;
+    }
+    if (have_stat && file_size > size) {
+        printf("[cat] truncated: file is %u bytes, showing first %u\n",
+               file_size, size);
     }
     for (uint32_t i = 0; i < size; ++i) {
         printf("%c", buffer[i]);

@@ -145,7 +145,8 @@ int fat32_init(void) {
     g_fs.partition_lba = partition_lba;
     if (ata_read_sectors(partition_lba, 1U, g_sector) != 0) return -1;
     if (g_sector[510] != 0x55U || g_sector[511] != 0xAAU) return -1;
-    if (g_sector[16] != 2U) return -1;
+    /* BPB "Number of FATs": FAT32 volumes legally carry 1 or 2. */
+    if (g_sector[16] < 1U || g_sector[16] > 2U) return -1;
 
     uint16_t bytes_per_sector = le16(g_sector + 11);
     uint8_t sectors_per_cluster = g_sector[13];
@@ -169,6 +170,12 @@ int fat32_init(void) {
     g_fs.first_data_lba = partition_lba + reserved + fat_count * sectors_per_fat;
     g_fs.root_cluster = root_cluster;
     g_fs.total_sectors = le32(g_sector + 32);
+    if (g_fs.total_sectors == 0U) {
+        /* 32-bit total is zero on small volumes: fall back to the
+         * 16-bit Total Sectors field (BPB offset 19), in sectors —
+         * same fallback fat32_image.py applies. */
+        g_fs.total_sectors = le16(g_sector + 19);
+    }
     g_fs.mounted = 1U;
 
     serial_print("[FAT32] Mounted at partition LBA ");

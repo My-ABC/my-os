@@ -24,6 +24,9 @@ ATAPI、无分区表解析——FAT32 卷从 `fat32_init()` 约定的固定位�
 公开声明在 `include/fs/fat32.h`。`FAT32_MAX_FILE_SIZE` = 1 MiB，约束
 整个文件的读/写/复制。
 
+`fat32_init` 接受 1 或 2 个 FAT 的卷；32 位 Total Sectors 字段为 0 时
+回退读 BPB 偏移 19 的 16 位字段——与 `fat32_image.py` 的回退一致。
+
 ## 文件名语义
 
 - 通过公开 API 写入的名字总是生成 LFN 项以保留原始大小写（vfat 风

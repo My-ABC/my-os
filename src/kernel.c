@@ -90,6 +90,19 @@ static int shell3_spawn_on_vt(int vt) {
         shell3_image = (uint8_t *)kmalloc(FAT32_MAX_FILE_SIZE);
         if (shell3_image == 0) return VT_SPAWN_RETRY;
     }
+    /* Pre-check via stat: a present-but-oversized (or directory)
+     * shell3.elf can never load — fail permanently instead of paying
+     * a full FAT32 read + ELF parse on every retry. A missing file
+     * keeps the transient RETRY path so a late-mounted disk still
+     * works. */
+    {
+        uint32_t fsize = 0U;
+        int is_dir = 0;
+        if (fat32_stat("/shell3.elf", &fsize, &is_dir) == 0 &&
+            (is_dir != 0 || fsize > FAT32_MAX_FILE_SIZE)) {
+            return -2;
+        }
+    }
     if (fat32_read_file("/shell3.elf", shell3_image, FAT32_MAX_FILE_SIZE,
                         &size) != 0) {
         return VT_SPAWN_RETRY;

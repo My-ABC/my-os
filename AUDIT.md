@@ -99,11 +99,11 @@
 
 建议：要么文档化“syscall buffer 必须已提交”，要么在 buffer 校验中允许 `ring3_user_range_permitted` 的栈/镜像页并由复制路径处理缺页（注意不能在内核态 memcpy 缺页）。
 
-### P2-2 未注册异常仍 `cli/hlt`，不走 `panic_blue_screen` ⬜
+### P2-2 未注册异常仍 `cli/hlt`，不走 `panic_blue_screen` ✅
 
-`src/arch/x86/idt.c:9-15`：默认 handler 对未单独实现的异常/IRQ 直接停机；`isr14` 非法内核访问会 panic，但 `#GP/#UD/#NM` 等仍静默挂起。调试时难以区分“死机”与“panic”。
+`src/arch/x86/idt.c`：默认 handler 对未单独实现的异常/IRQ 直接停机；`isr14` 非法内核访问会 panic，但 `#GP/#UD/#NM` 等仍静默挂起。
 
-建议：默认 handler 至少 `panic_blue_screen`（或记录寄存器后 panic），保持 boot/IDT 契约测试同步。
+- 修复：`default_handler` 改为构造 `struct registers`（int_no=0xFFFF、err_code=未知、eip/cs/eflags 取自 CPU 入栈帧）后走 `panic_blue_screen`。注意带错误码的向量帧布局不同，打印的 eip 可能是错误码——仍远好于无声死机。
 
 ### P2-3 `isr14` demand-map 对整个用户堆区一律 RW 映射，掩盖 UAF/野指针 ⬜
 
@@ -143,11 +143,11 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 建议：缓存 FAT 空闲提示/按 FAT sector 缓存扫描，避免每簇重复读盘。
 
-### P2-8 `paging_mm_create` 对低 4 MiB borrowed 页建立失败时静默 `continue`，返回不完整 mm ⬜
+### P2-8 `paging_mm_create` 对低 4 MiB borrowed 页建立失败时静默 `continue`，返回不完整 mm ✅
 
-`src/mm/paging.c`：创建用户 mm 时复制低身份页为 borrowed；`mm_ensure_pt` 失败只 `continue`，最终仍返回 `mm`。结果 mm 缺低半映射但 `in_use=1`，后续 `elf32_load/ring3_schedule` 可能在缺页地址上跑，或把缺页误判为“镜像未占用”。
+`src/mm/paging.c`：创建用户 mm 时复制低身份页为 borrowed；`mm_ensure_pt` 失败只 `continue`，最终仍返回 `mm`。
 
-建议：任一必要 pt 分配失败应释放已分配页表并返回 NULL，或至少记录失败位。
+- 修复：`mm_ensure_pt`/`paging_map_physical` 任一失败走 `mm_fail`——释放已分配的 PT 页、清空 slot、`in_use=0`，继续尝试下一个槽位；全部失败返回 NULL。不会再发出缺低半映射的半成品 mm。
 
 ### P2-9 `vt_alloc_fb` 中途 `pmm_alloc_page` 失败会泄漏已映射页，且 `fb_ready` 仍可能置位 ⬜
 
@@ -176,7 +176,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 3. `src/drivers/keyboard.c`：`alt_pressed` 声明后未使用；set1 `apply_modifiers` 对 Caps+Shift 仍输出大写；`keyboard_send_command_with_response` 未使用（编译警告）。✅（已删 alt_pressed/未用函数，Caps+Shift 改为 XOR）
 4. `src/shell/shell.c`/`shell_ring3.c`：`split_line` 未闭合引号按字面量处理（与注释一致但仍是边界）；`parse_pid`/PID 解析在 `shell.c` 有溢出保护而 `shell_ring3.c:157-166` 的 `parse_pid` 未做 `pid*10` 溢出检查 ✅（已补上界检查）；`shell_ring3 cmd_bg` 不校验 pid 是否存在/是否真为后台，`bg <bad>` 也打印成功。
 5. `src/fs/fat32_name.c`：LFN 只支持 ASCII，非 ASCII UTF-16 会折叠成 `?`，可能造成不同长名映射到同一短名/同一显示名。
-6. `src/fs/fat32.c`：`fat32_read_file` 在 buffer 不足时返回成功并把 `*size` 截断为实际复制长度；调用方若不比较 size 与文件长度会静默截断（`cmd_cat` 64 KiB buffer 即如此）。
+6. ~~`src/fs/fat32.c`：`fat32_read_file` 在 buffer 不足时返回成功并把 `*size` 截断为实际复制长度~~ ✅：API 保留（流式调用方依赖"返回实际长度"语义），`cmd_cat` 先 `fat32_stat`，文件大于 64 KiB buffer 时打印 `[cat] truncated: file is N bytes, showing first M` 显式截断提示，不再静默。
 7. `src/drivers/vbe.c:125-133`：`vbe_map_framebuffer` 按 `pitch*height` 映射到 `0xE0000000`，无上限/重叠检查；极端模式可能覆盖 `0xE8000000` VT backing 或 `0xF0000000` KMAP。`pitch*height` 也可能 32-bit 回绕。
 8. `src/drivers/vt.c`：`vt_fb_stride` 计算失败只打印日志，已 spawn 的 vt 仍会置 `switch_enabled`，F 键请求会被接受但 `vt_do_switch` 因 backing 缺失拒绝，用户只看到 serial 日志。
 9. `src/mm/paging.c`：`paging_try_reclaim_page_table` 回收页表后只 `flush_tlb(0)`，未按需刷其它地址；`paging_mm_unmap` 缺 `USER_MM_SPACE_LIMIT` 检查（与 P1-1 相关）。✅（unmap 已补上限检查；reclaim TLB 项保留观察）
@@ -241,9 +241,9 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 #### R2-N2 `elf_run_vt` 的 -7（mm 耗尽）被当作永久 spawn 失败，瞬时内存压力会永久禁用 vt ✅（-7→RETRY 部分）
 
-`src/kernel.c` `shell3_spawn_on_vt`：只有 `rc == -8`（进程表满）映射为 `VT_SPAWN_RETRY`；`paging_mm_create` 失败时 `elf_run_vt` 返回 -7，被当作 ELF 装载错误 → `vt_latch_spawn_failed` 永久关 F 键。`USER_MM_MAX=8` 的 mm 槽在进程密集/泄漏场景下会耗尽，属于可恢复资源不足，却走了永久失败路径。同函数还有次级问题：`fat32_read_file` 对超 `FAT32_MAX_FILE_SIZE` 的文件截断返回 0（P3-6），`elf_run_vt` 会拿截断镜像解析，大概率 -2 永久 latch。
+`src/kernel.c` `shell3_spawn_on_vt`：只有 `rc == -8`（进程表满）映射为 `VT_SPAWN_RETRY`；`paging_mm_create` 失败时 `elf_run_vt` 返回 -7，被当作 ELF 装载错误 → `vt_latch_spawn_failed` 永久关 F 键。`USER_MM_MAX=8` 的 mm 槽在进程密集/泄漏场景下会耗尽，属于可恢复资源不足，却走了永久失败路径。同函数还有次级问题：`fat32_read_file` 对超 `FAT32_MAX_FILE_SIZE` 的文件截断返回 0（P3-6），`elf_run_vt` 会拿截断镜像解析，大概率 -2 永久 latch。✅ 次级已修：spawn 前先 `fat32_stat`，文件存在但 `is_dir` 或 `size > FAT32_MAX_FILE_SIZE` 时返回 -2 永久 latch（跳过整文件读+ELF 解析）；stat 失败（文件缺失）仍走 RETRY，晚挂载磁盘不受影响。
 
-- 修复：`shell3_spawn_on_vt` 现把 `-7` 与 `-8` 都映射为 `VT_SPAWN_RETRY`（瞬时资源不足重试，不再永久 latch）。次级问题（`fat32_stat` 预检 size ≤ `FAT32_MAX_FILE_SIZE`）未做，仍 ⬜。
+- 修复：`shell3_spawn_on_vt` 现把 `-7` 与 `-8` 都映射为 `VT_SPAWN_RETRY`（瞬时资源不足重试，不再永久 latch）。次级问题（`fat32_stat` 预检）也已修，见上。
 
 #### R2-N3 `elf32_load` 的段复制依赖 CR0.WP=0，脆弱且未文档化 ⬜
 
@@ -258,7 +258,7 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 3. `mini-libc/src/time.c` `strftime`：`tm_wday`/`tm_mon` 未校验即索引 `wday_names[8]`/`mon_names[12]`，调用方构造越界 `struct tm` 会造成用户态 OOB 读。
 4. `mini-libc/src/stdio.c` `fread` 与 `fs.c` `fs_fread/fs_fwrite`：`size * count` 为 32-bit `size_t`/`unsigned`，大参数回绕后 `total` 偏小，返回值与实际读写不一致。✅ 四处入口加 `count > (size_t)-1 / size` → EINVAL；stdio 测试新增 `fread-overflow` 断言（`fwrite` 同型一并修）。
 5. `src/drivers/ata.c`：`ata_read_sectors`/`ata_write_sectors` 发命令前只做 `ata_wait_400ns`（4 次读），不等 BSY 清零；前一次操作未完成时寄存器写入可能被丢弃。建议命令前补 `ata_wait_bsy_clear`。
-6. `src/fs/fat32_core.c` `fat32_init`：`g_sector[16] != 2` 拒绝单 FAT 卷；`total_sectors==0` 时不回退读 BPB 19-20 的 16-bit 字段（`fat32_image.py` 已做此回退，内核没有），部分合法 FAT32 无法挂载。
+6. ~~`src/fs/fat32_core.c` `fat32_init`：`g_sector[16] != 2` 拒绝单 FAT 卷；`total_sectors==0` 时不回退读 BPB 19-20 的 16-bit 字段~~ ✅：fat_count 放宽为 1–2；`total_sectors==0` 时回退 `le16(BPB+19)`（扇区单位，与 `fat32_image.py` 一致）。
 7. `src/os/ring3.c` `ring3_kill`：对 `current_process` 自身置 DEAD 后不切帧，进程要等到 IRQ0 才被回收（窗口内仍可执行）；`ring3_signal_scan`/`ring3_terminate_current` 路径已处理，仅 kill-self 路径有此小窗口。
 8. `mini-libc` `xalloc` 的 malloc 头（base/magic/align/size）位于用户可写内存，用户可伪造头让 `free()` 把任意 `base` 传给 `MEMORY_FREE`；内核 `user_free` 有 magic+范围校验，实际只能命中自己进程堆，记为设计说明而非缺陷。
 9. `boot/boot.asm`/`boot/paging.asm`：启用分页时未置 CR0.WP/WP 相关位之外的 CR0 保留位检查；同时 WP=0 使内核可写只读页（含 rodata），属加固建议（见 R2-N3）。
@@ -358,18 +358,18 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 1. ~~`src/os/syscall.c` 各 `SYS_*` 已知 class 的 `default:` 子操作分支一律 `return 0`——拼错 op 号静默"成功"~~ ✅：六处子操作 default 统一改为 `return (uint32_t)-1`，与未知 class 一致；已 grep 确认无调用方依赖"未知 op 返回 0"。中英 `04-syscall-abi.md` 返回值约定与错误语义小节已同步。
 2. `mini-libc/src/stdlib.c:204` `strtol` 在 `acc=2^31`（`LONG_MIN` 边界）时 `-(long)acc` 构成 `-(LONG_MIN)` UB（x86 上碰巧正确）；`abs(INT_MIN)`/`labs(LONG_MIN)` 同型 UB。
-3. `mini-libc/src/stdio.c:213-221` `snprintf(NULL, 0, ...)` 因 `buf==0` 走 console 分支把内容打印到屏幕，而非只计算返回长度；`snprintf` 其余截断语义正确。
-4. `mini-libc/src/stdio.c:480` `vfscanf` 的 `eof_hit` 只在**字面量**分支设置；`scanf("%s")`/`%d` 在输入流首字符即 EOF 时经 `goto done` 返回 0 而非 EOF（POSIX 应为 EOF）。
+3. ~~`mini-libc/src/stdio.c` `snprintf(NULL, 0, ...)` 因 `buf==0` 走 console 分支把内容打印到屏幕~~ ✅：`buf==NULL || n==0` 改走 1 字节 cap 的丢弃 sink 只计数；顺带修复 `snprintf(buf, 0, ...)` 原先 cap=0 无界写 buf 的溢出。stdio 测试新增 `snprintf-null0-count`/`snprintf-size0-nostore`/`snprintf-size1`。
+4. ~~`mini-libc/src/stdio.c` `vfscanf` 的 `eof_hit` 只在**字面量**分支设置~~ ✅：`in_src` 新增 `eof` 标志由 `isrc_getc` 统一置位；`assigned==0 && matched==0 && eof` → 返回 EOF，覆盖 `%s`/`%d`/`%c` 首字符即 EOF 的路径；匹配失败（非 EOF）仍返回 0。stdio 测试新增 `sscanf-empty-eof`/`sscanf-ws-eof`/`sscanf-mismatch-not-eof`。
 5. `mini-libc/src/stdio.c:255` `in_getch` 把空行（内核 rc==0）当 EOF 返回 -1：`getchar()` 在用户按一次回车时返回 EOF，是瞬时错误而非流终止。
 6. `mini-libc/src/stdlib.c:21-25` `_Exit`/`exit` 恒以 `ecx=0` 调 `PROC_EXIT`，`status` 被丢弃（内核本就不记录，但 ABI 注释"ecx: 退出码"有误导）；`signal()`/`kill()` 的早退分支不设 `errno`。
 7. `mini-libc/include/stdint.h`：`intmax_t`/`uintmax_t` 定义为 `int`/`unsigned int`（hosted LP32 通常为 `long long`）；`int_least8_t` 等 least 类型取 `int` 过宽但合法。`inttypes.c` 的 imax\* 与之自洽，仅与 hosted C ABI 有偏差。
 8. `mini-libc/src/stdlib.c` `xalloc` 的 align 归一化 `while (a < align) a <<= 1`：用户伪造 malloc header 的 `align` 字段为非 2 幂大值（如 `0x80000001`）会让 `a` 溢出为 0 后死循环——仅自伤（header 在自己地址空间），但 `hdr_of` 不校验 align 幂次/上界。✅ `xalloc` 入口 `align > XALLOC_MAX_ALIGN`（1 MiB）→ ENOMEM，伪造 header 的 align 同样被 `realloc`→`xalloc` 路径拦截；`a <<= 1` 不再可能溢出。
 9. `src/os/syscall.c:855-867` `sys_call` 是内核态 `int 0x80` 包装：`current_process < 0`（内核/idle 上下文）时 `PROC_EXIT`/`PROC_YIELD` 等静默无效或走默认分支，属未文档化的边界。
-10. `src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）；`FS_OPEN` 的 mode 未限定 `<= SYSFS_O_RDWR` 之外的位（`mode > 1` 已拒，OK）。
+10. ~~`src/os/syscall.c` `sysfs_fd.size` 字段在 `FS_READ`/`FS_WRITE` 中被维护但从不参与任何判定（死字段）~~ ✅：字段及三处写入已删除；`FS_OPEN` 的 mode 校验（`mode > SYSFS_O_RDWR` 拒绝）本就正确。
 11. `ps` 把 SLEEPING 进程显示为 `UNUSED` ✅（用户实测反馈）：`src/shell/shell_ring3.c` `state_name` 与 `src/shell/shell.c` `cmd_ps` 的状态映射都缺 `PROC_ST_SLEEPING`/`RING3_PROCESS_SLEEPING` 分支，落到 default/"UNUSED"。表现：snake.elf 运行中（绝大部分时间在 `TIME_SLEEP`）`ps` 显示 `pid=3/4 UNUSED`，但进程存活且 `kill` 正常（`ring3_kill` 已覆盖 SLEEPING）。附带观察：`ring3_process_list` 返回全部 4 个槽位（含 pid=0 空槽），ring3 shell 的 `ps` 会多打 `0 UNUSED` 行；内核 shell `cmd_ps` 跳过 pid==0 不受影响。已修：两处状态映射补 `SLEEPING` 字符串。
 12. VBE 光标残影/串扰（用户实测反馈）：snake.elf 运行中切到 VT1 后，①光标"一直在串"——光标是画进像素 framebuffer 的（`src/drivers/vbe.c` `vbe_draw_cursor` 画 cell 底部 2 行前景色像素），`vbe_scroll_up` 按像素行拷贝会把光标条当内容滚走留下永久残影；非活动 vt 的 backing store 里也烧着光标像素，`vbe_console_switched` 切回再画一个新的而旧残影不清除，光标条越积越多。②字符"会串"——`vbe_erase_cursor` 用**背景色**填充光标 cell 底部 2 行而非恢复原字符：光标落在已有字符的 cell 上（滚屏后、`\b`、VT 切回恢复光标位置）时字符下两行被抹掉显示残缺；且屏幕是纯像素缓冲没有字符 cell 层，无法区分"光标覆盖区"与"字符像素"，写字符/滚屏/切 vt 都可能留下光标条或吃掉字符笔画。修法方向：引入字符 cell 缓冲层（cell→glyph+颜色，光标只作渲染态），或滚屏/切 vt 时先整屏重绘文本再画光标。
 13. `vbe_putchar` 的 `\b` 处理只向左一步并用空格 glyph 覆盖（`src/drivers/vbe.c:380-385`），不擦除 cell 内残余像素之外的内容、也不触发 `vbe_scroll_up` 的行逻辑；连续 `\b` 跨行/跨屏边界行为未定义（停在 col 0 不回退到上一行末尾）。
-14. `acpi_shutdown` 串口输出截断（用户实测反馈）：`src/drivers/acpi.c:382-553` 关机路径上 `serial_print` 逐字符轮询 LSR 发送，而 S5 写入/备用端口（0xB004/0x604/0x4004/0xCF9）任一生效后机器立即断电——正在发送中的字符串被腰斩，实测日志停在 `[ACPI] ACPI shut`（应为 "shutdown failed, trying fallback methods"）后直接回到 host shell prompt，尾部诊断信息全部丢失。（用户确认日志中重复出现的 `writing S5` 行是粘贴分隔，非重复调用，排除多入口并发嫌疑。）修法方向：关机前先输出一行明确的 "powering off" 标记并等待 UART FIFO 排空（或短延时），诊断信息前置到所有可能断电的写操作之前。
+14. ~~`acpi_shutdown` 串口输出截断~~ ✅：新增 `serial_flush()`（等 COM1 LSR TEMT，THR+FIFO+移位寄存器全空，带超时上限）；S5 内存/IO 写入前、每个备用端口（0xB004/0x604/0x4004/0xCF9）写入前均先打印 `powering off via ...` 标记并 `serial_flush()`，"all shutdown methods failed, halting" 后也 flush。断电瞬间不再有排队中的诊断尾巴被腰斩。
 15. 串口双端口形态不一致：`serial_init`（`src/drivers/serial.c:4-20`）同时初始化 COM1(0x3F8) 与 COM3(0x3E8)，但 Makefile 的 QEMU 命令行只挂 `-serial stdio`（COM1→stdio）；COM3 输出（`serial3_print`，如 `SYS_POWEROFF` 路径 `src/os/syscall.c:539`）在日常 `make run` 下没有接收端，QEMU 里写 COM3 只是空发。`serial3_tx_timeout_warned` 的超时告警也走 COM1，会与正常日志交错。
 
 ### 复核结论（本轮确认无新问题）
