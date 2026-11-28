@@ -202,6 +202,11 @@ static uint64_t pmm_alloc_page_from(uint32_t first_frame, uint32_t wrap) {
          * is ever jumped over. */
         if (g_pmm.bitmap[frame >> 3] == 0xFFU) {
             uint32_t skip = 8U - (frame & 7U);
+            /* Clamp to the remaining range: do not rely on
+             * total_frames being a multiple of 8 or on the bitmap
+             * tail being addressable past total_frames. */
+            if (skip > g_pmm.total_frames - frame)
+                skip = g_pmm.total_frames - frame;
             frame += skip;
             scanned += skip;
             continue;

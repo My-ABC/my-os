@@ -7,6 +7,9 @@
 #define PMM_PHYSICAL_BITS 36U
 #define PMM_PHYSICAL_CEILING (1ULL << PMM_PHYSICAL_BITS)
 #define PMM_MAX_FRAMES ((uint32_t)(PMM_PHYSICAL_CEILING / PMM_PAGE_SIZE))
+/* Bitmap covers PMM_MAX_FRAMES bits; total_frames should stay a
+ * multiple of 8 so whole-byte skips in pmm_alloc_page_from never
+ * need a partial tail (a clamp in the scan also guards this). */
 #define PMM_BITMAP_SIZE (PMM_MAX_FRAMES / 8U)
 
 typedef struct {
