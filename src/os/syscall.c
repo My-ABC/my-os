@@ -210,7 +210,12 @@ static uint32_t user_restore_pages(struct user_mm *mm,
 }
 
 static void *user_alloc(struct user_mm *mm, uint32_t size) {
-    if (size == 0U || size > 0xFFFFFFFFU - sizeof(struct user_block)) {
+    /* Reject up front anything that can never fit: the heap spans less
+     * than 1 GiB, and both user_pages_for_size (size + header + pad)
+     * and pages * PAGE_SIZE are computed in 32 bits — a huge size
+     * wraps pages to 0 and the bounds check below, which "succeeds"
+     * with a zero-page block. */
+    if (size == 0U || size > USER_HEAP_END - USER_HEAP_START) {
         return 0;
     }
 
@@ -305,6 +310,12 @@ static void *user_realloc(struct user_mm *mm, void *ptr, uint32_t size) {
     }
     if (size == 0U) {
         user_free(mm, ptr);
+        return 0;
+    }
+    /* Same overflow guard as user_alloc: user_pages_for_size(size)
+     * wraps to 0 for huge sizes, which would take the "shrink" branch
+     * and stamp block->size with the huge value. */
+    if (size > USER_HEAP_END - USER_HEAP_START) {
         return 0;
     }
 
