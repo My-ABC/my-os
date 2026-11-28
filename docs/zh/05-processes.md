@@ -61,6 +61,17 @@
 - `elf` / `PROC_RUN_USERCODE` —— 链接进内核镜像的 ELF32 内建演示
   （`boot/elf_demo.asm`）。
 
+## 用户堆
+
+每进程堆（`0x01000000`–`0x40000000`）由 `src/os/syscall.c` 的
+`user_alloc`/`user_free`/`user_realloc` 管理：
+
+- `MEMORY_REALLOC` 入口校验 `ptr` 必须在
+  `[USER_HEAP_START + sizeof(user_block), USER_HEAP_END)` 内，否则返
+  回 0——在读取块 magic 之前检查（P1-2）。
+- spawn 失败时，`paging_mm_create` 的 `mm_fail` 路径会释放已分配的
+  页表、清空槽位并尝试下一个，不会返回残缺地址空间（P2-8）。
+
 ## 内存隔离
 
 每个 Ring 3 进程拥有独立 CR3 的私有地址空间——详见

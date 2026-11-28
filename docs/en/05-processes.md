@@ -68,6 +68,18 @@ caller's vt). Shell paths that use it:
 - `elf` / `PROC_RUN_USERCODE` — the built-in ELF32 demo linked into the
   kernel image (`boot/elf_demo.asm`).
 
+## User heap
+
+The per-process heap (`0x01000000`–`0x40000000`) is managed by
+`user_alloc`/`user_free`/`user_realloc` in `src/os/syscall.c`:
+
+- `MEMORY_REALLOC` validates at entry that `ptr` lies in
+  `[USER_HEAP_START + sizeof(user_block), USER_HEAP_END)`, returning 0
+  otherwise — checked before the block magic is read (P1-2).
+- On spawn failure, `paging_mm_create`'s `mm_fail` path frees any page
+  tables already allocated, clears the slot, and tries the next one —
+  it never returns a half-built address space (P2-8).
+
 ## Memory isolation
 
 Each Ring 3 process owns a private address space with its own CR3 —

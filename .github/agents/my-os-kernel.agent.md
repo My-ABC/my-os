@@ -41,6 +41,8 @@ You maintain MyOS, a freestanding 32-bit x86 kernel booting via GRUB/Multiboot. 
 - Shell has 16-entry history (Up/Down) and cursor line editing; quoting via `split_line`/`shell_unescape_arg`. Kernel `echo`/`help` and disk/process commands dual-write VGA+COM1; Ring 3 output goes to its vt buffer + COM3.
 - Keep changes surgical. Never hide an error behind a success-shaped fallback.
 - F1/F2 scancodes are consumed by the keyboard ISR as vt-switch requests — they never enter the per-vt input buffers. VBE per-terminal backing stores live at `VT_FB_BASE=0xE8000000`–`VT_FB_LIMIT=0xF0000000` (above the heap window `0xD0000000`–`0xE0000000` and the ~4 MiB scanout at `0xE0000000`, below KMAP `0xF0000000`; `#error` guards enforce it). Stride = `vbe_scanout_bytes()` (= `pitch * height`, e.g. 5120×800 = 4,096,000 B for 1280×800×32) rounded up to `VT_FB_ALIGN` (1 MiB) → 4 MiB per terminal; never hardcode 640×480 sizes.
+- Unhandled exceptions and IRQs route to `default_handler`, which calls `panic_blue_screen` with the register dump. Any new IDT entry must have an explicit handler; a missing one panics the kernel rather than hanging silently.
+- P1-7: `user_block` metadata (`next`/`pages`/`magic`) lives in user-writable heap pages; `user_find_free`/`user_remove_free`/`user_restore_pages` walk `block->next` without validation. A Ring 3 process can DoS the kernel by forging free-list pointers. Adding range checks does not fix this — the fix is moving metadata out of user-writable pages (slab allocator or a separate read-only mapping).
 
 ## History & lessons (why the rules exist)
 
