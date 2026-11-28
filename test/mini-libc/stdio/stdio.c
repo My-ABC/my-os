@@ -28,6 +28,15 @@ int main(void) {
     n = snprintf(buf, 8, "abcdefghij");
     CHK(n == 10 && strcmp(buf, "abcdefg") == 0, "snprintf-trunc");
 
+    /* NULL/0-size snprintf counts without storing or printing */
+    buf[0] = 'Z';
+    n = snprintf(0, 0, "count-%d", 42);
+    CHK(n == 8, "snprintf-null0-count");
+    n = snprintf(buf, 0, "count-%d", 42);
+    CHK(n == 8 && buf[0] == 'Z', "snprintf-size0-nostore");
+    n = snprintf(buf, 1, "abc");
+    CHK(n == 3 && buf[0] == '\0', "snprintf-size1");
+
     n = sscanf("-12 0x1f 052 hello", "%d %i %i %4s", &a, &lv, &uv, buf);
     CHK(n == 4 && a == -12 && lv == 31 && uv == 42 &&
         strcmp(buf, "hell") == 0, "sscanf-mixed");
@@ -39,6 +48,14 @@ int main(void) {
 
     n = sscanf("100%", "%%");   /* literal % matches nothing numeric */
     CHK(n == EOF || n == 0, "sscanf-pct");
+
+    /* EOF before the first conversion returns EOF, not 0 */
+    n = sscanf("", "%d", &a);
+    CHK(n == EOF, "sscanf-empty-eof");
+    n = sscanf("   ", "%s", buf);
+    CHK(n == EOF, "sscanf-ws-eof");
+    n = sscanf("abc", "%d", &a);
+    CHK(n == 0, "sscanf-mismatch-not-eof");
 
     /* FILE* over a FAT32 file injected into the test disk image */
     FILE *f = fopen("tdata.txt", "r");

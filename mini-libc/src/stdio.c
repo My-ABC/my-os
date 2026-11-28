@@ -211,12 +211,27 @@ int sprintf(char *buf, const char *fmt, ...) {
 }
 
 int snprintf(char *buf, size_t n, const char *fmt, ...) {
-    struct out_sink o = { buf, n, 0, 0, 0 };
+    /* buf==NULL or n==0 must count characters without storing or
+     * printing: route through a 1-byte sink whose cap drops every
+     * write (os_ch still increments o->count). cap==0 would mean
+     * "unlimited" and buf==NULL would fall into the console path. */
+    static char sink_dummy;
+    struct out_sink o;
+    if (buf == 0 || n == 0) {
+        o.buf = &sink_dummy;
+        o.cap = 1;
+    } else {
+        o.buf = buf;
+        o.cap = n;
+    }
+    o.len = 0;
+    o.count = 0;
+    o.f = 0;
     va_list ap;
     va_start(ap, fmt);
     int rc = vformat(&o, fmt, ap);
     va_end(ap);
-    if (n != 0) buf[o.len] = '\0';
+    if (buf != 0 && n != 0) buf[o.len] = '\0';
     return rc;
 }
 
@@ -273,22 +288,33 @@ struct in_src {
     size_t pos;
     int pushed;
     FILE *f;            /* non-NULL → read from this stream */
+    int eof;            /* set once isrc_getc observes end of input */
 };
 
 static int file_getc_raw(FILE *f);
 static void file_ungetc_raw(FILE *f, int c);
 
 static int isrc_getc(struct in_src *src) {
+    int c;
     if (src->pushed >= 0) {
-        int c = src->pushed;
+        c = src->pushed;
         src->pushed = -1;
         return c;
     }
-    if (src->f != 0) return file_getc_raw(src->f);
-    if (src->s == 0) return in_getch();
-    unsigned char c = (unsigned char)src->s[src->pos];
-    if (c == 0) return -1;
-    ++src->pos;
+    if (src->f != 0) {
+        c = file_getc_raw(src->f);
+    } else if (src->s == 0) {
+        c = in_getch();
+    } else {
+        unsigned char ch = (unsigned char)src->s[src->pos];
+        if (ch == 0) {
+            c = -1;
+        } else {
+            ++src->pos;
+            c = ch;
+        }
+    }
+    if (c < 0) src->eof = 1;
     return c;
 }
 
@@ -354,7 +380,6 @@ static int scan_uint(struct in_src *src, int base, struct ispec *sp,
 
 static int vfscanf(struct in_src *src, const char *fmt, va_list ap) {
     int assigned = 0;
-    int eof_hit = 0;
     int matched = 0;
 
     for (const char *p = fmt; *p != '\0'; ++p) {
@@ -365,7 +390,7 @@ static int vfscanf(struct in_src *src, const char *fmt, va_list ap) {
         }
         if (*p != '%') {
             int c = isrc_getc(src);
-            if (c < 0) { eof_hit = 1; break; }
+            if (c < 0) break;
             if (c != (unsigned char)*p) {
                 isrc_ungetc(src, c);
                 break;
@@ -482,7 +507,9 @@ static int vfscanf(struct in_src *src, const char *fmt, va_list ap) {
         }
     }
 done:
-    if (assigned == 0 && matched == 0 && eof_hit) return -1;
+    /* POSIX: EOF only when input failure happens before the first
+     * conversion completes — i.e. nothing was assigned or matched. */
+    if (assigned == 0 && matched == 0 && src->eof) return -1;
     return assigned;
 }
 
@@ -505,7 +532,7 @@ int getline(char *buf, int size) {
 }
 
 int scanf(const char *fmt, ...) {
-    struct in_src src = { 0, 0, -1, 0 };
+    struct in_src src = { 0, 0, -1, 0, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vfscanf(&src, fmt, ap);
@@ -514,7 +541,7 @@ int scanf(const char *fmt, ...) {
 }
 
 int sscanf(const char *s, const char *fmt, ...) {
-    struct in_src src = { s, 0, -1, 0 };
+    struct in_src src = { s, 0, -1, 0, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vfscanf(&src, fmt, ap);
@@ -674,7 +701,7 @@ int fprintf(FILE *f, const char *fmt, ...) {
 
 int fscanf(FILE *f, const char *fmt, ...) {
     if (f == 0) return EOF;
-    struct in_src src = { 0, 0, -1, f };
+    struct in_src src = { 0, 0, -1, f, 0 };
     va_list ap;
     va_start(ap, fmt);
     int rc = vfscanf(&src, fmt, ap);

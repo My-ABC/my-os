@@ -38,7 +38,8 @@ There is no real buffering yet — console output goes to
   `fmt`/varargs as `printf`.
 - **Returns**: characters that *would* have been written excluding
   NUL, or `< 0`.
-- **Details**: Output is truncated to `n-1` chars + NUL.
+- **Details**: Output is truncated to `n-1` chars + NUL. `buf == NULL`
+  or `n == 0` counts characters only — nothing is stored or printed.
 
 ### `int puts(const char *s)`
 
