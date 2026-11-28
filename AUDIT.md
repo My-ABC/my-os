@@ -178,6 +178,8 @@ N3 已修“覆盖写先建新链后放旧链”，但 delete/move 的顺序仍�
 
 > **测试发现（QEMU 偶发定位）**：连续 `make test-qemu` 通过率一度跌到 1/5，`-d int` + 分场景复现定位出两个独立原因，均非 R3-N3 回归：① `check_page_faults` 的 stack.elf 断言是**测试竞态**——`STACK-OK` 走 COM3、`[PAGE FAULT]` 走 COM1，两 socket 独立排空，COM1 行可滞后于 COM3 标记；改为 `wait_for_regex` 等待文本（测试健壮性修复）。② oom.elf 排干 PMM 的 malloc 循环**真实超时**——`pmm_alloc_page_from` 逐帧扫 `PMM_MAX_FRAMES`（64GiB 上限 = 16M 帧）位图，实际可用帧仅 ~32K，其余全 1 尾部主导每次分配扫描，碎片化下 oom.elf 的 ~2 万次页分配需数分钟（TCG 下 >240s）。修复：`pmm_alloc_page_from` 遇 `0xFF` 位图字节整段跳过 8 帧（只跳全 1 区，不会跳过空闲帧），OOM 检查恢复 60s 超时后 6/6 连续通过。`pmm_get_free_frames` 仍是 O(全扫)但仅启动调用一次。
 
+> **测试观察（QEMU 偶发，未定性）**：PMM 0xFF 跳过加 `total_frames - frame` 截断保护（`afef7bb`）后首轮 `make test-qemu` 在 `ring3_scenarios` 第二次 `elf` 的 `[SIG] Deliver sig 2` 等待处超时（8s），日志显示第二个 ELF 已 `Scheduling Ring 3` 但 SIGINT 投递未出现；连续 5 次重跑全部 PASS。判定为既有时序 flake（与 PMM 路径无关——`total_frames=16M` 本就是 8 的倍数，clamp 下行为等价），暂不改测试等待逻辑；若再发且失败点集中在 SIGINT 交付，需查 `ring3_signal_scan`/Ctrl+C 投递路径而非加大超时。
+
 ---
 
 ## 已复核为已修复/不再成立的历史项
