@@ -95,9 +95,10 @@ static int shell3_spawn_on_vt(int vt) {
         return VT_SPAWN_RETRY;
     }
     int rc = elf_run_vt(shell3_image, size, vt);
-    /* -8 = process-table schedule failure (transient); every other
+    /* -7 (user-mm slots exhausted) and -8 (process-table schedule
+     * failure) are both transient resource exhaustion; every other
      * nonzero is an ELF load/parse error and latches permanently. */
-    return rc == -8 ? VT_SPAWN_RETRY : rc;
+    return (rc == -7 || rc == -8) ? VT_SPAWN_RETRY : rc;
 }
 
 static void shell3_supervisor(void) {
